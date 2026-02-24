@@ -90,6 +90,19 @@ function RootLayoutNav() {
           }}
         />
         <Stack.Screen
+          name="quiz-challenge"
+          options={{
+            presentation: "fullScreenModal",
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="challenge-history"
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
           name="group-detail"
           options={{
             headerShown: false,

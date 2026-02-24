@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import type { ActivityItem, NotificationItem } from '@/types';
 
 const API_URL = __DEV__ ? 'http://localhost:3000/api' : 'https://api.blink.app/api';
 
@@ -98,4 +99,18 @@ export async function api(path: string, options: RequestInit = {}): Promise<any>
   const text = await res.text();
   if (!text) return null;
   return JSON.parse(text);
+}
+
+// ── Activity ──
+export function getActivity(): Promise<ActivityItem[]> {
+  return api('/activity');
+}
+
+// ── Notifications ──
+export function getNotifications(): Promise<NotificationItem[]> {
+  return api('/notifications');
+}
+
+export function markNotificationsRead(): Promise<void> {
+  return api('/notifications/read', { method: 'PATCH' });
 }
