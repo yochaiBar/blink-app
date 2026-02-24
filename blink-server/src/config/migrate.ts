@@ -1,7 +1,8 @@
 import { query } from './database';
+import logger from '../utils/logger';
 
 async function migrate() {
-  console.log('Running migrations...');
+  logger.info('Running migrations...');
 
   await query(`
     CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -105,11 +106,11 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_active_penalties_user ON active_penalties(user_id, group_id);
   `);
 
-  console.log('Migrations complete!');
+  logger.info('Migrations complete!');
   process.exit(0);
 }
 
 migrate().catch((err) => {
-  console.error('Migration failed:', err);
+  logger.error('Migration failed', { error: err.message });
   process.exit(1);
 });

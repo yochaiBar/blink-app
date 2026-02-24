@@ -1,6 +1,10 @@
 import { Router, Response } from 'express';
 import { query } from '../config/database';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { asyncHandler } from '../middleware/asyncHandler';
+import { validateBody } from '../middleware/validate';
+import { createChallengeSchema, respondChallengeSchema } from '../utils/schemas';
+import logger from '../utils/logger';
 import { CHALLENGE_COUNTDOWN_SECONDS } from '../utils/constants';
 
 const router = Router();
@@ -111,7 +115,7 @@ async function processSkipsForChallenge(challengeId: string, groupId: string) {
 }
 
 // ── POST /api/groups/:groupId/challenges — Trigger a challenge ──
-router.post('/groups/:groupId/challenges', async (req: AuthRequest, res: Response) => {
+router.post('/groups/:groupId/challenges', validateBody(createChallengeSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const groupId = req.params.groupId as string;
   const { type } = req.body; // 'snap', 'quiz_food', 'quiz_most_likely', 'quiz_rate_day'
 
@@ -150,12 +154,12 @@ router.post('/groups/:groupId/challenges', async (req: AuthRequest, res: Respons
 
     if (quizType === 'most_likely') {
       // Options are group member names
-      const members = await query(
+      const membersList = await query(
         `SELECT u.id, u.display_name FROM group_members gm
          JOIN users u ON u.id = gm.user_id WHERE gm.group_id = $1`,
         [groupId]
       );
-      optionsJson = JSON.stringify(members.rows.map((m: any) => m.display_name || 'Anonymous'));
+      optionsJson = JSON.stringify(membersList.rows.map((m: any) => m.display_name || 'Anonymous'));
     } else {
       optionsJson = JSON.stringify(quiz.options);
     }
@@ -169,11 +173,12 @@ router.post('/groups/:groupId/challenges', async (req: AuthRequest, res: Respons
     [groupId, challengeType, promptText, optionsJson, req.userId, expiresAt, CHALLENGE_COUNTDOWN_SECONDS]
   );
 
+  logger.info('Challenge triggered', { groupId, challengeId: result.rows[0].id, type: challengeType });
   res.status(201).json(result.rows[0]);
-});
+}));
 
 // ── GET active challenge ──
-router.get('/groups/:groupId/challenges/active', async (req: AuthRequest, res: Response) => {
+router.get('/groups/:groupId/challenges/active', asyncHandler(async (req: AuthRequest, res: Response) => {
   const groupId = req.params.groupId as string;
 
   const membership = await query(
@@ -220,10 +225,10 @@ router.get('/groups/:groupId/challenges/active', async (req: AuthRequest, res: R
     ...challenge,
     user_has_responded: userResponse.rows.length > 0,
   });
-});
+}));
 
 // ── POST respond to challenge ──
-router.post('/:id/respond', async (req: AuthRequest, res: Response) => {
+router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
   const { photo_url, response_time_ms, answer_index } = req.body;
 
@@ -275,11 +280,12 @@ router.post('/:id/respond', async (req: AuthRequest, res: Response) => {
     await processSkipsForChallenge(id, c.group_id);
   }
 
+  logger.info('Challenge response submitted', { challengeId: id, userId: req.userId });
   res.status(201).json(result.rows[0]);
-});
+}));
 
 // ── GET responses (can't peek until you play) ──
-router.get('/:id/responses', async (req: AuthRequest, res: Response) => {
+router.get('/:id/responses', asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
 
   const userResponse = await query(
@@ -301,10 +307,10 @@ router.get('/:id/responses', async (req: AuthRequest, res: Response) => {
   );
 
   res.json(responses.rows);
-});
+}));
 
 // ── GET challenge history ──
-router.get('/groups/:groupId/challenges/history', async (req: AuthRequest, res: Response) => {
+router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthRequest, res: Response) => {
   const groupId = req.params.groupId as string;
 
   const membership = await query(
@@ -328,6 +334,6 @@ router.get('/groups/:groupId/challenges/history', async (req: AuthRequest, res: 
   );
 
   res.json(result.rows);
-});
+}));
 
 export default router;

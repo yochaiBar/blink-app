@@ -1,5 +1,6 @@
 import admin from 'firebase-admin';
 import dotenv from 'dotenv';
+import logger from '../utils/logger';
 
 dotenv.config();
 
@@ -17,7 +18,7 @@ try {
     projectId: process.env.FIREBASE_PROJECT_ID,
   });
 } catch (error) {
-  console.warn('Firebase initialization skipped (no credentials configured)');
+  logger.warn('Firebase initialization skipped (no credentials configured)');
   firebaseApp = admin.initializeApp({
     projectId: process.env.FIREBASE_PROJECT_ID || 'blink-dev',
   });

@@ -1,6 +1,10 @@
 import { Router, Response } from 'express';
 import { query } from '../config/database';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { asyncHandler } from '../middleware/asyncHandler';
+import { validateBody } from '../middleware/validate';
+import { createGroupSchema, joinGroupSchema } from '../utils/schemas';
+import logger from '../utils/logger';
 import crypto from 'crypto';
 
 const router = Router();
@@ -13,12 +17,8 @@ function generateInviteCode(): string {
 router.use(authenticate);
 
 // POST /api/groups - Create a group
-router.post('/', async (req: AuthRequest, res: Response) => {
+router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { name, icon, category, quiet_hours_start, quiet_hours_end, skip_penalty_type } = req.body;
-  if (!name) {
-    res.status(400).json({ error: 'name is required' });
-    return;
-  }
 
   // 3-group free tier limit
   const userGroups = await query(
@@ -53,11 +53,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     [group.rows[0].id, req.userId]
   );
 
+  logger.info('Group created', { groupId: group.rows[0].id, userId: req.userId });
   res.status(201).json(group.rows[0]);
-});
+}));
 
 // GET /api/groups - List user's groups
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await query(
     `SELECT g.*, gm.role,
        (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) as member_count
@@ -68,10 +69,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     [req.userId]
   );
   res.json(result.rows);
-});
+}));
 
 // GET /api/groups/:id - Get group details + members + stats
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
   const membership = await query(
@@ -115,15 +116,11 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     members: members.rows,
     active_penalties: penalties.rows,
   });
-});
+}));
 
 // POST /api/groups/join - Join via invite code
-router.post('/join', async (req: AuthRequest, res: Response) => {
+router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { invite_code } = req.body;
-  if (!invite_code) {
-    res.status(400).json({ error: 'invite_code is required' });
-    return;
-  }
 
   // 3-group free tier limit
   const userGroups = await query(
@@ -162,7 +159,93 @@ router.post('/join', async (req: AuthRequest, res: Response) => {
     [g.id, req.userId]
   );
 
+  logger.info('User joined group', { groupId: g.id, userId: req.userId });
   res.json(g);
-});
+}));
+
+// POST /api/groups/:id/leave - Leave a group
+router.post('/:id/leave', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  const membership = await query(
+    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    [id, req.userId]
+  );
+  if (membership.rows.length === 0) {
+    res.status(404).json({ error: 'Not a member of this group' });
+    return;
+  }
+
+  const isAdmin = membership.rows[0].role === 'admin';
+
+  if (isAdmin) {
+    // Check if there are other members
+    const otherMembers = await query(
+      `SELECT user_id, role FROM group_members WHERE group_id = $1 AND user_id != $2`,
+      [id, req.userId]
+    );
+
+    if (otherMembers.rows.length === 0) {
+      // Last member — delete the group entirely
+      await query(`DELETE FROM groups WHERE id = $1`, [id]);
+      logger.info('Group deleted (last member left)', { groupId: id, userId: req.userId });
+      res.json({ message: 'Left group. Group was deleted as you were the last member.' });
+      return;
+    }
+
+    // Check if there are other admins
+    const otherAdmins = otherMembers.rows.filter((m: any) => m.role === 'admin');
+    if (otherAdmins.length === 0) {
+      // Transfer admin to the longest-standing member
+      const nextAdmin = await query(
+        `SELECT user_id FROM group_members
+         WHERE group_id = $1 AND user_id != $2
+         ORDER BY joined_at ASC LIMIT 1`,
+        [id, req.userId]
+      );
+      await query(
+        `UPDATE group_members SET role = 'admin' WHERE group_id = $1 AND user_id = $2`,
+        [id, nextAdmin.rows[0].user_id]
+      );
+      logger.info('Admin role transferred', { groupId: id, newAdminId: nextAdmin.rows[0].user_id });
+    }
+  }
+
+  await query(
+    `DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    [id, req.userId]
+  );
+
+  logger.info('User left group', { groupId: id, userId: req.userId });
+  res.json({ message: 'Left group successfully' });
+}));
+
+// DELETE /api/groups/:id - Delete a group (admin only)
+router.delete('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  const membership = await query(
+    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    [id, req.userId]
+  );
+  if (membership.rows.length === 0) {
+    res.status(403).json({ error: 'Not a member of this group' });
+    return;
+  }
+
+  if (membership.rows[0].role !== 'admin') {
+    res.status(403).json({ error: 'Only group admins can delete a group' });
+    return;
+  }
+
+  const result = await query(`DELETE FROM groups WHERE id = $1 RETURNING id`, [id]);
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'Group not found' });
+    return;
+  }
+
+  logger.info('Group deleted by admin', { groupId: id, userId: req.userId });
+  res.json({ message: 'Group deleted successfully' });
+}));
 
 export default router;

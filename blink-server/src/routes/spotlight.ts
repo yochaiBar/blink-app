@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { query } from '../config/database';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { asyncHandler } from '../middleware/asyncHandler';
+import logger from '../utils/logger';
 
 const router = Router();
 
@@ -20,7 +22,7 @@ const SUPERLATIVES = [
 ];
 
 // GET /api/groups/:groupId/spotlight — Get or generate today's spotlight
-router.get('/:groupId/spotlight', async (req: AuthRequest, res: Response) => {
+router.get('/:groupId/spotlight', asyncHandler(async (req: AuthRequest, res: Response) => {
   const { groupId } = req.params;
 
   const membership = await query(
@@ -106,11 +108,12 @@ router.get('/:groupId/spotlight', async (req: AuthRequest, res: Response) => {
     [groupId, member.user_id, superlative, JSON.stringify(statsJson)]
   );
 
+  logger.info('Daily spotlight generated', { groupId, featuredUserId: member.user_id });
   res.json({
     ...spotlight.rows[0],
     display_name: member.display_name,
     avatar_url: member.avatar_url,
   });
-});
+}));
 
 export default router;
