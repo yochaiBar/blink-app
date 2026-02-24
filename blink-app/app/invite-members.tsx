@@ -8,6 +8,7 @@ import * as Clipboard from 'expo-clipboard';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Button } from '@/components/ui';
 
 export default function InviteMembersScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -84,24 +85,13 @@ export default function InviteMembersScreen() {
         >
           <Text style={styles.codeLabel}>INVITE CODE</Text>
           <Text style={[styles.codeText, { color: group.color }]}>{inviteCode}</Text>
-          <TouchableOpacity
-            style={[styles.copyBtn, copied && styles.copyBtnSuccess]}
+          <Button
+            title={copied ? 'Copied!' : 'Copy Code'}
             onPress={handleCopyCode}
-            activeOpacity={0.8}
-            testID="copy-code-btn"
-          >
-            {copied ? (
-              <>
-                <Check size={16} color={theme.green} />
-                <Text style={[styles.copyBtnText, { color: theme.green }]}>Copied!</Text>
-              </>
-            ) : (
-              <>
-                <Copy size={16} color={group.color} />
-                <Text style={[styles.copyBtnText, { color: group.color }]}>Copy Code</Text>
-              </>
-            )}
-          </TouchableOpacity>
+            variant="secondary"
+            size="md"
+            icon={copied ? <Check size={16} color={theme.green} /> : <Copy size={16} color={group.color} />}
+          />
         </LinearGradient>
 
         <View style={styles.dividerRow}>
@@ -110,25 +100,21 @@ export default function InviteMembersScreen() {
           <View style={styles.divider} />
         </View>
 
-        <View style={styles.shareOptions}>
-          <TouchableOpacity style={styles.shareOption} onPress={handleCopyLink}>
-            <View style={[styles.shareIconBg, { backgroundColor: theme.blueMuted }]}>
-              {linkCopied ? (
-                <Check size={20} color={theme.green} />
-              ) : (
-                <Link size={20} color={theme.blue} />
-              )}
-            </View>
-            <Text style={styles.shareLabel}>{linkCopied ? 'Copied!' : 'Copy Link'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.shareOption} onPress={handleShare}>
-            <View style={[styles.shareIconBg, { backgroundColor: theme.greenMuted }]}>
-              <Share2 size={20} color={theme.green} />
-            </View>
-            <Text style={styles.shareLabel}>Share</Text>
-          </TouchableOpacity>
-
+        <View style={styles.shareButtons}>
+          <Button
+            title={linkCopied ? 'Copied!' : 'Copy Link'}
+            onPress={handleCopyLink}
+            variant="secondary"
+            size="md"
+            icon={linkCopied ? <Check size={18} color={theme.green} /> : <Link size={18} color={theme.blue} />}
+          />
+          <Button
+            title="Share Link"
+            onPress={handleShare}
+            variant="primary"
+            size="md"
+            icon={<Share2 size={18} color={theme.white} />}
+          />
         </View>
 
         <View style={styles.tipCard}>
@@ -216,22 +202,7 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
     marginBottom: 16,
   },
-  copyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  copyBtnSuccess: {
-    backgroundColor: theme.greenMuted,
-  },
-  copyBtnText: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-  },
+  // copyBtn styles replaced by shared Button component
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -247,27 +218,11 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
     marginHorizontal: 14,
   },
-  shareOptions: {
+  shareButtons: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 28,
+    gap: 12,
     marginBottom: 28,
-  },
-  shareOption: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  shareIconBg: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  shareLabel: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: theme.textSecondary,
   },
   tipCard: {
     flexDirection: 'row',

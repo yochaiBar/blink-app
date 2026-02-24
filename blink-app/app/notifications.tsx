@@ -8,6 +8,7 @@ import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import { NotificationItem } from '@/types';
 import { getRelativeTime } from '@/utils/time';
+import { Skeleton, EmptyState } from '@/components/ui';
 
 const notifIcons: Record<string, { icon: typeof Bell; color: string }> = {
   challenge: { icon: Camera, color: theme.coral },
@@ -22,7 +23,7 @@ const notifIcons: Record<string, { icon: typeof Bell; color: string }> = {
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { notifications, markNotificationsRead } = useApp();
+  const { notifications, markNotificationsRead, isLoading } = useApp();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -90,20 +91,35 @@ export default function NotificationsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <FlatList
-        data={notifications}
-        renderItem={renderNotification}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🔔</Text>
-            <Text style={styles.emptyTitle}>No notifications</Text>
-            <Text style={styles.emptySubtext}>You're all caught up!</Text>
-          </View>
-        }
-      />
+      {isLoading ? (
+        <View style={styles.list}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton variant="circle" width={44} height={44} />
+              <View style={styles.skeletonLines}>
+                <Skeleton variant="text" width={160} height={14} />
+                <Skeleton variant="text" width={200} height={12} />
+                <Skeleton variant="text" width={80} height={11} />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <FlatList
+          data={notifications}
+          renderItem={renderNotification}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <EmptyState
+              emoji="🔔"
+              title="All caught up!"
+              subtitle="You'll see notifications from your groups here"
+            />
+          }
+        />
+      )}
     </View>
   );
 }
@@ -217,21 +233,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.coral,
     marginTop: 6,
   },
-  empty: {
-    alignItems: 'center',
-    paddingTop: 80,
-    gap: 8,
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
   },
-  emptyEmoji: {
-    fontSize: 48,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: theme.text,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: theme.textMuted,
+  skeletonLines: {
+    flex: 1,
+    gap: 6,
   },
 });

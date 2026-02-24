@@ -1,12 +1,13 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, Dimensions, Platform, KeyboardAvoidingView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Animated, Dimensions, Platform, KeyboardAvoidingView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowRight, Camera, Users, Zap, Sparkles, Phone } from 'lucide-react-native';
+import { Camera, Users, Zap, Sparkles, Phone } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Button } from '@/components/ui';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -230,18 +231,15 @@ export default function OnboardingScreen() {
             )}
           </Animated.View>
 
-          <TouchableOpacity
-            style={[styles.nextBtn, isNextDisabled && styles.nextBtnDisabled]}
+          <Button
+            title={getButtonText()}
             onPress={handleNext}
+            variant="primary"
+            size="lg"
+            loading={isSubmitting}
             disabled={isNextDisabled}
-            activeOpacity={0.85}
-            testID="onboarding-next-btn"
-          >
-            <Text style={[styles.nextBtnText, isNextDisabled && styles.nextBtnTextDisabled]}>
-              {getButtonText()}
-            </Text>
-            <ArrowRight size={18} color={isNextDisabled ? theme.textMuted : theme.white} />
-          </TouchableOpacity>
+            fullWidth
+          />
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -377,24 +375,5 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     textAlign: 'center',
   },
-  nextBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: theme.coral,
-    borderRadius: 16,
-    paddingVertical: 18,
-  },
-  nextBtnDisabled: {
-    backgroundColor: theme.surface,
-  },
-  nextBtnText: {
-    fontSize: 17,
-    fontWeight: '800' as const,
-    color: theme.white,
-  },
-  nextBtnTextDisabled: {
-    color: theme.textMuted,
-  },
+  // nextBtn styles replaced by shared Button component
 });

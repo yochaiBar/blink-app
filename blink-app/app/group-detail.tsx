@@ -11,6 +11,7 @@ import { useApp } from '@/providers/AppProvider';
 import SnapCard from '@/components/SnapCard';
 import { categoryLabels } from '@/constants/categories';
 import { api } from '@/services/api';
+import { Skeleton, SnapCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
 import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse } from '@/types/api';
 import { apiGroupDetailToGroup, apiResponseToSnap } from '@/utils/adapters';
 import { isDemoGroup, DEMO_GROUP_DETAIL, DEMO_CHALLENGE, DEMO_RESPONSES } from '@/constants/demoData';
@@ -267,9 +268,39 @@ export default function GroupDetailScreen() {
             <ArrowLeft size={22} color={theme.text} />
           </TouchableOpacity>
         </View>
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Loading...</Text>
+        <View style={{ paddingHorizontal: 20, paddingTop: 12, gap: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Skeleton variant="circle" width={36} height={36} borderRadius={10} />
+            <View style={{ gap: 6 }}>
+              <Skeleton variant="text" width={140} height={16} />
+              <Skeleton variant="text" width={80} height={12} />
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} variant="circle" width={28} height={28} />
+            ))}
+            <Skeleton variant="text" width={70} height={14} />
+          </View>
+          <SnapCardSkeleton />
+          <SnapCardSkeleton />
         </View>
+      </View>
+    );
+  }
+
+  if (groupQuery.isError) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ArrowLeft size={22} color={theme.text} />
+          </TouchableOpacity>
+        </View>
+        <ErrorState
+          message="Failed to load group details"
+          onRetry={() => groupQuery.refetch()}
+        />
       </View>
     );
   }
@@ -282,11 +313,11 @@ export default function GroupDetailScreen() {
             <ArrowLeft size={22} color={theme.text} />
           </TouchableOpacity>
         </View>
-        <View style={styles.empty}>
-          <Text style={styles.emptyEmoji}>😅</Text>
-          <Text style={styles.emptyTitle}>Group not found</Text>
-          <Text style={styles.emptySubtext}>It may have been deleted or you lost access.</Text>
-        </View>
+        <EmptyState
+          emoji="😅"
+          title="Group not found"
+          subtitle="It may have been deleted or you lost access."
+        />
       </View>
     );
   }
@@ -415,12 +446,23 @@ export default function GroupDetailScreen() {
           </View>
         )}
 
-        {snaps.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>📸</Text>
-            <Text style={styles.emptyTitle}>No snaps yet</Text>
-            <Text style={styles.emptySubtext}>Be the first to share!</Text>
-          </View>
+        {responsesQuery.isLoading && activeChallenge ? (
+          <>
+            <SnapCardSkeleton />
+            <SnapCardSkeleton />
+          </>
+        ) : responsesQuery.isError ? (
+          <ErrorState
+            message="Failed to load snaps"
+            onRetry={() => responsesQuery.refetch()}
+            compact
+          />
+        ) : snaps.length === 0 ? (
+          <EmptyState
+            emoji="📸"
+            title="No snaps yet"
+            subtitle="Start a challenge to see snaps here!"
+          />
         ) : (
           snaps.map(snap => (
             <SnapCard

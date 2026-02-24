@@ -6,10 +6,11 @@ import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import ActivityRow from '@/components/ActivityRow';
 import { ActivityItem } from '@/types';
+import { Skeleton, EmptyState } from '@/components/ui';
 
 export default function ActivityScreen() {
   const insets = useSafeAreaInsets();
-  const { activity, refreshGroups } = useApp();
+  const { activity, refreshGroups, isLoading } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const renderItem = useCallback(({ item }: { item: ActivityItem }) => (
@@ -34,27 +35,41 @@ export default function ActivityScreen() {
         <Text style={styles.title}>Activity</Text>
       </View>
 
-      <FlatList
-        data={activity}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.coral}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🦗</Text>
-            <Text style={styles.emptyText}>No activity yet</Text>
-            <Text style={styles.emptySubtext}>Join a group to see what your friends are up to!</Text>
-          </View>
-        }
-      />
+      {isLoading ? (
+        <View style={styles.list}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton variant="circle" width={40} height={40} />
+              <View style={styles.skeletonLines}>
+                <Skeleton variant="text" width={180} height={14} />
+                <Skeleton variant="text" width={120} height={12} />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <FlatList
+          data={activity}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.coral}
+            />
+          }
+          ListEmptyComponent={
+            <EmptyState
+              emoji="📭"
+              title="No activity yet"
+              subtitle="Join a group and start snapping to see activity here!"
+            />
+          }
+        />
+      )}
     </View>
   );
 }
@@ -81,23 +96,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 100,
   },
-  empty: {
+  skeletonRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 80,
-    gap: 8,
+    gap: 12,
+    paddingVertical: 12,
   },
-  emptyEmoji: {
-    fontSize: 48,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: theme.text,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: theme.textMuted,
-    textAlign: 'center',
+  skeletonLines: {
+    flex: 1,
+    gap: 6,
   },
 });

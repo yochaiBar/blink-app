@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Button } from '@/components/ui';
 
 export default function JoinGroupScreen() {
   const insets = useSafeAreaInsets();
@@ -96,17 +97,17 @@ export default function JoinGroupScreen() {
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
 
-        <TouchableOpacity
-          style={[styles.joinBtn, (!code.trim() || isJoining) && styles.joinBtnDisabled]}
-          onPress={handleJoin}
-          disabled={!code.trim() || isJoining}
-          activeOpacity={0.85}
-          testID="join-group-btn"
-        >
-          <Text style={[styles.joinBtnText, (!code.trim() || isJoining) && styles.joinBtnTextDisabled]}>
-            {isJoining ? 'Joining...' : 'Join Group'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.joinBtnWrapper}>
+          <Button
+            title={isJoining ? 'Joining...' : 'Join Group'}
+            onPress={handleJoin}
+            variant="primary"
+            size="lg"
+            loading={isJoining}
+            disabled={!code.trim() || isJoining}
+            fullWidth
+          />
+        </View>
 
         <View style={styles.tipCard}>
           <Text style={styles.tipEmoji}>💡</Text>
@@ -201,23 +202,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginLeft: 4,
   },
-  joinBtn: {
-    backgroundColor: theme.coral,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
+  joinBtnWrapper: {
     marginBottom: 24,
-  },
-  joinBtnDisabled: {
-    backgroundColor: theme.surface,
-  },
-  joinBtnText: {
-    fontSize: 17,
-    fontWeight: '800' as const,
-    color: theme.white,
-  },
-  joinBtnTextDisabled: {
-    color: theme.textMuted,
   },
   tipCard: {
     flexDirection: 'row',
