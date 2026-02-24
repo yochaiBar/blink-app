@@ -11,6 +11,7 @@ import { useOnboardingStore } from "@/stores/onboardingStore";
 import { theme } from "@/constants/colors";
 import { registerForPushNotifications } from "@/utils/notifications";
 import { Platform } from "react-native";
+import { OfflineBanner } from "@/components/ui";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -170,6 +171,7 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <AppProvider>
           <StatusBar style="light" />
+          <OfflineBanner visible={false} />
           <RootLayoutNav />
         </AppProvider>
       </GestureHandlerRootView>

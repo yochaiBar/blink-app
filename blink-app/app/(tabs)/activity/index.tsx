@@ -29,7 +29,6 @@ export default function ActivityScreen() {
     isActivityError,
     refetchActivity,
     refreshGroups,
-    isRefreshing,
   } = useApp();
 
   const renderItem = useCallback(({ item }: { item: ActivityItem }) => (
@@ -76,16 +75,16 @@ export default function ActivityScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={isRefreshing}
+              refreshing={false}
               onRefresh={onRefresh}
               tintColor={theme.coral}
             />
           }
           ListEmptyComponent={
             <EmptyState
-              emoji="🦗"
+              emoji="📭"
               title="No activity yet"
-              subtitle="Join a group to see what your friends are up to!"
+              subtitle="Join a group and start snapping to see activity here!"
             />
           }
         />

@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services/api';
+import { Button } from '@/components/ui';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -191,19 +192,18 @@ export default function SettingsScreen() {
 
             <View style={styles.rowDivider} />
 
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={handleLogout}
-              disabled={isLoggingOut}
-            >
-              <View style={[styles.iconBg, { backgroundColor: theme.redMuted }]}>
-                <LogOut size={18} color={theme.red} />
-              </View>
-              <Text style={[styles.settingLabel, { color: theme.red }]}>
-                {isLoggingOut ? 'Logging out...' : 'Log Out'}
-              </Text>
-              <ChevronRight size={16} color={theme.textMuted} />
-            </TouchableOpacity>
+            <View style={styles.settingRow}>
+              <Button
+                title={isLoggingOut ? 'Logging out...' : 'Log Out'}
+                onPress={handleLogout}
+                variant="destructive"
+                size="md"
+                loading={isLoggingOut}
+                disabled={isLoggingOut}
+                icon={<LogOut size={18} color={theme.white} />}
+                fullWidth
+              />
+            </View>
 
             <View style={styles.rowDivider} />
 

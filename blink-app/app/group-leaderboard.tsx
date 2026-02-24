@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
 import { ApiGroupDetail } from '@/types/api';
 import { apiMembersToLeaderboard } from '@/utils/adapters';
+import { Skeleton, EmptyState, ErrorState } from '@/components/ui';
 
 const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
 const rankEmojis = ['🥇', '🥈', '🥉'];
@@ -85,7 +86,68 @@ export default function GroupLeaderboardScreen() {
   if (!group) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text style={styles.errorText}>Group not found</Text>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ArrowLeft size={22} color={theme.text} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Trophy size={18} color={theme.yellow} />
+            <Text style={styles.headerTitle}>Leaderboard</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+        <ErrorState message="Group not found" />
+      </View>
+    );
+  }
+
+  if (detailQuery.isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ArrowLeft size={22} color={theme.text} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Trophy size={18} color={theme.yellow} />
+            <Text style={styles.headerTitle}>Leaderboard</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={{ paddingHorizontal: 16, gap: 8, paddingTop: 20 }}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton variant="text" width={28} height={15} />
+              <Skeleton variant="circle" width={40} height={40} />
+              <View style={styles.skeletonInfo}>
+                <Skeleton variant="text" width={100} height={14} />
+                <Skeleton variant="text" width={60} height={12} />
+              </View>
+              <Skeleton variant="text" width={30} height={18} />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  if (detailQuery.isError) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ArrowLeft size={22} color={theme.text} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Trophy size={18} color={theme.yellow} />
+            <Text style={styles.headerTitle}>Leaderboard</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+        <ErrorState
+          message="Failed to load leaderboard"
+          onRetry={() => detailQuery.refetch()}
+        />
       </View>
     );
   }
@@ -108,26 +170,36 @@ export default function GroupLeaderboardScreen() {
         <Text style={styles.groupName}>{group.name}</Text>
       </View>
 
-      {topThree.length >= 3 && (
-        <LinearGradient
-          colors={['rgba(255, 215, 0, 0.06)', 'transparent']}
-          style={styles.podium}
-        >
-          <View style={styles.podiumRow}>
-            {renderPodiumItem(topThree[1], 1)}
-            {renderPodiumItem(topThree[0], 0)}
-            {renderPodiumItem(topThree[2], 2)}
-          </View>
-        </LinearGradient>
-      )}
+      {leaderboard.length === 0 ? (
+        <EmptyState
+          emoji="🏆"
+          title="No rankings yet"
+          subtitle="Start participating to climb the leaderboard!"
+        />
+      ) : (
+        <>
+          {topThree.length >= 3 && (
+            <LinearGradient
+              colors={['rgba(255, 215, 0, 0.06)', 'transparent']}
+              style={styles.podium}
+            >
+              <View style={styles.podiumRow}>
+                {renderPodiumItem(topThree[1], 1)}
+                {renderPodiumItem(topThree[0], 0)}
+                {renderPodiumItem(topThree[2], 2)}
+              </View>
+            </LinearGradient>
+          )}
 
-      <FlatList
-        data={rest}
-        renderItem={renderListItem}
-        keyExtractor={(item) => item.userId}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-      />
+          <FlatList
+            data={rest}
+            renderItem={renderListItem}
+            keyExtractor={(item) => item.userId}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -293,5 +365,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800' as const,
     color: theme.text,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    marginBottom: 6,
+    backgroundColor: theme.bgCard,
+  },
+  skeletonInfo: {
+    flex: 1,
+    gap: 4,
   },
 });

@@ -7,11 +7,12 @@ import { Settings, Camera, Flame, Users, Calendar, ChevronRight, Shield, Bell as
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Skeleton } from '@/components/ui';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, refreshGroups } = useApp();
+  const { user, refreshGroups, isLoading } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -71,38 +72,61 @@ export default function ProfileScreen() {
           />
         }
       >
-        <TouchableOpacity
-          style={styles.profileSection}
-          activeOpacity={0.8}
-          onPress={() => router.push('/edit-profile' as never)}
-        >
-          <View style={styles.avatarContainer}>
-            <Image source={{ uri: user.avatar }} style={styles.avatar} contentFit="cover" />
-            <View style={styles.editAvatarBtn}>
-              <Camera size={14} color={theme.white} />
+        {isLoading ? (
+          <View style={styles.profileSection}>
+            <Skeleton variant="circle" width={90} height={90} />
+            <View style={{ marginTop: 14, gap: 6, alignItems: 'center' }}>
+              <Skeleton variant="text" width={140} height={20} />
+              <Skeleton variant="text" width={100} height={14} />
+              <Skeleton variant="text" width={180} height={14} />
             </View>
           </View>
-          <Text style={styles.name}>{user.name}</Text>
-          <Text style={styles.username}>{user.username}</Text>
-          <Text style={styles.bio}>{user.bio}</Text>
-        </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.profileSection}
+            activeOpacity={0.8}
+            onPress={() => router.push('/edit-profile' as never)}
+          >
+            <View style={styles.avatarContainer}>
+              <Image source={{ uri: user.avatar }} style={styles.avatar} contentFit="cover" />
+              <View style={styles.editAvatarBtn}>
+                <Camera size={14} color={theme.white} />
+              </View>
+            </View>
+            <Text style={styles.name}>{user.name}</Text>
+            <Text style={styles.username}>{user.username}</Text>
+            <Text style={styles.bio}>{user.bio}</Text>
+          </TouchableOpacity>
+        )}
 
-        <View style={styles.statsContainer}>
-          {stats.map((stat, i) => {
-            const IconComponent = stat.icon;
-            return (
-              <LinearGradient
-                key={i}
-                colors={[`${stat.color}15`, `${stat.color}08`]}
-                style={styles.statCard}
-              >
-                <IconComponent size={20} color={stat.color} />
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </LinearGradient>
-            );
-          })}
-        </View>
+        {isLoading ? (
+          <View style={styles.statsContainer}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={[styles.statCard, { backgroundColor: theme.bgCard }]}>
+                <Skeleton variant="circle" width={20} height={20} />
+                <Skeleton variant="text" width={40} height={18} />
+                <Skeleton variant="text" width={60} height={11} />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.statsContainer}>
+            {stats.map((stat, i) => {
+              const IconComponent = stat.icon;
+              return (
+                <LinearGradient
+                  key={i}
+                  colors={[`${stat.color}15`, `${stat.color}08`]}
+                  style={styles.statCard}
+                >
+                  <IconComponent size={20} color={stat.color} />
+                  <Text style={styles.statValue}>{stat.value}</Text>
+                  <Text style={styles.statLabel}>{stat.label}</Text>
+                </LinearGradient>
+              );
+            })}
+          </View>
+        )}
 
         {menuSections.map((section, sectionIndex) => (
           <View key={sectionIndex} style={styles.menuSection}>

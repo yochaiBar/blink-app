@@ -14,11 +14,12 @@ import Tooltip, { TargetLayout } from '@/components/Tooltip';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { isDemoGroup } from '@/constants/demoData';
 import { getTimeGreeting } from '@/utils/time';
+import { GroupCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
 
 export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { groups, user, unreadNotificationCount, refreshGroups, isRefreshing, shouldShowDemoGroup } = useApp();
+  const { groups, user, unreadNotificationCount, refreshGroups, isRefreshing, isLoading, shouldShowDemoGroup } = useApp();
   const fabScale = useRef(new Animated.Value(1)).current;
 
   const tourStep = useOnboardingStore((s) => s.tourStep);
@@ -227,43 +228,61 @@ export default function GroupsScreen() {
           />
         )}
 
-        {remainingActiveGroups.length > 0 && (
+        {isLoading ? (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.liveDot} />
-              <Text style={styles.sectionTitle}>Active Challenges</Text>
-            </View>
-            {remainingActiveGroups.map(group => (
-              <View
-                key={group.id}
-                ref={isDemoGroup(group.id) ? demoCardRef : undefined}
-                collapsable={false}
-              >
-                <GroupCard
-                  group={group}
-                  onPress={() => handleGroupPress(group.id)}
-                />
-              </View>
-            ))}
+            <GroupCardSkeleton />
+            <GroupCardSkeleton />
+            <GroupCardSkeleton />
           </View>
-        )}
+        ) : groups.length === 0 && !shouldShowDemoGroup ? (
+          <EmptyState
+            emoji="👋"
+            title="Welcome to Blink!"
+            subtitle="Create or join a group to get started"
+            actionLabel="Create Group"
+            onAction={handleCreateGroup}
+          />
+        ) : (
+          <>
+            {remainingActiveGroups.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.sectionTitle}>Active Challenges</Text>
+                </View>
+                {remainingActiveGroups.map(group => (
+                  <View
+                    key={group.id}
+                    ref={isDemoGroup(group.id) ? demoCardRef : undefined}
+                    collapsable={false}
+                  >
+                    <GroupCard
+                      group={group}
+                      onPress={() => handleGroupPress(group.id)}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
 
-        {otherGroups.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Groups</Text>
-            {otherGroups.map(group => (
-              <View
-                key={group.id}
-                ref={isDemoGroup(group.id) ? demoCardRef : undefined}
-                collapsable={false}
-              >
-                <GroupCard
-                  group={group}
-                  onPress={() => handleGroupPress(group.id)}
-                />
+            {otherGroups.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Your Groups</Text>
+                {otherGroups.map(group => (
+                  <View
+                    key={group.id}
+                    ref={isDemoGroup(group.id) ? demoCardRef : undefined}
+                    collapsable={false}
+                  >
+                    <GroupCard
+                      group={group}
+                      onPress={() => handleGroupPress(group.id)}
+                    />
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
+            )}
+          </>
         )}
 
         <View style={{ height: 100 }} />

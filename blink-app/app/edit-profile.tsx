@@ -8,6 +8,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
+import { Button } from '@/components/ui';
 
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -179,16 +180,24 @@ export default function EditProfileScreen() {
           <Text style={styles.charCount}>{bio.length}/100</Text>
         </View>
 
-        <TouchableOpacity
-          style={[styles.saveMainBtn, (!hasChanges || isSaving) && styles.saveMainBtnDisabled]}
-          onPress={handleSave}
-          disabled={!hasChanges || isSaving}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.saveMainBtnText, (!hasChanges || isSaving) && styles.saveMainBtnTextDisabled]}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </Text>
-        </TouchableOpacity>
+        <View style={{ gap: 10, marginTop: 8 }}>
+          <Button
+            title={isSaving ? 'Saving...' : 'Save Changes'}
+            onPress={handleSave}
+            variant="primary"
+            size="lg"
+            loading={isSaving}
+            disabled={!hasChanges || isSaving}
+            fullWidth
+          />
+          <Button
+            title="Cancel"
+            onPress={() => router.back()}
+            variant="ghost"
+            size="md"
+            fullWidth
+          />
+        </View>
       </ScrollView>
     </View>
   );
@@ -319,22 +328,5 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 6,
   },
-  saveMainBtn: {
-    backgroundColor: theme.coral,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  saveMainBtnDisabled: {
-    backgroundColor: theme.surface,
-  },
-  saveMainBtnText: {
-    fontSize: 17,
-    fontWeight: '800' as const,
-    color: theme.white,
-  },
-  saveMainBtnTextDisabled: {
-    color: theme.textMuted,
-  },
+  // saveMainBtn styles replaced by shared Button component
 });

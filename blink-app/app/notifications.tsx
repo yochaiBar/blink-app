@@ -138,8 +138,8 @@ export default function NotificationsScreen() {
           ListEmptyComponent={
             <EmptyState
               emoji="🔔"
-              title="No notifications"
-              subtitle="You're all caught up!"
+              title="All caught up!"
+              subtitle="You'll see notifications from your groups here"
             />
           }
         />

@@ -8,6 +8,7 @@ import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import { GroupCategory, Group } from '@/types';
 import { categoryLabels } from '@/constants/categories';
+import { Button } from '@/components/ui';
 
 const categoryOptions: { key: GroupCategory; emoji: string; color: string }[] = [
   { key: 'close_friends', emoji: '💜', color: theme.coral },
@@ -156,16 +157,15 @@ export default function CreateGroupScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[styles.bigCreateBtn, (!name.trim() || isCreating) && styles.bigCreateBtnDisabled]}
+        <Button
+          title={isCreating ? 'Creating...' : 'Create Group'}
           onPress={handleCreate}
+          variant="primary"
+          size="lg"
+          loading={isCreating}
           disabled={!name.trim() || isCreating}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.bigCreateBtnText, (!name.trim() || isCreating) && styles.bigCreateBtnTextDisabled]}>
-            {isCreating ? 'Creating...' : 'Create Group'}
-          </Text>
-        </TouchableOpacity>
+          fullWidth
+        />
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -300,22 +300,5 @@ const styles = StyleSheet.create({
   emojiText: {
     fontSize: 22,
   },
-  bigCreateBtn: {
-    backgroundColor: theme.coral,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  bigCreateBtnDisabled: {
-    backgroundColor: theme.surface,
-  },
-  bigCreateBtnText: {
-    fontSize: 17,
-    fontWeight: '800' as const,
-    color: theme.white,
-  },
-  bigCreateBtnTextDisabled: {
-    color: theme.textMuted,
-  },
+  // bigCreateBtn styles replaced by shared Button component
 });
