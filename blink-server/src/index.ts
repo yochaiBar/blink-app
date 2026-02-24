@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import http from 'http';
 
 dotenv.config();
 
@@ -12,8 +13,11 @@ import groupRoutes from './routes/groups';
 import challengeRoutes from './routes/challenges';
 import uploadRoutes from './routes/upload';
 import spotlightRoutes from './routes/spotlight';
+import activityRoutes from './routes/activity';
+import notificationRoutes from './routes/notifications';
 import logger from './utils/logger';
 import { RATE_LIMITS } from './utils/constants';
+import { initSocket } from './socket';
 
 const app = express();
 
@@ -70,6 +74,8 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/challenges', challengeRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/spotlight', spotlightRoutes);
+app.use('/api/activity', activityRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -85,7 +91,12 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+
+// Create HTTP server and initialize Socket.io
+const server = http.createServer(app);
+export const io = initSocket(server);
+
+server.listen(PORT, () => {
   logger.info(`Blink server running on port ${PORT}`);
 });
 

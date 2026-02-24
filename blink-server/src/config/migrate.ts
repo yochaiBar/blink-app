@@ -104,6 +104,31 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_groups_invite_code ON groups(invite_code);
     CREATE INDEX IF NOT EXISTS idx_daily_spotlights_group_date ON daily_spotlights(group_id, date);
     CREATE INDEX IF NOT EXISTS idx_active_penalties_user ON active_penalties(user_id, group_id);
+
+    -- Notifications
+    CREATE TABLE IF NOT EXISTS notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type VARCHAR(30) NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+      from_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      read BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
+
+    -- Reactions
+    CREATE TABLE IF NOT EXISTS reactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      response_id UUID NOT NULL REFERENCES challenge_responses(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji VARCHAR(10) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(response_id, user_id, emoji)
+    );
+    CREATE INDEX IF NOT EXISTS idx_reactions_response ON reactions(response_id);
   `);
 
   logger.info('Migrations complete!');

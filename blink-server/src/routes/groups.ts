@@ -6,6 +6,8 @@ import { validateBody } from '../middleware/validate';
 import { createGroupSchema, joinGroupSchema } from '../utils/schemas';
 import logger from '../utils/logger';
 import crypto from 'crypto';
+import { createNotification } from '../utils/notifications';
+import { emitToGroup } from '../socket';
 
 const router = Router();
 const MAX_FREE_GROUPS = 3;
@@ -158,6 +160,32 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
      ON CONFLICT (group_id, user_id) DO NOTHING`,
     [g.id, req.userId]
   );
+
+  // Notify existing group members
+  const joinerUser = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+  const joinerName = joinerUser.rows[0]?.display_name || 'Someone';
+
+  const existingMembers = await query(
+    `SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2`,
+    [g.id, req.userId]
+  );
+  for (const member of existingMembers.rows) {
+    await createNotification(
+      member.user_id,
+      'group_joined',
+      'New Member!',
+      `${joinerName} joined ${g.name}`,
+      g.id,
+      req.userId
+    );
+  }
+
+  // Emit real-time event
+  emitToGroup(g.id, 'group:member-joined', {
+    groupId: g.id,
+    userId: req.userId,
+    displayName: joinerName,
+  });
 
   logger.info('User joined group', { groupId: g.id, userId: req.userId });
   res.json(g);

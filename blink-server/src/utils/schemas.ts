@@ -76,3 +76,12 @@ export const respondChallengeSchema = z.object({
   response_time_ms: z.number().int().positive().optional(),
   answer_index: z.number().int().min(0).optional(),
 });
+
+// ── Reaction schemas ─────────────────────────────────────────
+
+export const addReactionSchema = z.object({
+  emoji: z
+    .string()
+    .min(1, 'Emoji is required')
+    .max(10, 'Emoji must be at most 10 characters'),
+});

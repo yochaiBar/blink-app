@@ -3,9 +3,11 @@ import { query } from '../config/database';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { validateBody } from '../middleware/validate';
-import { createChallengeSchema, respondChallengeSchema } from '../utils/schemas';
+import { createChallengeSchema, respondChallengeSchema, addReactionSchema } from '../utils/schemas';
 import logger from '../utils/logger';
 import { CHALLENGE_COUNTDOWN_SECONDS } from '../utils/constants';
+import { createNotification } from '../utils/notifications';
+import { emitToGroup } from '../socket';
 
 const router = Router();
 
@@ -173,8 +175,36 @@ router.post('/groups/:groupId/challenges', validateBody(createChallengeSchema), 
     [groupId, challengeType, promptText, optionsJson, req.userId, expiresAt, CHALLENGE_COUNTDOWN_SECONDS]
   );
 
-  logger.info('Challenge triggered', { groupId, challengeId: result.rows[0].id, type: challengeType });
-  res.status(201).json(result.rows[0]);
+  const challenge = result.rows[0];
+
+  // Notify all group members except trigger-er
+  const groupMembers = await query(
+    `SELECT gm.user_id, u.display_name FROM group_members gm
+     JOIN users u ON u.id = gm.user_id
+     WHERE gm.group_id = $1 AND gm.user_id != $2`,
+    [groupId, req.userId]
+  );
+  const triggerUser = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+  const triggerName = triggerUser.rows[0]?.display_name || 'Someone';
+  const groupInfo = await query(`SELECT name FROM groups WHERE id = $1`, [groupId]);
+  const groupName = groupInfo.rows[0]?.name || 'your group';
+
+  for (const member of groupMembers.rows) {
+    await createNotification(
+      member.user_id,
+      'challenge_started',
+      'New Challenge!',
+      `${triggerName} started a ${challengeType} challenge in ${groupName}`,
+      groupId,
+      req.userId
+    );
+  }
+
+  // Emit real-time event
+  emitToGroup(groupId, 'challenge:started', challenge);
+
+  logger.info('Challenge triggered', { groupId, challengeId: challenge.id, type: challengeType });
+  res.status(201).json(challenge);
 }));
 
 // ── GET active challenge ──
@@ -266,6 +296,26 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
     [id, req.userId, responseType, photo_url || null, answer_index ?? null, response_time_ms || null]
   );
 
+  // Notify the challenge trigger-er that someone responded
+  if (c.triggered_by && c.triggered_by !== req.userId) {
+    const responderUser = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+    const responderName = responderUser.rows[0]?.display_name || 'Someone';
+    await createNotification(
+      c.triggered_by,
+      'snap_received',
+      'New Response!',
+      `${responderName} responded to your challenge`,
+      c.group_id,
+      req.userId
+    );
+  }
+
+  // Emit real-time event for the response
+  emitToGroup(c.group_id, 'challenge:response', {
+    challengeId: id,
+    response: result.rows[0],
+  });
+
   // Check if all responded -> complete
   const totalMembers = await query(
     `SELECT COUNT(*) FROM group_members WHERE group_id = $1`,
@@ -278,6 +328,9 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
   if (parseInt(totalResponses.rows[0].count) >= parseInt(totalMembers.rows[0].count)) {
     await query(`UPDATE challenges SET status = 'completed' WHERE id = $1`, [id]);
     await processSkipsForChallenge(id, c.group_id);
+
+    // Emit challenge completed event
+    emitToGroup(c.group_id, 'challenge:completed', { challengeId: id, groupId: c.group_id });
   }
 
   logger.info('Challenge response submitted', { challengeId: id, userId: req.userId });
@@ -306,7 +359,40 @@ router.get('/:id/responses', asyncHandler(async (req: AuthRequest, res: Response
     [id]
   );
 
-  res.json(responses.rows);
+  // Fetch reactions for all responses in this challenge
+  const responseIds = responses.rows.map((r: any) => r.id);
+  let reactionsMap: Record<string, { emoji: string; count: number; users: string[] }[]> = {};
+
+  if (responseIds.length > 0) {
+    const reactions = await query(
+      `SELECT r.response_id, r.emoji, COUNT(*) as count,
+              ARRAY_AGG(u.display_name) as user_names
+       FROM reactions r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.response_id = ANY($1)
+       GROUP BY r.response_id, r.emoji
+       ORDER BY count DESC`,
+      [responseIds]
+    );
+
+    for (const row of reactions.rows) {
+      if (!reactionsMap[row.response_id]) {
+        reactionsMap[row.response_id] = [];
+      }
+      reactionsMap[row.response_id].push({
+        emoji: row.emoji,
+        count: parseInt(row.count),
+        users: row.user_names,
+      });
+    }
+  }
+
+  const responsesWithReactions = responses.rows.map((r: any) => ({
+    ...r,
+    reactions: reactionsMap[r.id] || [],
+  }));
+
+  res.json(responsesWithReactions);
 }));
 
 // ── GET challenge history ──
@@ -334,6 +420,70 @@ router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthR
   );
 
   res.json(result.rows);
+}));
+
+// ── POST /api/challenges/responses/:responseId/reactions — Add reaction ──
+router.post('/responses/:responseId/reactions', validateBody(addReactionSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { responseId } = req.params;
+  const { emoji } = req.body;
+
+  // Verify the response exists
+  const response = await query(
+    `SELECT cr.*, c.group_id FROM challenge_responses cr
+     JOIN challenges c ON c.id = cr.challenge_id
+     WHERE cr.id = $1`,
+    [responseId]
+  );
+  if (response.rows.length === 0) {
+    res.status(404).json({ error: 'Response not found' });
+    return;
+  }
+
+  // Verify user is a member of the group
+  const membership = await query(
+    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    [response.rows[0].group_id, req.userId]
+  );
+  if (membership.rows.length === 0) {
+    res.status(403).json({ error: 'Not a member of this group' });
+    return;
+  }
+
+  const result = await query(
+    `INSERT INTO reactions (response_id, user_id, emoji)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (response_id, user_id, emoji) DO NOTHING
+     RETURNING *`,
+    [responseId, req.userId, emoji]
+  );
+
+  if (result.rows.length === 0) {
+    res.status(409).json({ error: 'Reaction already exists' });
+    return;
+  }
+
+  logger.info('Reaction added', { responseId, userId: req.userId, emoji });
+  res.status(201).json(result.rows[0]);
+}));
+
+// ── DELETE /api/challenges/responses/:responseId/reactions/:emoji — Remove reaction ──
+router.delete('/responses/:responseId/reactions/:emoji', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { responseId, emoji } = req.params;
+
+  const result = await query(
+    `DELETE FROM reactions
+     WHERE response_id = $1 AND user_id = $2 AND emoji = $3
+     RETURNING *`,
+    [responseId, req.userId, emoji]
+  );
+
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'Reaction not found' });
+    return;
+  }
+
+  logger.info('Reaction removed', { responseId, userId: req.userId, emoji });
+  res.json({ message: 'Reaction removed' });
 }));
 
 export default router;
