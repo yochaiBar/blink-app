@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { Group, SnapSubmission, ActivityItem, NotificationItem, PromptResponse, DailySpotlight, UserProfile, LeaderboardEntry } from '@/types';
@@ -32,6 +33,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const realGroups = groupsQuery.data ?? [];
   // Only show demo group once the query has loaded (not while still fetching)
+  // Demo group disappears when: user has real groups OR tour is complete
   const querySettled = groupsQuery.isFetched || groupsQuery.isError;
   const shouldShowDemoGroup = querySettled && realGroups.length === 0 && !tourComplete;
 
@@ -70,8 +72,31 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [spotlight] = useState<DailySpotlight | null>(null);
 
   // ── Activity / Notifications (no backend endpoints yet) ──
-  const [activity] = useState<ActivityItem[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [notifications] = useState<NotificationItem[]>([]);
+
+  // ── Add activity item helper ──
+  const addActivityItem = useCallback((
+    type: ActivityItem['type'],
+    groupName: string,
+    groupId: string,
+    message: string,
+    imageUrl?: string,
+  ) => {
+    const item: ActivityItem = {
+      id: `activity_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type,
+      userId: user.id || 'self',
+      userName: user.name?.split(' ')[0] || 'You',
+      userAvatar: user.avatar,
+      groupName,
+      groupId,
+      message,
+      timestamp: new Date().toISOString(),
+      imageUrl,
+    };
+    setActivity(prev => [item, ...prev]);
+  }, [user.id, user.name, user.avatar]);
   const [promptResponses, setPromptResponses] = useState<PromptResponse[]>([]);
   const [snaps, setSnaps] = useState<SnapSubmission[]>([]);
   const [leaderboards, setLeaderboards] = useState<Record<string, LeaderboardEntry[]>>({});
@@ -114,8 +139,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
         body: JSON.stringify(body),
       });
     },
-    onSuccess: () => {
+    onSuccess: (_data, { groupId }) => {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
+      // Track activity
+      const group = groups.find(g => g.id === groupId);
+      addActivityItem('snap', group?.name ?? 'Group', groupId, 'submitted a snap');
+    },
+    onError: (error: Error) => {
+      Alert.alert('Snap Failed', error.message || 'Could not submit your snap. Please try again.');
     },
   });
 
@@ -137,8 +168,13 @@ export const [AppProvider, useApp] = createContextHook(() => {
       });
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (_data, group) => {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
+      // Track activity
+      addActivityItem('join', group.name, group.id, 'created a new group');
+    },
+    onError: (error: Error) => {
+      Alert.alert('Create Group Failed', error.message || 'Could not create the group. Please try again.');
     },
   });
 
@@ -156,12 +192,15 @@ export const [AppProvider, useApp] = createContextHook(() => {
       });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       completeTourAction();
+      // Track activity
+      addActivityItem('join', result.name ?? 'Group', result.id, 'joined the group');
       return { success: true, groupId: result.id, groupName: result.name, message: 'Joined successfully' };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to join group';
+      Alert.alert('Join Failed', message);
       return { success: false, message };
     }
-  }, [queryClient, completeTourAction]);
+  }, [queryClient, completeTourAction, addActivityItem]);
 
   // ── Get group snaps ──
   const getGroupSnaps = useCallback((groupId: string) => {
@@ -246,15 +285,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
     // Persist to server
     try {
-      await api('/auth/profile', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          display_name: updates.name,
-          avatar_url: updates.avatar,
-        }),
-      });
-    } catch {
-      // Server update failed — local change still applied
+      const payload: Record<string, unknown> = {};
+      if (updates.name !== undefined) payload.display_name = updates.name;
+      if (updates.avatar !== undefined) payload.avatar_url = updates.avatar;
+      // Only call API if there are server-side fields to update
+      if (Object.keys(payload).length > 0) {
+        await api('/auth/profile', {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not save profile changes.';
+      Alert.alert('Profile Update Failed', message);
+      throw err; // Re-throw so callers (e.g. edit-profile screen) can handle it
     }
   }, []);
 
@@ -286,6 +330,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     addGroup,
     getGroupSnaps,
     addReaction,
+    addActivityItem,
     markNotificationsRead,
     completeOnboarding,
     respondToPrompt,

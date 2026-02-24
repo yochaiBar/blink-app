@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Zap } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
@@ -9,13 +9,23 @@ import { ActivityItem } from '@/types';
 
 export default function ActivityScreen() {
   const insets = useSafeAreaInsets();
-  const { activity } = useApp();
+  const { activity, refreshGroups } = useApp();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const renderItem = React.useCallback(({ item }: { item: ActivityItem }) => (
+  const renderItem = useCallback(({ item }: { item: ActivityItem }) => (
     <ActivityRow item={item} />
   ), []);
 
-  const keyExtractor = React.useCallback((item: ActivityItem) => item.id, []);
+  const keyExtractor = useCallback((item: ActivityItem) => item.id, []);
+
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshGroups();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshGroups]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -30,6 +40,13 @@ export default function ActivityScreen() {
         keyExtractor={keyExtractor}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.coral}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyEmoji}>🦗</Text>
