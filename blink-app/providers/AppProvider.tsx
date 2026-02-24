@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { Group, SnapSubmission, ActivityItem, NotificationItem, PromptResponse, DailySpotlight, UserProfile, LeaderboardEntry } from '@/types';
-import { api } from '@/services/api';
+import { api, getActivity, getNotifications, markNotificationsRead as markNotificationsReadApi } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { apiGroupListToGroup, apiGroupDetailToGroup, apiMemberToGroupMember, apiSpotlightToUI, apiResponseToSnap, apiMembersToLeaderboard, apiUserToProfile } from '@/utils/adapters';
@@ -71,9 +71,34 @@ export const [AppProvider, useApp] = createContextHook(() => {
   // ── Spotlight (empty for now — endpoint may not exist) ──
   const [spotlight] = useState<DailySpotlight | null>(null);
 
-  // ── Activity / Notifications (no backend endpoints yet) ──
-  const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [notifications] = useState<NotificationItem[]>([]);
+  // ── Activity (backend wired via React Query) ──
+  const activityQuery = useQuery({
+    queryKey: ['activity'],
+    queryFn: getActivity,
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+  });
+
+  const [localActivity, setLocalActivity] = useState<ActivityItem[]>([]);
+
+  // Merge backend activity with local optimistic items
+  const activity = useMemo(() => {
+    const backendItems = activityQuery.data ?? [];
+    // Prepend local-only items (they have ids starting with 'activity_')
+    const backendIds = new Set(backendItems.map(i => i.id));
+    const uniqueLocal = localActivity.filter(i => !backendIds.has(i.id));
+    return [...uniqueLocal, ...backendItems];
+  }, [activityQuery.data, localActivity]);
+
+  // ── Notifications (backend wired via React Query) ──
+  const notificationsQuery = useQuery({
+    queryKey: ['notifications'],
+    queryFn: getNotifications,
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+  });
+
+  const notifications = notificationsQuery.data ?? [];
 
   // ── Add activity item helper ──
   const addActivityItem = useCallback((
@@ -95,7 +120,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
       timestamp: new Date().toISOString(),
       imageUrl,
     };
-    setActivity(prev => [item, ...prev]);
+    setLocalActivity(prev => [item, ...prev]);
+    // Also invalidate to re-fetch from server
+    queryClient.invalidateQueries({ queryKey: ['activity'] });
   }, [user.id, user.name, user.avatar]);
   const [promptResponses, setPromptResponses] = useState<PromptResponse[]>([]);
   const [snaps, setSnaps] = useState<SnapSubmission[]>([]);
@@ -240,9 +267,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [user.id]);
 
   // ── Notifications ──
-  const markNotificationsRead = useCallback(() => {
-    // No-op — no backend endpoint yet
-  }, []);
+  const markNotificationsRead = useCallback(async () => {
+    try {
+      await markNotificationsReadApi();
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    } catch {
+      // Silently fail — UI already marked as read locally
+    }
+  }, [queryClient]);
 
   const unreadNotificationCount = useMemo(() => {
     return notifications.filter(n => !n.read).length;
@@ -326,6 +358,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
     isDataLoaded: !groupsQuery.isLoading,
     isLoading: groupsQuery.isLoading && isAuthenticated,
     isRefreshing: groupsQuery.isRefetching,
+    isActivityLoading: activityQuery.isLoading,
+    isActivityError: activityQuery.isError,
+    refetchActivity: activityQuery.refetch,
+    isNotificationsLoading: notificationsQuery.isLoading,
+    isNotificationsError: notificationsQuery.isError,
+    refetchNotifications: notificationsQuery.refetch,
     submitSnap,
     addGroup,
     getGroupSnaps,

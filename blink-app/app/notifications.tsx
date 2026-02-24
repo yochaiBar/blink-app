@@ -6,6 +6,7 @@ import { ArrowLeft, Bell, Camera, Heart, MessageCircle, Flame, UserPlus, Star, M
 import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
+import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import { NotificationItem } from '@/types';
 import { getRelativeTime } from '@/utils/time';
 
@@ -19,10 +20,29 @@ const notifIcons: Record<string, { icon: typeof Bell; color: string }> = {
   invite: { icon: Mail, color: theme.purple },
 };
 
+function NotificationSkeleton() {
+  return (
+    <View style={styles.skeletonRow}>
+      <Skeleton variant="circle" width={44} height={44} />
+      <View style={styles.skeletonContent}>
+        <Skeleton variant="text" width={160} height={15} />
+        <Skeleton variant="text" width={200} height={13} />
+        <Skeleton variant="text" width={90} height={12} />
+      </View>
+    </View>
+  );
+}
+
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { notifications, markNotificationsRead } = useApp();
+  const {
+    notifications,
+    markNotificationsRead,
+    isNotificationsLoading,
+    isNotificationsError,
+    refetchNotifications,
+  } = useApp();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -68,7 +88,7 @@ export default function NotificationsScreen() {
             {item.groupName && (
               <>
                 <Text style={styles.notifGroup}>{item.groupName}</Text>
-                <Text style={styles.notifDot}>·</Text>
+                <Text style={styles.notifDot}>{'\u00B7'}</Text>
               </>
             )}
             <Text style={styles.notifTime}>{getRelativeTime(item.timestamp)}</Text>
@@ -90,20 +110,40 @@ export default function NotificationsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <FlatList
-        data={notifications}
-        renderItem={renderNotification}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🔔</Text>
-            <Text style={styles.emptyTitle}>No notifications</Text>
-            <Text style={styles.emptySubtext}>You're all caught up!</Text>
-          </View>
-        }
-      />
+      {/* Loading state */}
+      {isNotificationsLoading && (
+        <View style={styles.loadingContainer}>
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <NotificationSkeleton key={i} />
+          ))}
+        </View>
+      )}
+
+      {/* Error state */}
+      {isNotificationsError && !isNotificationsLoading && (
+        <ErrorState
+          message="Could not load notifications"
+          onRetry={() => refetchNotifications()}
+        />
+      )}
+
+      {/* Data */}
+      {!isNotificationsLoading && !isNotificationsError && (
+        <FlatList
+          data={notifications}
+          renderItem={renderNotification}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <EmptyState
+              emoji="🔔"
+              title="No notifications"
+              subtitle="You're all caught up!"
+            />
+          }
+        />
+      )}
     </View>
   );
 }
@@ -132,6 +172,21 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800' as const,
     color: theme.text,
+  },
+  loadingContainer: {
+    paddingHorizontal: 16,
+    gap: 4,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+  },
+  skeletonContent: {
+    flex: 1,
+    gap: 6,
   },
   list: {
     paddingHorizontal: 16,
@@ -216,22 +271,5 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: theme.coral,
     marginTop: 6,
-  },
-  empty: {
-    alignItems: 'center',
-    paddingTop: 80,
-    gap: 8,
-  },
-  emptyEmoji: {
-    fontSize: 48,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: theme.text,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: theme.textMuted,
   },
 });

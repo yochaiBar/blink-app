@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Refresh
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { ArrowLeft, Camera, MoreHorizontal, Share2, Trophy, UserPlus, Zap, X, LogOut, Edit3, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Camera, MoreHorizontal, Share2, Trophy, UserPlus, Zap, X, LogOut, Edit3, Trash2, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
@@ -103,12 +103,24 @@ export default function GroupDetailScreen() {
         body: JSON.stringify({ type }),
       });
     },
-    onSuccess: (_data, type) => {
+    onSuccess: (data, type) => {
       queryClient.invalidateQueries({ queryKey: ['challenge', id] });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       setShowRingModal(false);
       if (type === 'snap') {
         router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
+      } else if (type === 'food_quiz' || type === 'most_likely' || type === 'rate_day') {
+        router.push({
+          pathname: '/quiz-challenge' as never,
+          params: {
+            groupId: id,
+            challengeId: data?.id ?? '',
+            type,
+            promptText: data?.prompt ?? '',
+            optionsJson: JSON.stringify(data?.options ?? []),
+            expiresAt: data?.expires_at ?? '',
+          },
+        });
       } else {
         router.push({ pathname: '/group-prompt' as never, params: { groupId: id } });
       }
@@ -227,7 +239,24 @@ export default function GroupDetailScreen() {
 
     if (activeChallenge?.type === 'snap') {
       router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
+    } else if (
+      activeChallenge?.type === 'food_quiz' ||
+      activeChallenge?.type === 'most_likely' ||
+      activeChallenge?.type === 'rate_day'
+    ) {
+      router.push({
+        pathname: '/quiz-challenge' as never,
+        params: {
+          groupId: id,
+          challengeId: activeChallenge.id,
+          type: activeChallenge.type,
+          promptText: activeChallenge.prompt ?? '',
+          optionsJson: JSON.stringify(activeChallenge.options ?? []),
+          expiresAt: activeChallenge.expires_at,
+        },
+      });
     } else {
+      // Fallback for unknown types
       router.push({ pathname: '/group-prompt' as never, params: { groupId: id } });
     }
   }, [router, id, activeChallenge, isDemo, advanceTour]);
@@ -353,6 +382,14 @@ export default function GroupDetailScreen() {
           >
             <Share2 size={16} color={theme.green} />
             <Text style={[styles.quickActionText, { color: theme.green }]}>Invite</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.quickAction, { backgroundColor: theme.purpleMuted }]}
+            onPress={() => router.push({ pathname: '/challenge-history' as never, params: { groupId: id } })}
+          >
+            <Clock size={16} color={theme.purple} />
+            <Text style={[styles.quickActionText, { color: theme.purple }]}>History</Text>
           </TouchableOpacity>
 
           {!activeChallenge && (
@@ -619,6 +656,7 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 20,
     gap: 8,
     paddingVertical: 10,
