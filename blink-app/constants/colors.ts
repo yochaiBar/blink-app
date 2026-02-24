@@ -21,7 +21,7 @@ export const theme = {
 
   text: '#FAFAFA',
   textSecondary: '#9999AA',
-  textMuted: '#666680',
+  textMuted: '#7A7A8E',
   textInverse: '#0A0A0F',
 
   coral: '#FF6B4A',
@@ -49,6 +49,16 @@ export const theme = {
 
   white: '#FFFFFF',
   black: '#000000',
+
+  // Semantic colors
+  success: '#4ADE80',
+  successMuted: 'rgba(74, 222, 128, 0.15)',
+  warning: '#FBBF24',
+  warningMuted: 'rgba(251, 191, 36, 0.15)',
+  error: '#EF4444',
+  errorMuted: 'rgba(239, 68, 68, 0.15)',
+  info: '#60A5FA',
+  infoMuted: 'rgba(96, 165, 250, 0.15)',
 
   categoryColors: {
     close_friends: '#FF6B4A',
