@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "backend-developer@expanly-claude-code-agents": true,
+    "frontend-developer@expanly-claude-code-agents": true,
+    "fullstack-developer@expanly-claude-code-agents": true,
+    "api-designer@expanly-claude-code-agents": true,
+    "ui-designer@expanly-claude-code-agents": true,
+    "ux-researcher@expanly-claude-code-agents": true,
+    "qa-expert@expanly-claude-code-agents": true,
+    "code-reviewer@expanly-claude-code-agents": true,
+    "agent-organizer@expanly-claude-code-agents": true
+  }
+}
