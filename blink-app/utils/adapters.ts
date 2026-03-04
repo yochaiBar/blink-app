@@ -67,18 +67,19 @@ export function apiGroupDetailToGroup(detail: ApiGroupDetail, activeChallenge?: 
   };
 }
 
-export function apiSpotlightToUI(s: ApiSpotlight): DailySpotlight {
+export function apiSpotlightToUI(s: ApiSpotlight, groupId?: string): DailySpotlight {
+  const stats = s.stats_json;
   return {
-    userId: s.user_id,
+    userId: s.featured_user_id,
     userName: s.display_name ?? 'User',
     userAvatar: s.avatar_url ?? DEFAULT_AVATAR,
-    groupId: '',
+    groupId: groupId ?? s.group_id ?? '',
     title: s.superlative || "Today's Star",
-    subtitle: 'Top performer this week!',
+    subtitle: stats.fun_fact || 'Top performer this week!',
     stats: [
-      { label: 'Responses', value: String(s.stats.total_responses), emoji: '📸' },
-      { label: 'Streak', value: `${s.stats.streak} days`, emoji: '🔥' },
-      { label: 'Avg Time', value: s.stats.avg_response_time_ms ? `${(s.stats.avg_response_time_ms / 1000).toFixed(1)}s` : 'N/A', emoji: '⚡' },
+      { label: 'Responses', value: String(stats.total_responses), emoji: '📸' },
+      { label: 'Streak', value: `${stats.streak} days`, emoji: '🔥' },
+      { label: 'Rate', value: `${stats.participation_rate}%`, emoji: '🎯' },
     ],
   };
 }
@@ -91,7 +92,7 @@ export function apiResponseToSnap(r: ApiChallengeResponse): SnapSubmission {
     userAvatar: r.avatar_url ?? DEFAULT_AVATAR,
     groupId: '',
     imageUrl: r.photo_url ?? '',
-    timestamp: r.created_at,
+    timestamp: r.responded_at ?? r.created_at,
     reactions: [],
   };
 }
@@ -109,13 +110,13 @@ export function apiMembersToLeaderboard(members: ApiGroupMember[]): LeaderboardE
     }));
 }
 
-export function apiUserToProfile(user: { id: string; phone_number: string; display_name: string | null; avatar_url: string | null }): UserProfile {
+export function apiUserToProfile(user: { id: string; phone_number: string; display_name: string | null; avatar_url: string | null; bio?: string | null }): UserProfile {
   return {
     id: user.id,
     name: user.display_name ?? '',
     username: '',
     avatar: user.avatar_url ?? DEFAULT_AVATAR,
-    bio: '',
+    bio: user.bio ?? '',
     totalSnaps: 0,
     longestStreak: 0,
     groupCount: 0,

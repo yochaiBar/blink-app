@@ -5,6 +5,7 @@ export interface ApiUser {
   phone_number: string;
   display_name: string | null;
   avatar_url: string | null;
+  bio: string | null;
 }
 
 export interface ApiGroupListItem {
@@ -46,12 +47,17 @@ export interface ApiGroupDetail {
 export interface ApiChallenge {
   id: string;
   group_id: string;
-  type: 'snap' | 'food_quiz' | 'most_likely' | 'rate_day';
+  type: 'snap' | 'quiz' | 'quiz_food' | 'quiz_most_likely' | 'quiz_rate_day' | 'prompt';
   prompt: string | null;
+  prompt_text: string | null;
   options: string[] | null;
-  created_by: string;
-  created_at: string;
+  options_json: string[] | null;
+  triggered_by: string;
+  triggered_at: string;
   expires_at: string;
+  status: 'active' | 'completed' | 'expired';
+  countdown_seconds: number;
+  user_has_responded?: boolean;
 }
 
 export interface ApiChallengeResponse {
@@ -62,20 +68,26 @@ export interface ApiChallengeResponse {
   avatar_url: string | null;
   photo_url: string | null;
   answer_index: number | null;
+  answer_text?: string | null;
   response_time_ms: number | null;
+  responded_at: string;
   created_at: string;
 }
 
 export interface ApiSpotlight {
-  user_id: string;
+  id: string;
+  group_id: string;
+  featured_user_id: string;
   display_name: string | null;
   avatar_url: string | null;
   superlative: string;
-  stats: {
+  stats_json: {
     streak: number;
     total_responses: number;
-    avg_response_time_ms: number | null;
+    participation_rate: number;
+    fun_fact: string;
   };
+  date: string;
 }
 
 export interface ApiActivePenalty {

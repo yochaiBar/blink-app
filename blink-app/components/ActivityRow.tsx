@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { ActivityItem } from '@/types';
 import { theme } from '@/constants/colors';
@@ -11,15 +11,19 @@ const typeIcons: Record<string, string> = {
   spotlight: '⭐',
   quiz: '🧠',
   prompt: '💬',
+  reaction: '❤️',
+  streak: '🔥',
+  challenge_triggered: '⚡',
 };
 
 interface ActivityRowProps {
   item: ActivityItem;
+  onPress?: () => void;
 }
 
-export default React.memo(function ActivityRow({ item }: ActivityRowProps) {
+export default React.memo(function ActivityRow({ item, onPress }: ActivityRowProps) {
   return (
-    <View style={styles.container} testID={`activity-row-${item.id}`}>
+    <TouchableOpacity style={styles.container} testID={`activity-row-${item.id}`} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}>
       <View style={styles.avatarArea}>
         <Image source={{ uri: item.userAvatar }} style={styles.avatar} contentFit="cover" />
         <Text style={styles.typeIcon}>{typeIcons[item.type] ?? '📌'}</Text>
@@ -40,7 +44,7 @@ export default React.memo(function ActivityRow({ item }: ActivityRowProps) {
       {item.imageUrl && (
         <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} contentFit="cover" />
       )}
-    </View>
+    </TouchableOpacity>
   );
 });
 

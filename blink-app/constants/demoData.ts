@@ -115,10 +115,14 @@ export const DEMO_CHALLENGE: ApiChallenge = {
   group_id: DEMO_GROUP_ID,
   type: 'snap',
   prompt: 'Show us your view right now!',
+  prompt_text: 'Show us your view right now!',
   options: null,
-  created_by: 'demo_user_1',
-  created_at: new Date().toISOString(),
+  options_json: null,
+  triggered_by: 'demo_user_1',
+  triggered_at: new Date().toISOString(),
   expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+  status: 'active',
+  countdown_seconds: 300,
 };
 
 export const DEMO_RESPONSES: ApiChallengeResponse[] = [
@@ -131,6 +135,7 @@ export const DEMO_RESPONSES: ApiChallengeResponse[] = [
     photo_url: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=600&h=800&fit=crop',
     answer_index: null,
     response_time_ms: 3200,
+    responded_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
   },
   {
@@ -142,6 +147,7 @@ export const DEMO_RESPONSES: ApiChallengeResponse[] = [
     photo_url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=800&fit=crop',
     answer_index: null,
     response_time_ms: 5100,
+    responded_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
     created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
   },
 ];

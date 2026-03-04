@@ -3,28 +3,30 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Refresh
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { ArrowLeft, Camera, MoreHorizontal, Share2, Trophy, UserPlus, Zap, X, LogOut, Edit3, Trash2, Clock } from 'lucide-react-native';
+import { ArrowLeft, Camera, ChevronRight, Flame, MoreHorizontal, Share2, Trophy, UserPlus, Zap, X, LogOut, Trash2, Clock, Flag } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import SnapCard from '@/components/SnapCard';
+import SpotlightCard from '@/components/SpotlightCard';
+import ReportModal from '@/components/ReportModal';
 import { categoryLabels } from '@/constants/categories';
-import { api } from '@/services/api';
+import { api, blockUser, getSpotlight } from '@/services/api';
 import { Skeleton, SnapCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
-import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse } from '@/types/api';
-import { apiGroupDetailToGroup, apiResponseToSnap } from '@/utils/adapters';
+import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
+import { apiGroupDetailToGroup, apiResponseToSnap, apiSpotlightToUI, apiMembersToLeaderboard } from '@/utils/adapters';
 import { isDemoGroup, DEMO_GROUP_DETAIL, DEMO_CHALLENGE, DEMO_RESPONSES } from '@/constants/demoData';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
 
-type ChallengeType = 'snap' | 'food_quiz' | 'most_likely' | 'rate_day';
+type ChallengeType = 'snap' | 'quiz' | 'quiz_food' | 'quiz_most_likely' | 'quiz_rate_day';
 
 const challengeTypes: { type: ChallengeType; emoji: string; label: string }[] = [
   { type: 'snap', emoji: '📸', label: 'Snap Challenge' },
-  { type: 'food_quiz', emoji: '🍔', label: 'Food Quiz' },
-  { type: 'most_likely', emoji: '👀', label: 'Most Likely To' },
-  { type: 'rate_day', emoji: '⭐', label: 'Rate Your Day' },
+  { type: 'quiz_food', emoji: '🍔', label: 'Food Quiz' },
+  { type: 'quiz_most_likely', emoji: '👀', label: 'Most Likely To' },
+  { type: 'quiz_rate_day', emoji: '⭐', label: 'Rate Your Day' },
 ];
 
 export default function GroupDetailScreen() {
@@ -42,6 +44,12 @@ export default function GroupDetailScreen() {
   const [countdown, setCountdown] = useState<string>('');
   const [showRingModal, setShowRingModal] = useState(false);
   const [showGroupMenu, setShowGroupMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{
+    contentType: 'photo' | 'user' | 'group' | 'challenge_response';
+    reportedUserId?: string;
+    reportedContentId?: string;
+  }>({ contentType: 'photo' });
   const [challengeBarLayout, setChallengeBarLayout] = useState<TargetLayout | null>(null);
   const challengeBarRef = useRef<View>(null);
 
@@ -77,17 +85,40 @@ export default function GroupDetailScreen() {
     queryKey: ['responses', isDemo ? 'demo' : activeChallenge?.id],
     queryFn: async () => {
       if (isDemo) return DEMO_RESPONSES;
-      const responses: ApiChallengeResponse[] = await api(`/challenges/${activeChallenge!.id}/responses`);
+      if (!activeChallenge?.id) return [];
+      const responses: ApiChallengeResponse[] = await api(`/challenges/${activeChallenge.id}/responses`);
       return responses;
     },
     enabled: isDemo ? !!id : !!activeChallenge?.id,
     staleTime: isDemo ? Infinity : undefined,
   });
 
+  // Fetch daily spotlight for this group
+  const spotlightQuery = useQuery({
+    queryKey: ['spotlight', id],
+    queryFn: async () => {
+      const data: ApiSpotlight | null = await getSpotlight(id!);
+      return data;
+    },
+    enabled: !!id && !isDemo,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const spotlight = spotlightQuery.data
+    ? apiSpotlightToUI(spotlightQuery.data, id)
+    : null;
+
   // Build UI group from API detail
   const group = groupQuery.data
     ? apiGroupDetailToGroup(groupQuery.data, activeChallenge)
     : null;
+
+  // Compute leaderboard from group members
+  const leaderboard = groupQuery.data?.members
+    ? apiMembersToLeaderboard(groupQuery.data.members)
+    : [];
+  const leaderboardTop3 = leaderboard.slice(0, 3);
 
   const snaps = (responsesQuery.data ?? []).map((r) => ({
     ...apiResponseToSnap(r),
@@ -110,15 +141,15 @@ export default function GroupDetailScreen() {
       setShowRingModal(false);
       if (type === 'snap') {
         router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
-      } else if (type === 'food_quiz' || type === 'most_likely' || type === 'rate_day') {
+      } else if (type === 'quiz_food' || type === 'quiz_most_likely' || type === 'quiz_rate_day') {
         router.push({
           pathname: '/quiz-challenge' as never,
           params: {
             groupId: id,
             challengeId: data?.id ?? '',
             type,
-            promptText: data?.prompt ?? '',
-            optionsJson: JSON.stringify(data?.options ?? []),
+            promptText: data?.prompt_text ?? data?.prompt ?? '',
+            optionsJson: JSON.stringify(data?.options_json ?? data?.options ?? []),
             expiresAt: data?.expires_at ?? '',
           },
         });
@@ -135,6 +166,11 @@ export default function GroupDetailScreen() {
   const isAdmin = group
     ? group.members.some((m) => m.id === user.id && m.role === 'admin') || group.createdBy === user.id
     : false;
+
+  // Debug: trace admin check in dev mode
+  if (__DEV__ && group) {
+    console.log('[GroupDetail] isAdmin:', isAdmin, '| user.id:', user.id, '| createdBy:', group.createdBy, '| members:', group.members.map(m => ({ id: m.id, role: m.role })));
+  }
 
   const handleGroupMenu = useCallback(() => {
     setShowGroupMenu(true);
@@ -157,36 +193,51 @@ export default function GroupDetailScreen() {
 
   const handleDeleteGroup = useCallback(() => {
     setShowGroupMenu(false);
-    Alert.alert('Delete Group', 'Are you sure? This action cannot be undone and all members will lose access.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => deleteMutation.mutate(),
-      },
-    ]);
+    // Use setTimeout to let the modal close before showing the confirm dialog
+    setTimeout(() => {
+      if (Platform.OS === 'web') {
+        // On web, window.confirm is more reliable than Alert.alert with button callbacks
+        const confirmed = window.confirm('Delete Group?\n\nAre you sure? This action cannot be undone and all members will lose access.');
+        if (confirmed) {
+          deleteMutation.mutate();
+        }
+      } else {
+        Alert.alert('Delete Group', 'Are you sure? This action cannot be undone and all members will lose access.', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => deleteMutation.mutate(),
+          },
+        ]);
+      }
+    }, 300);
   }, [deleteMutation]);
 
   const handleLeaveGroup = useCallback(() => {
     setShowGroupMenu(false);
-    Alert.alert('Leave Group', 'Are you sure? You will need an invite to rejoin.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Leave',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await api(`/groups/${id}/leave`, { method: 'POST' });
-            queryClient.invalidateQueries({ queryKey: ['groups'] });
-            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            router.back();
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Failed to leave group';
-            Alert.alert('Error', message);
-          }
-        },
-      },
-    ]);
+    const doLeave = async () => {
+      try {
+        await api(`/groups/${id}/leave`, { method: 'POST' });
+        queryClient.invalidateQueries({ queryKey: ['groups'] });
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        router.back();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to leave group';
+        Alert.alert('Error', message);
+      }
+    };
+    setTimeout(() => {
+      if (Platform.OS === 'web') {
+        const confirmed = window.confirm('Leave Group?\n\nAre you sure? You will need an invite to rejoin.');
+        if (confirmed) doLeave();
+      } else {
+        Alert.alert('Leave Group', 'Are you sure? You will need an invite to rejoin.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Leave', style: 'destructive', onPress: doLeave },
+        ]);
+      }
+    }, 300);
   }, [id, queryClient, router]);
 
   const handleShareGroup = useCallback(() => {
@@ -195,11 +246,6 @@ export default function GroupDetailScreen() {
       message: `Join my group "${group?.name}" on Blink! Use invite code: ${group?.inviteCode}`,
     });
   }, [group?.name, group?.inviteCode]);
-
-  const handleEditGroup = useCallback(() => {
-    setShowGroupMenu(false);
-    Alert.alert('Coming Soon', 'Group editing will be available in a future update.');
-  }, []);
 
   useEffect(() => {
     if (!group?.challengeEndTime) return;
@@ -241,9 +287,10 @@ export default function GroupDetailScreen() {
     if (activeChallenge?.type === 'snap') {
       router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
     } else if (
-      activeChallenge?.type === 'food_quiz' ||
-      activeChallenge?.type === 'most_likely' ||
-      activeChallenge?.type === 'rate_day'
+      activeChallenge?.type === 'quiz' ||
+      activeChallenge?.type === 'quiz_food' ||
+      activeChallenge?.type === 'quiz_most_likely' ||
+      activeChallenge?.type === 'quiz_rate_day'
     ) {
       router.push({
         pathname: '/quiz-challenge' as never,
@@ -251,8 +298,8 @@ export default function GroupDetailScreen() {
           groupId: id,
           challengeId: activeChallenge.id,
           type: activeChallenge.type,
-          promptText: activeChallenge.prompt ?? '',
-          optionsJson: JSON.stringify(activeChallenge.options ?? []),
+          promptText: activeChallenge.prompt_text ?? activeChallenge.prompt ?? '',
+          optionsJson: JSON.stringify(activeChallenge.options_json ?? activeChallenge.options ?? []),
           expiresAt: activeChallenge.expires_at,
         },
       });
@@ -266,6 +313,38 @@ export default function GroupDetailScreen() {
     addReaction(snapId, emoji);
   }, [addReaction]);
 
+  const handleReportSnap = useCallback((snapId: string, userId: string) => {
+    setReportTarget({ contentType: 'challenge_response', reportedContentId: snapId, reportedUserId: userId });
+    setShowReportModal(true);
+  }, []);
+
+  const handleBlockUser = useCallback((userId: string, userName: string) => {
+    const doBlock = async () => {
+      try {
+        await blockUser(userId);
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Blocked', `${userName} has been blocked. You won't see their content anymore.`);
+        // Refresh responses to filter out blocked user
+        responsesQuery.refetch();
+      } catch {
+        Alert.alert('Error', 'Could not block user. Please try again.');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Block ${userName}?\n\nYou won't see their content and they won't see yours.`)) doBlock();
+    } else {
+      Alert.alert(
+        `Block ${userName}?`,
+        "You won't see their content and they won't see yours.",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Block', style: 'destructive', onPress: doBlock },
+        ]
+      );
+    }
+  }, [responsesQuery]);
+
   const handleRing = useCallback(() => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -277,8 +356,9 @@ export default function GroupDetailScreen() {
     if (isDemo) return;
     groupQuery.refetch();
     challengeQuery.refetch();
+    spotlightQuery.refetch();
     if (activeChallenge?.id) responsesQuery.refetch();
-  }, [groupQuery, challengeQuery, responsesQuery, activeChallenge, isDemo]);
+  }, [groupQuery, challengeQuery, responsesQuery, spotlightQuery, activeChallenge, isDemo]);
 
   // Tour tooltip handler for step 2
   const handleGroupDetailTourNext = useCallback(() => {
@@ -477,6 +557,51 @@ export default function GroupDetailScreen() {
           />
         }
       >
+        {/* Daily Spotlight */}
+        {spotlight && !isDemo && (
+          <SpotlightCard spotlight={spotlight} />
+        )}
+
+        {/* Leaderboard Preview (top 3) */}
+        {leaderboardTop3.length > 0 && !isDemo && (
+          <View style={styles.leaderboardPreview}>
+            <TouchableOpacity
+              style={styles.leaderboardPreviewHeader}
+              onPress={() => router.push({ pathname: '/group-leaderboard' as never, params: { groupId: id } })}
+              activeOpacity={0.7}
+            >
+              <View style={styles.leaderboardPreviewTitleRow}>
+                <Trophy size={16} color={theme.yellow} />
+                <Text style={styles.leaderboardPreviewTitle}>Leaderboard</Text>
+              </View>
+              <View style={styles.leaderboardSeeAll}>
+                <Text style={styles.leaderboardSeeAllText}>See all</Text>
+                <ChevronRight size={14} color={theme.textMuted} />
+              </View>
+            </TouchableOpacity>
+            {leaderboardTop3.map((entry, i) => {
+              const isMe = entry.userId === user.id;
+              const rankEmojis = ['🥇', '🥈', '🥉'];
+              return (
+                <View key={entry.userId} style={[styles.leaderboardRow, isMe && styles.leaderboardRowMe]}>
+                  <Text style={styles.leaderboardRank}>{rankEmojis[i]}</Text>
+                  <Image source={{ uri: entry.userAvatar }} style={styles.leaderboardAvatar} contentFit="cover" />
+                  <View style={styles.leaderboardInfo}>
+                    <Text style={[styles.leaderboardName, isMe && { color: theme.coral }]} numberOfLines={1}>
+                      {entry.userName}{isMe ? ' (you)' : ''}
+                    </Text>
+                    <View style={styles.leaderboardStreakRow}>
+                      <Flame size={11} color={theme.yellow} />
+                      <Text style={styles.leaderboardStreakText}>{entry.streak} day streak</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.leaderboardScore}>{entry.score}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {!hasSubmittedToday && snaps.length > 0 && !isDemo && (
           <View style={styles.peekNotice}>
             <Text style={styles.peekNoticeText}>Submit your snap to see what everyone shared!</Text>
@@ -507,6 +632,8 @@ export default function GroupDetailScreen() {
               snap={snap}
               isLocked={isDemo ? false : !hasSubmittedToday}
               onReact={handleReaction}
+              onReport={handleReportSnap}
+              onBlock={handleBlockUser}
             />
           ))
         )}
@@ -587,17 +714,10 @@ export default function GroupDetailScreen() {
               </TouchableOpacity>
 
               {isAdmin && (
-                <>
-                  <TouchableOpacity style={styles.menuItem} onPress={handleEditGroup}>
-                    <Edit3 size={20} color={theme.text} />
-                    <Text style={styles.menuItemText}>Edit Group</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.menuItem} onPress={handleDeleteGroup}>
-                    <Trash2 size={20} color={theme.red} />
-                    <Text style={[styles.menuItemText, { color: theme.red }]}>Delete Group</Text>
-                  </TouchableOpacity>
-                </>
+                <TouchableOpacity style={styles.menuItem} onPress={handleDeleteGroup}>
+                  <Trash2 size={20} color={theme.red} />
+                  <Text style={[styles.menuItemText, { color: theme.red }]}>Delete Group</Text>
+                </TouchableOpacity>
               )}
 
               {!isAdmin && (
@@ -606,10 +726,31 @@ export default function GroupDetailScreen() {
                   <Text style={[styles.menuItemText, { color: theme.red }]}>Leave Group</Text>
                 </TouchableOpacity>
               )}
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowGroupMenu(false);
+                  setReportTarget({ contentType: 'group', reportedContentId: id });
+                  setShowReportModal(true);
+                }}
+              >
+                <Flag size={20} color={theme.yellow} />
+                <Text style={[styles.menuItemText, { color: theme.yellow }]}>Report Group</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Report Modal */}
+      <ReportModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        reportedUserId={reportTarget.reportedUserId}
+        reportedContentId={reportTarget.reportedContentId}
+        contentType={reportTarget.contentType}
+      />
     </View>
   );
 }
@@ -799,6 +940,84 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: theme.textMuted,
+  },
+  // Leaderboard preview styles
+  leaderboardPreview: {
+    backgroundColor: theme.bgCard,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    gap: 6,
+  },
+  leaderboardPreviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  leaderboardPreviewTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  leaderboardPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: theme.text,
+  },
+  leaderboardSeeAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  leaderboardSeeAllText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: theme.textMuted,
+  },
+  leaderboardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  leaderboardRowMe: {
+    backgroundColor: `${theme.coral}10`,
+  },
+  leaderboardRank: {
+    fontSize: 18,
+    width: 28,
+    textAlign: 'center',
+  },
+  leaderboardAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  leaderboardInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  leaderboardName: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.text,
+  },
+  leaderboardStreakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  leaderboardStreakText: {
+    fontSize: 11,
+    color: theme.textMuted,
+  },
+  leaderboardScore: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: theme.text,
   },
   // Ring modal styles
   modalOverlay: {

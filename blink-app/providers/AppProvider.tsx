@@ -2,12 +2,12 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
-import { Group, SnapSubmission, ActivityItem, NotificationItem, PromptResponse, DailySpotlight, UserProfile, LeaderboardEntry } from '@/types';
-import { api, getActivity, getNotifications, markNotificationsRead as markNotificationsReadApi } from '@/services/api';
+import { Group, ActivityItem, NotificationItem, PromptResponse, UserProfile } from '@/types';
+import { api, uploadPhoto, getActivity, getNotifications, markNotificationsRead as markNotificationsReadApi, addReactionApi, removeReactionApi } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
-import { apiGroupListToGroup, apiGroupDetailToGroup, apiMemberToGroupMember, apiSpotlightToUI, apiResponseToSnap, apiMembersToLeaderboard, apiUserToProfile } from '@/utils/adapters';
-import { ApiGroupListItem, ApiGroupDetail, ApiChallenge, ApiChallengeResponse } from '@/types/api';
+import { apiGroupListToGroup, apiUserToProfile } from '@/utils/adapters';
+import { ApiGroupListItem, ApiChallenge } from '@/types/api';
 import { DEMO_GROUP, isDemoGroup } from '@/constants/demoData';
 
 const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
@@ -68,9 +68,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     };
   }, [authUser, groups.length]);
 
-  // ── Spotlight (empty for now — endpoint may not exist) ──
-  const [spotlight] = useState<DailySpotlight | null>(null);
-
   // ── Activity (backend wired via React Query) ──
   const activityQuery = useQuery({
     queryKey: ['activity'],
@@ -125,8 +122,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queryClient.invalidateQueries({ queryKey: ['activity'] });
   }, [user.id, user.name, user.avatar]);
   const [promptResponses, setPromptResponses] = useState<PromptResponse[]>([]);
-  const [snaps, setSnaps] = useState<SnapSubmission[]>([]);
-  const [leaderboards, setLeaderboards] = useState<Record<string, LeaderboardEntry[]>>({});
 
   // ── Submission tracking ──
   const [hasSubmittedToday] = useState(false);
@@ -157,7 +152,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
       const body: Record<string, unknown> = {};
       if (imageUri) {
-        body.photo_base64 = imageUri;
+        const photoUrl = await uploadPhoto(imageUri, groupId, challengeId);
+        body.photo_url = photoUrl;
       }
       body.response_time_ms = 5000;
 
@@ -168,6 +164,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
     onSuccess: (_data, { groupId }) => {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['responses'] });
       // Track activity
       const group = groups.find(g => g.id === groupId);
       addActivityItem('snap', group?.name ?? 'Group', groupId, 'submitted a snap');
@@ -191,6 +188,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           icon: group.emoji,
           category: group.category === 'close_friends' ? 'friends' : group.category,
           skip_penalty_type: 'none',
+          ai_personality: group.aiPersonality ?? 'funny',
         }),
       });
       return result;
@@ -229,42 +227,21 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
   }, [queryClient, completeTourAction, addActivityItem]);
 
-  // ── Get group snaps ──
-  const getGroupSnaps = useCallback((groupId: string) => {
-    return snaps.filter(s => s.groupId === groupId);
-  }, [snaps]);
-
-  // ── Reactions (local only for now) ──
-  const addReaction = useCallback((snapId: string, emoji: string) => {
-    setSnaps(prev => prev.map(snap => {
-      if (snap.id !== snapId) return snap;
-      const existing = snap.reactions.find(r => r.emoji === emoji);
-      if (existing) {
-        if (existing.userIds.includes(user.id)) {
-          return {
-            ...snap,
-            reactions: snap.reactions.map(r =>
-              r.emoji === emoji
-                ? { ...r, count: r.count - 1, userIds: r.userIds.filter(id => id !== user.id) }
-                : r
-            ).filter(r => r.count > 0),
-          };
-        }
-        return {
-          ...snap,
-          reactions: snap.reactions.map(r =>
-            r.emoji === emoji
-              ? { ...r, count: r.count + 1, userIds: [...r.userIds, user.id] }
-              : r
-          ),
-        };
+  // ── Reactions (wired to server API) ──
+  const addReaction = useCallback(async (responseId: string, emoji: string) => {
+    try {
+      await addReactionApi(responseId, emoji);
+    } catch {
+      // If 409 conflict (already reacted), try removing instead (toggle behavior)
+      try {
+        await removeReactionApi(responseId, emoji);
+      } catch {
+        // Silently fail
       }
-      return {
-        ...snap,
-        reactions: [...snap.reactions, { emoji, count: 1, userIds: [user.id] }],
-      };
-    }));
-  }, [user.id]);
+    }
+    // Refresh the challenge responses to reflect updated reactions
+    queryClient.invalidateQueries({ queryKey: ['responses'] });
+  }, [queryClient]);
 
   // ── Notifications ──
   const markNotificationsRead = useCallback(async () => {
@@ -286,28 +263,38 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, []);
 
   // ── Prompts ──
-  const respondToPrompt = useCallback((promptId: string, answer: string, selectedOption?: number) => {
+  const respondToPrompt = useCallback(async (promptId: string, answer: string, selectedOption?: number) => {
+    // Optimistic local update
     const newResponse: PromptResponse = {
       id: `resp_${Date.now()}`,
       promptId,
       userId: user.id,
-      userName: user.name.split(' ')[0] || 'You',
+      userName: user.name?.split(' ')[0] || 'You',
       userAvatar: user.avatar,
       answer,
       selectedOption,
       timestamp: new Date().toISOString(),
     };
     setPromptResponses(prev => [newResponse, ...prev]);
-  }, [user]);
+
+    // Persist to backend
+    try {
+      await api(`/challenges/${promptId}/respond`, {
+        method: 'POST',
+        body: JSON.stringify({
+          answer_text: answer,
+          ...(selectedOption !== undefined ? { answer_index: selectedOption } : {}),
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['responses', promptId] });
+    } catch (e) {
+      if (__DEV__) console.warn('[respondToPrompt] API error:', e);
+    }
+  }, [user, queryClient]);
 
   const getPromptResponses = useCallback((promptId: string) => {
     return promptResponses.filter(r => r.promptId === promptId);
   }, [promptResponses]);
-
-  // ── Leaderboard ──
-  const getLeaderboard = useCallback((groupId: string): LeaderboardEntry[] => {
-    return leaderboards[groupId] ?? [];
-  }, [leaderboards]);
 
   // ── Profile update ──
   const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
@@ -315,11 +302,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (updates.name && authStore.user) {
       authStore.updateName(updates.name);
     }
-    // Persist to server
+    // Persist to server (only server-supported fields)
     try {
       const payload: Record<string, unknown> = {};
       if (updates.name !== undefined) payload.display_name = updates.name;
-      if (updates.avatar !== undefined) payload.avatar_url = updates.avatar;
+      // Only send avatar_url if it's a real URL (not a local file URI)
+      if (updates.avatar !== undefined && updates.avatar.startsWith('http')) {
+        payload.avatar_url = updates.avatar;
+      }
       // Only call API if there are server-side fields to update
       if (Object.keys(payload).length > 0) {
         await api('/auth/profile', {
@@ -347,9 +337,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   return {
     groups,
     shouldShowDemoGroup,
-    snaps,
     activity,
-    spotlight,
     user,
     hasSubmittedToday,
     notifications,
@@ -366,14 +354,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
     refetchNotifications: notificationsQuery.refetch,
     submitSnap,
     addGroup,
-    getGroupSnaps,
     addReaction,
     addActivityItem,
     markNotificationsRead,
     completeOnboarding,
     respondToPrompt,
     getPromptResponses,
-    getLeaderboard,
     updateProfile,
     joinGroup,
     refreshGroups,

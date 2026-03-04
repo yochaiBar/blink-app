@@ -21,8 +21,8 @@ const SUPERLATIVES = [
   "Most likely to start a challenge at 8:01am",
 ];
 
-// GET /api/groups/:groupId/spotlight — Get or generate today's spotlight
-router.get('/:groupId/spotlight', asyncHandler(async (req: AuthRequest, res: Response) => {
+// GET /api/spotlight/:groupId — Get or generate today's spotlight
+router.get('/:groupId', asyncHandler(async (req: AuthRequest, res: Response) => {
   const { groupId } = req.params;
 
   const membership = await query(

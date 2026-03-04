@@ -28,14 +28,15 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
       -- Photo/answer responses (snap)
       SELECT
         CASE WHEN cr.response_type = 'photo' THEN 'snap' ELSE 'quiz' END as type,
-        u.display_name as "userName",
-        u.avatar_url as "userAvatar",
+        cr.user_id as "userId",
+        COALESCE(u.display_name, 'Someone') as "userName",
+        COALESCE(u.avatar_url, '') as "userAvatar",
         g.name as "groupName",
         g.id as "groupId",
-        u.display_name || ' responded to a challenge' as message,
+        COALESCE(u.display_name, 'Someone') || ' responded to a challenge' as message,
         cr.responded_at as timestamp,
         cr.photo_url as "imageUrl",
-        cr.id as item_id
+        cr.id as id
       FROM challenge_responses cr
       JOIN challenges c ON c.id = cr.challenge_id
       JOIN users u ON u.id = cr.user_id
@@ -48,14 +49,15 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
       -- Challenge triggered
       SELECT
         'challenge_triggered' as type,
-        u.display_name as "userName",
-        u.avatar_url as "userAvatar",
+        c.triggered_by as "userId",
+        COALESCE(u.display_name, 'Someone') as "userName",
+        COALESCE(u.avatar_url, '') as "userAvatar",
         g.name as "groupName",
         g.id as "groupId",
-        u.display_name || ' triggered a ' || c.type || ' challenge' as message,
+        COALESCE(u.display_name, 'Someone') || ' triggered a ' || c.type || ' challenge' as message,
         c.triggered_at as timestamp,
         NULL as "imageUrl",
-        c.id as item_id
+        c.id as id
       FROM challenges c
       JOIN users u ON u.id = c.triggered_by
       JOIN groups g ON g.id = c.group_id
@@ -66,14 +68,15 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
       -- Group joins
       SELECT
         'join' as type,
-        u.display_name as "userName",
-        u.avatar_url as "userAvatar",
+        gm.user_id as "userId",
+        COALESCE(u.display_name, 'Someone') as "userName",
+        COALESCE(u.avatar_url, '') as "userAvatar",
         g.name as "groupName",
         g.id as "groupId",
-        u.display_name || ' joined ' || g.name as message,
+        COALESCE(u.display_name, 'Someone') || ' joined ' || g.name as message,
         gm.joined_at as timestamp,
         NULL as "imageUrl",
-        gm.id as item_id
+        gm.id as id
       FROM group_members gm
       JOIN users u ON u.id = gm.user_id
       JOIN groups g ON g.id = gm.group_id

@@ -1,88 +1,112 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, Shield, Moon, LogOut, ChevronRight, Globe, Lock, Eye, Trash2, FileText } from 'lucide-react-native';
+import { ArrowLeft, Bell, Shield, Moon, LogOut, ChevronRight, Globe, Lock, Eye, Trash2, FileText, Mail, UserX, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
-import { api } from '@/services/api';
+import { api, API_URL, getBlockedUsers, unblockUser } from '@/services/api';
 import { Button } from '@/components/ui';
+import { Image } from 'expo-image';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, updateProfile, logout } = useApp();
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(user.notificationsEnabled);
-  const [quietHoursEnabled, setQuietHoursEnabled] = useState<boolean>(Boolean(user.quietHoursStart));
+  // Local-only toggle states until server support is added
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState<boolean>(false);
+  const [privacyMode, setPrivacyMode] = useState<'everyone' | 'friends' | 'groups_only'>('everyone');
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+  const [blockedUsers, setBlockedUsers] = useState<Array<{ blocked_id: string; display_name: string; avatar_url: string | null }>>([]);
+
+  useEffect(() => {
+    getBlockedUsers()
+      .then((data) => { if (Array.isArray(data)) setBlockedUsers(data); })
+      .catch(() => {});
+  }, []);
+
+  const handleUnblock = useCallback((userId: string, name: string) => {
+    const doUnblock = async () => {
+      try {
+        await unblockUser(userId);
+        setBlockedUsers((prev) => prev.filter((u) => u.blocked_id !== userId));
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        Alert.alert('Error', 'Could not unblock user.');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Unblock ${name}?`)) doUnblock();
+    } else {
+      Alert.alert(`Unblock ${name}?`, 'They will be able to see your content again.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Unblock', onPress: doUnblock },
+      ]);
+    }
+  }, []);
 
   const handleToggleNotifications = useCallback((value: boolean) => {
     setNotificationsEnabled(value);
-    updateProfile({ notificationsEnabled: value });
-    Haptics.selectionAsync();
-  }, [updateProfile]);
+    if (Platform.OS !== 'web') Haptics.selectionAsync();
+  }, []);
 
   const handleToggleQuietHours = useCallback((value: boolean) => {
     setQuietHoursEnabled(value);
-    updateProfile({
-      quietHoursStart: value ? '22:00' : undefined,
-      quietHoursEnd: value ? '08:00' : undefined,
-    });
-    Haptics.selectionAsync();
-  }, [updateProfile]);
+    if (Platform.OS !== 'web') Haptics.selectionAsync();
+  }, []);
 
   const handleLogout = useCallback(() => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out? All local data will be cleared.',
-      [
+    const doLogout = async () => {
+      setIsLoggingOut(true);
+      try {
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        await logout();
+        router.replace('/onboarding' as never);
+      } catch {
+        Alert.alert('Error', 'Could not log out. Please try again.');
+      } finally {
+        setIsLoggingOut(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Log Out?\n\nAre you sure you want to log out? All local data will be cleared.');
+      if (confirmed) doLogout();
+    } else {
+      Alert.alert('Log Out', 'Are you sure you want to log out? All local data will be cleared.', [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: async () => {
-            setIsLoggingOut(true);
-            try {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-              await logout();
-              router.replace('/onboarding' as never);
-            } catch {
-              Alert.alert('Error', 'Could not log out. Please try again.');
-            } finally {
-              setIsLoggingOut(false);
-            }
-          },
-        },
-      ]
-    );
+        { text: 'Log Out', style: 'destructive', onPress: doLogout },
+      ]);
+    }
   }, [logout, router]);
 
   const handleDeleteAccount = useCallback(() => {
-    Alert.alert(
-      'Delete Account',
-      'This will permanently delete all your data. This action cannot be undone.',
-      [
+    const doDelete = async () => {
+      try {
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        await api('/auth/delete-account', { method: 'DELETE' });
+        await logout();
+        router.replace('/onboarding' as never);
+      } catch {
+        // If API fails, still log out locally
+        await logout();
+        router.replace('/onboarding' as never);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Delete Account?\n\nThis will permanently delete all your data. This action cannot be undone.');
+      if (confirmed) doDelete();
+    } else {
+      Alert.alert('Delete Account', 'This will permanently delete all your data. This action cannot be undone.', [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              await api('/auth/delete-account', { method: 'DELETE' });
-              await logout();
-              router.replace('/onboarding' as never);
-            } catch {
-              // If API fails, still log out locally
-              await logout();
-              router.replace('/onboarding' as never);
-            }
-          },
-        },
-      ]
-    );
+        { text: 'Delete', style: 'destructive', onPress: doDelete },
+      ]);
+    }
   }, [logout, router]);
 
   const privacyOptions: { key: 'everyone' | 'friends' | 'groups_only'; label: string; icon: typeof Globe }[] = [
@@ -146,14 +170,14 @@ export default function SettingsScreen() {
             <Text style={styles.privacyLabel}>Who can see your snaps</Text>
             {privacyOptions.map((opt) => {
               const IconComp = opt.icon;
-              const isSelected = user.privacyMode === opt.key;
+              const isSelected = privacyMode === opt.key;
               return (
                 <TouchableOpacity
                   key={opt.key}
                   style={[styles.privacyOption, isSelected && styles.privacyOptionSelected]}
                   onPress={() => {
-                    updateProfile({ privacyMode: opt.key });
-                    Haptics.selectionAsync();
+                    setPrivacyMode(opt.key);
+                    if (Platform.OS !== 'web') Haptics.selectionAsync();
                   }}
                 >
                   <IconComp size={18} color={isSelected ? theme.coral : theme.textMuted} />
@@ -170,9 +194,56 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Support</Text>
+          <View style={styles.card}>
+            <TouchableOpacity style={styles.settingRow} onPress={() => Linking.openURL('mailto:support@blink.app')}>
+              <View style={[styles.iconBg, { backgroundColor: theme.coralMuted }]}>
+                <Mail size={18} color={theme.coral} />
+              </View>
+              <Text style={styles.settingLabel}>Contact Support</Text>
+              <ChevronRight size={16} color={theme.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Blocked Users</Text>
+          <View style={styles.card}>
+            {blockedUsers.length === 0 ? (
+              <View style={styles.settingRow}>
+                <View style={[styles.iconBg, { backgroundColor: theme.surface }]}>
+                  <UserX size={18} color={theme.textMuted} />
+                </View>
+                <Text style={[styles.settingLabel, { color: theme.textMuted }]}>No blocked users</Text>
+              </View>
+            ) : (
+              blockedUsers.map((u, i) => (
+                <React.Fragment key={u.blocked_id}>
+                  {i > 0 && <View style={styles.rowDivider} />}
+                  <View style={styles.settingRow}>
+                    <Image
+                      source={{ uri: u.avatar_url || undefined }}
+                      style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: theme.surface }}
+                      contentFit="cover"
+                    />
+                    <Text style={styles.settingLabel}>{u.display_name || 'Unknown'}</Text>
+                    <TouchableOpacity
+                      style={[styles.iconBg, { backgroundColor: theme.redMuted }]}
+                      onPress={() => handleUnblock(u.blocked_id, u.display_name || 'this user')}
+                    >
+                      <X size={16} color={theme.red} />
+                    </TouchableOpacity>
+                  </View>
+                </React.Fragment>
+              ))
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.card}>
-            <TouchableOpacity style={styles.settingRow} onPress={() => Linking.openURL('https://blink.app/privacy')}>
+            <TouchableOpacity style={styles.settingRow} onPress={() => Linking.openURL(`${API_URL.replace(/\/api$/, '')}/privacy`)}>
               <View style={[styles.iconBg, { backgroundColor: theme.greenMuted }]}>
                 <Shield size={18} color={theme.green} />
               </View>
@@ -182,7 +253,7 @@ export default function SettingsScreen() {
 
             <View style={styles.rowDivider} />
 
-            <TouchableOpacity style={styles.settingRow} onPress={() => Linking.openURL('https://blink.app/terms')}>
+            <TouchableOpacity style={styles.settingRow} onPress={() => Linking.openURL(`${API_URL.replace(/\/api$/, '')}/terms`)}>
               <View style={[styles.iconBg, { backgroundColor: theme.blueMuted }]}>
                 <FileText size={18} color={theme.blue} />
               </View>

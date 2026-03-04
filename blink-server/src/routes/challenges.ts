@@ -8,12 +8,26 @@ import logger from '../utils/logger';
 import { CHALLENGE_COUNTDOWN_SECONDS } from '../utils/constants';
 import { createNotification } from '../utils/notifications';
 import { emitToGroup } from '../socket';
+import { sendPushToGroup, sendPushToUser } from '../services/pushNotifications';
+import { moderateImage, deleteS3Object, extractS3Key, logModerationResult } from '../services/contentModeration';
 
 const router = Router();
 
 router.use(authenticate);
 
 // ── Preset quiz pools ──────────────────────────────────────────
+// Column aliases to map DB schema names to client-expected field names.
+// The DB uses triggered_by/triggered_at/prompt_text/options_json,
+// but the client ApiChallenge type expects created_by/created_at/prompt/options.
+const CHALLENGE_SELECT = `
+  id, group_id, type,
+  prompt_text as prompt,
+  options_json as options,
+  triggered_by as created_by,
+  triggered_at as created_at,
+  expires_at, status, countdown_seconds
+`;
+
 const QUIZ_PRESETS = {
   food: [
     { prompt: "What did you eat for lunch today?", options: ["Something healthy (sure...)", "Leftovers from 3 days ago", "Snacks count as a meal", "I forgot to eat"] },
@@ -148,7 +162,14 @@ router.post('/groups/:groupId/challenges', validateBody(createChallengeSchema), 
   let promptText: string | null = null;
   let optionsJson: string | null = null;
 
-  if (type && type.startsWith('quiz_')) {
+  if (type === 'prompt') {
+    // Open-text or poll/quiz prompt created by user
+    challengeType = 'prompt';
+    promptText = req.body.prompt_text;
+    if (req.body.options && req.body.options.length > 0) {
+      optionsJson = JSON.stringify(req.body.options);
+    }
+  } else if (type && type.startsWith('quiz_')) {
     challengeType = 'quiz';
     const quizType = type.replace('quiz_', '') as 'food' | 'most_likely' | 'rate_day';
     const quiz = getRandomQuiz(quizType);
@@ -171,11 +192,15 @@ router.post('/groups/:groupId/challenges', validateBody(createChallengeSchema), 
   const result = await query(
     `INSERT INTO challenges (group_id, type, prompt_text, options_json, triggered_by, expires_at, countdown_seconds)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING *`,
+     RETURNING ${CHALLENGE_SELECT}`,
     [groupId, challengeType, promptText, optionsJson, req.userId, expiresAt, CHALLENGE_COUNTDOWN_SECONDS]
   );
 
   const challenge = result.rows[0];
+  // Parse options_json string into an actual array for the client
+  if (challenge.options && typeof challenge.options === 'string') {
+    try { challenge.options = JSON.parse(challenge.options); } catch { /* keep as-is */ }
+  }
 
   // Notify all group members except trigger-er
   const groupMembers = await query(
@@ -202,6 +227,15 @@ router.post('/groups/:groupId/challenges', validateBody(createChallengeSchema), 
 
   // Emit real-time event
   emitToGroup(groupId, 'challenge:started', challenge);
+
+  // Fire-and-forget push notification to group members
+  sendPushToGroup(
+    groupId,
+    'New Challenge!',
+    `${triggerName} started a ${challengeType} challenge in ${groupName}`,
+    { type: 'challenge_started', groupId, challengeId: challenge.id },
+    req.userId
+  ).catch(() => {});
 
   logger.info('Challenge triggered', { groupId, challengeId: challenge.id, type: challengeType });
   res.status(201).json(challenge);
@@ -236,7 +270,7 @@ router.get('/groups/:groupId/challenges/active', asyncHandler(async (req: AuthRe
   );
 
   const result = await query(
-    `SELECT * FROM challenges WHERE group_id = $1 AND status = 'active' LIMIT 1`,
+    `SELECT ${CHALLENGE_SELECT} FROM challenges WHERE group_id = $1 AND status = 'active' LIMIT 1`,
     [groupId]
   );
 
@@ -246,6 +280,11 @@ router.get('/groups/:groupId/challenges/active', asyncHandler(async (req: AuthRe
   }
 
   const challenge = result.rows[0];
+  // Parse options_json string into an actual array for the client
+  if (challenge.options && typeof challenge.options === 'string') {
+    try { challenge.options = JSON.parse(challenge.options); } catch { /* keep as-is */ }
+  }
+
   const userResponse = await query(
     `SELECT id FROM challenge_responses WHERE challenge_id = $1 AND user_id = $2`,
     [challenge.id, req.userId]
@@ -260,7 +299,9 @@ router.get('/groups/:groupId/challenges/active', asyncHandler(async (req: AuthRe
 // ── POST respond to challenge ──
 router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
-  const { photo_url, response_time_ms, answer_index } = req.body;
+  const { photo_url, photo_base64, response_time_ms, answer_index, answer_text } = req.body;
+  // Accept either photo_url or photo_base64 (data URI from camera)
+  const resolvedPhotoUrl = photo_url || photo_base64 || null;
 
   const challenge = await query(`SELECT * FROM challenges WHERE id = $1`, [id]);
   if (challenge.rows.length === 0) {
@@ -288,12 +329,41 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
     return;
   }
 
-  const responseType = c.type === 'quiz' ? 'answer' : 'photo';
+  // ── Content moderation for S3 images ──────────────────────────
+  if (resolvedPhotoUrl) {
+    const s3Key = extractS3Key(resolvedPhotoUrl);
+    if (s3Key) {
+      const moderationResult = await moderateImage(s3Key);
+
+      // Log every moderation check (async, fire-and-forget)
+      logModerationResult(req.userId!, s3Key, moderationResult).catch(() => {});
+
+      if (!moderationResult.safe) {
+        // Delete the offending image from S3
+        await deleteS3Object(s3Key);
+
+        logger.warn('Challenge response rejected by content moderation', {
+          challengeId: id,
+          userId: req.userId,
+          labels: moderationResult.labels,
+          confidence: moderationResult.confidence,
+        });
+
+        res.status(400).json({
+          error: 'Your photo was flagged by our content moderation system and cannot be posted. Please try a different photo.',
+          moderation_labels: moderationResult.labels,
+        });
+        return;
+      }
+    }
+  }
+
+  const responseType = (c.type === 'quiz' || c.type === 'prompt') ? 'answer' : 'photo';
   const result = await query(
-    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, answer_index, response_time_ms)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, answer_index, answer_text, response_time_ms)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [id, req.userId, responseType, photo_url || null, answer_index ?? null, response_time_ms || null]
+    [id, req.userId, responseType, resolvedPhotoUrl, answer_index ?? null, answer_text || null, response_time_ms || null]
   );
 
   // Notify the challenge trigger-er that someone responded
@@ -308,6 +378,14 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
       c.group_id,
       req.userId
     );
+
+    // Fire-and-forget push notification to challenge creator
+    sendPushToUser(
+      c.triggered_by,
+      'New Response!',
+      `${responderName} responded to your challenge`,
+      { type: 'snap_received', groupId: c.group_id, challengeId: id }
+    ).catch(() => {});
   }
 
   // Emit real-time event for the response
@@ -409,8 +487,14 @@ router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthR
   }
 
   const result = await query(
-    `SELECT c.*,
+    `SELECT c.id, c.group_id, c.type,
+       c.prompt_text as prompt,
+       c.options_json as options,
+       c.triggered_by as created_by,
+       c.triggered_at as created_at,
+       c.expires_at, c.status, c.countdown_seconds,
        (SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = c.id AND response_type != 'skip') as response_count,
+       (SELECT COUNT(*)::int FROM group_members WHERE group_id = c.group_id) as member_count,
        EXISTS(SELECT 1 FROM challenge_responses WHERE challenge_id = c.id AND user_id = $2 AND response_type != 'skip') as user_responded
      FROM challenges c
      WHERE c.group_id = $1 AND c.status IN ('completed', 'expired')
@@ -418,6 +502,13 @@ router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthR
      LIMIT 20`,
     [groupId, req.userId]
   );
+
+  // Parse options strings into arrays
+  for (const row of result.rows) {
+    if (row.options && typeof row.options === 'string') {
+      try { row.options = JSON.parse(row.options); } catch { /* keep as-is */ }
+    }
+  }
 
   res.json(result.rows);
 }));
@@ -460,6 +551,19 @@ router.post('/responses/:responseId/reactions', validateBody(addReactionSchema),
   if (result.rows.length === 0) {
     res.status(409).json({ error: 'Reaction already exists' });
     return;
+  }
+
+  // Fire-and-forget push notification to the response owner
+  const responseOwner = response.rows[0].user_id;
+  if (responseOwner && responseOwner !== req.userId) {
+    const reactorUser = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+    const reactorName = reactorUser.rows[0]?.display_name || 'Someone';
+    sendPushToUser(
+      responseOwner,
+      'New Reaction!',
+      `${reactorName} reacted ${emoji} to your photo`,
+      { type: 'reaction', responseId, groupId: response.rows[0].group_id }
+    ).catch(() => {});
   }
 
   logger.info('Reaction added', { responseId, userId: req.userId, emoji });

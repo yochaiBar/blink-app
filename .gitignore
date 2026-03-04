@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Env files
+.env
+.env.local
+.env.production
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+postgres_data/
+
+# TypeScript
+*.tsbuildinfo
+TEST_STRATEGY.md
+blink-app/GoogleService-Info.plist
+PRODUCTION_ROADMAP.md
+blink-server/.env.production.example

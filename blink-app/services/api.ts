@@ -1,9 +1,28 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import type { ActivityItem, NotificationItem } from '@/types';
 
-const API_URL = __DEV__ ? 'http://localhost:3000/api' : 'https://api.blink.app/api';
+// API_URL resolution order:
+// 1. expo-constants extra.apiUrl (set via app.config.ts from EAS env vars)
+// 2. Dev fallback: localhost (web) or LAN IP (native)
+// 3. Production fallback: production API domain
+const configApiUrl = Constants.expoConfig?.extra?.apiUrl as string | undefined;
+
+function resolveApiUrl(): string {
+  if (configApiUrl) return configApiUrl;
+  if (__DEV__) {
+    return Platform.OS === 'web' ? 'http://localhost:3000/api' : 'http://192.168.68.120:3000/api';
+  }
+  return 'https://blink-server.up.railway.app/api';
+}
+
+export const API_URL = resolveApiUrl();
 
 let accessToken: string | null = null;
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
 
 // SecureStore doesn't work on web — fall back to localStorage
 const storage = {
@@ -101,16 +120,120 @@ export async function api(path: string, options: RequestInit = {}): Promise<any>
   return JSON.parse(text);
 }
 
+// ── Upload ──
+export async function uploadPhoto(base64DataUri: string, groupId: string, challengeId: string): Promise<string> {
+  const presign = await api('/upload/presign', {
+    method: 'POST',
+    body: JSON.stringify({ groupId, challengeId }),
+  });
+
+  // Dev mode (no S3) — return base64 as-is
+  if (!presign.uploadUrl) return base64DataUri;
+
+  // Convert base64 data URI to binary blob
+  const base64Data = base64DataUri.replace(/^data:image\/\w+;base64,/, '');
+  const binaryString = atob(base64Data);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  // Upload directly to S3 via presigned PUT URL
+  const uploadRes = await fetch(presign.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'image/jpeg' },
+    body: bytes,
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`S3 upload failed: ${uploadRes.status}`);
+  }
+
+  return presign.publicUrl;
+}
+
 // ── Activity ──
-export function getActivity(): Promise<ActivityItem[]> {
-  return api('/activity');
+export async function getActivity(): Promise<ActivityItem[]> {
+  const data = await api('/activity');
+  if (!Array.isArray(data)) return [];
+  // Map any server-only types to UI types.
+  // 'challenge_triggered' is kept as-is since the ActivityItem type now includes it.
+  const typeMap: Record<string, ActivityItem['type']> = {
+    challenge_triggered: 'challenge_triggered',
+  };
+  return data.map((item: any) => ({
+    ...item,
+    type: typeMap[item.type] || item.type,
+    timestamp: item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString(),
+  }));
 }
 
 // ── Notifications ──
-export function getNotifications(): Promise<NotificationItem[]> {
-  return api('/notifications');
+export async function getNotifications(): Promise<NotificationItem[]> {
+  const data = await api('/notifications');
+  if (!Array.isArray(data)) return [];
+  return data.map((item: any) => ({
+    ...item,
+    timestamp: item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString(),
+  }));
 }
 
 export function markNotificationsRead(): Promise<void> {
   return api('/notifications/read', { method: 'PATCH' });
+}
+
+// ── Reactions ──
+export function addReactionApi(responseId: string, emoji: string): Promise<any> {
+  return api(`/challenges/responses/${responseId}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  });
+}
+
+export function removeReactionApi(responseId: string, emoji: string): Promise<any> {
+  return api(`/challenges/responses/${responseId}/reactions/${encodeURIComponent(emoji)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ── Spotlight ──
+export async function getSpotlight(groupId: string): Promise<any> {
+  return api(`/spotlight/${groupId}`);
+}
+
+// ── Moderation ──
+export function reportContent(data: {
+  reported_user_id?: string;
+  reported_content_id?: string;
+  content_type: 'photo' | 'user' | 'group' | 'challenge_response';
+  reason: string;
+  description?: string;
+}): Promise<any> {
+  return api('/moderation/report', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function blockUser(blockedId: string): Promise<any> {
+  return api('/moderation/block', {
+    method: 'POST',
+    body: JSON.stringify({ blocked_id: blockedId }),
+  });
+}
+
+export function unblockUser(userId: string): Promise<any> {
+  return api(`/moderation/blocks/${userId}`, { method: 'DELETE' });
+}
+
+export function getBlockedUsers(): Promise<any> {
+  return api('/moderation/blocks');
+}
+
+// ── Push Token Registration ──
+export function registerPushToken(pushToken: string): Promise<any> {
+  return api('/auth/push-token', {
+    method: 'POST',
+    body: JSON.stringify({ push_token: pushToken }),
+  });
 }

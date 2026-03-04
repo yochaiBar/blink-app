@@ -1,5 +1,7 @@
 export type GroupCategory = 'close_friends' | 'family' | 'students' | 'work' | 'custom';
 
+export type AiPersonality = 'family_friendly' | 'funny' | 'spicy' | 'sarcastic' | 'motivational' | 'extreme' | 'sexy' | 'no_filter';
+
 export interface GroupMember {
   id: string;
   name: string;
@@ -26,6 +28,7 @@ export interface Group {
   activePrompt?: PromptQuestion;
   createdAt: string;
   createdBy?: string;
+  aiPersonality?: AiPersonality;
 }
 
 export interface SnapSubmission {
@@ -63,7 +66,7 @@ export interface SpotlightStat {
 
 export interface ActivityItem {
   id: string;
-  type: 'snap' | 'join' | 'spotlight' | 'quiz' | 'prompt' | 'reaction' | 'streak';
+  type: 'snap' | 'join' | 'spotlight' | 'quiz' | 'prompt' | 'reaction' | 'streak' | 'challenge_triggered';
   userId: string;
   userName: string;
   userAvatar: string;
@@ -112,7 +115,7 @@ export interface PromptResponse {
 
 export interface NotificationItem {
   id: string;
-  type: 'challenge' | 'reaction' | 'prompt' | 'streak' | 'join' | 'spotlight' | 'invite';
+  type: 'challenge' | 'reaction' | 'prompt' | 'streak' | 'join' | 'spotlight' | 'invite' | 'system' | string;
   title: string;
   body: string;
   timestamp: string;

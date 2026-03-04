@@ -11,16 +11,35 @@ router.use(authenticate);
 // GET /api/notifications — Get user's notifications
 router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await query(
-    `SELECT n.*, u.display_name as from_user_name, u.avatar_url as from_user_avatar
+    `SELECT n.id, n.type, n.title, n.body, n.read,
+            n.created_at as timestamp,
+            n.group_id as "groupId",
+            g.name as "groupName",
+            u.avatar_url as "fromUserAvatar"
      FROM notifications n
      LEFT JOIN users u ON u.id = n.from_user_id
+     LEFT JOIN groups g ON g.id = n.group_id
      WHERE n.user_id = $1
      ORDER BY n.created_at DESC
      LIMIT 50`,
     [req.userId]
   );
 
-  res.json(result.rows);
+  // Map server notification types to UI types
+  const typeMap: Record<string, string> = {
+    challenge_started: 'challenge',
+    snap_received: 'reaction',
+    group_joined: 'join',
+    streak_milestone: 'streak',
+    spotlight: 'spotlight',
+  };
+
+  const mapped = result.rows.map((row: any) => ({
+    ...row,
+    type: typeMap[row.type] || row.type,
+  }));
+
+  res.json(mapped);
 }));
 
 // PATCH /api/notifications/read — Mark all as read

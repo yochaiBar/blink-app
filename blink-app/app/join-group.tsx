@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, UserPlus, Search } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -13,8 +13,9 @@ export default function JoinGroupScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { joinGroup } = useApp();
+  const params = useLocalSearchParams<{ code?: string }>();
 
-  const [code, setCode] = useState<string>('');
+  const [code, setCode] = useState<string>(params.code?.toUpperCase() || '');
   const [isJoining, setIsJoining] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 

@@ -8,7 +8,7 @@ let io: SocketServer | null = null;
 export function initSocket(httpServer: HttpServer) {
   io = new SocketServer(httpServer, {
     cors: {
-      origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:8081'],
+      origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:8081', 'http://localhost:19006'],
       credentials: true,
     },
   });

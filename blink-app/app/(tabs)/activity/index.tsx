@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Zap } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
@@ -23,6 +24,7 @@ function ActivitySkeleton() {
 
 export default function ActivityScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const {
     activity,
     isActivityLoading,
@@ -32,8 +34,11 @@ export default function ActivityScreen() {
   } = useApp();
 
   const renderItem = useCallback(({ item }: { item: ActivityItem }) => (
-    <ActivityRow item={item} />
-  ), []);
+    <ActivityRow
+      item={item}
+      onPress={() => router.push({ pathname: '/group-detail' as never, params: { id: item.groupId } })}
+    />
+  ), [router]);
 
   const keyExtractor = useCallback((item: ActivityItem) => item.id, []);
 

@@ -1,7 +1,7 @@
-import React, { useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
+import React, { useRef, useCallback, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Lock } from 'lucide-react-native';
+import { Lock, MoreHorizontal } from 'lucide-react-native';
 import { SnapSubmission } from '@/types';
 import { theme } from '@/constants/colors';
 import { getRelativeTime } from '@/utils/time';
@@ -11,12 +11,15 @@ interface SnapCardProps {
   snap: SnapSubmission;
   isLocked: boolean;
   onReact?: (snapId: string, emoji: string) => void;
+  onReport?: (snapId: string, userId: string) => void;
+  onBlock?: (userId: string, userName: string) => void;
 }
 
 const quickReactions = ['😂', '🔥', '💀', '😍', '👀'];
 
-export default React.memo(function SnapCard({ snap, isLocked, onReact }: SnapCardProps) {
+export default React.memo(function SnapCard({ snap, isLocked, onReact, onReport, onBlock }: SnapCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [showMenu, setShowMenu] = useState(false);
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, {
@@ -53,10 +56,19 @@ export default React.memo(function SnapCard({ snap, isLocked, onReact }: SnapCar
       >
         <View style={styles.header}>
           <Image source={{ uri: snap.userAvatar }} style={styles.avatar} contentFit="cover" />
-          <View>
+          <View style={styles.headerInfo}>
             <Text style={styles.userName}>{snap.userName}</Text>
             <Text style={styles.timestamp}>{getRelativeTime(snap.timestamp)}</Text>
           </View>
+          {(onReport || onBlock) && (
+            <TouchableOpacity
+              style={styles.reportBtn}
+              onPress={() => setShowMenu(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <MoreHorizontal size={18} color={theme.textMuted} />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.imageContainer}>
@@ -99,6 +111,42 @@ export default React.memo(function SnapCard({ snap, isLocked, onReact }: SnapCar
           </View>
         )}
       </TouchableOpacity>
+
+      {/* Action Menu */}
+      <Modal visible={showMenu} transparent animationType="fade">
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
+          <View style={styles.menuContent} onStartShouldSetResponder={() => true}>
+            {onReport && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  onReport(snap.id, snap.userId);
+                }}
+              >
+                <Text style={styles.menuItemText}>Report</Text>
+              </TouchableOpacity>
+            )}
+            {onBlock && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  onBlock(snap.userId, snap.userName);
+                }}
+              >
+                <Text style={[styles.menuItemText, { color: theme.red }]}>Block {snap.userName}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.menuItem, styles.menuCancel]}
+              onPress={() => setShowMenu(false)}
+            >
+              <Text style={[styles.menuItemText, { color: theme.textMuted }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Animated.View>
   );
 });
@@ -115,6 +163,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     padding: 12,
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  reportBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatar: {
     width: 36,
@@ -190,5 +248,33 @@ const styles = StyleSheet.create({
   },
   quickReactEmoji: {
     fontSize: 16,
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  menuContent: {
+    backgroundColor: theme.bgCard,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 8,
+    paddingBottom: 32,
+  },
+  menuItem: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.border,
+  },
+  menuItemText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: theme.text,
+    textAlign: 'center',
+  },
+  menuCancel: {
+    borderBottomWidth: 0,
+    marginTop: 4,
   },
 });

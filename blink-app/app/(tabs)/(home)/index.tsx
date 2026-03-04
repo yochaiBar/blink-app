@@ -66,7 +66,6 @@ export default function GroupsScreen() {
   }, [tourStep]);
 
   const handleCreateGroup = useCallback(() => {
-    console.log('[DEBUG] handleCreateGroup fired, pushing /create-group');
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -84,8 +83,15 @@ export default function GroupsScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.push('/invite-members' as never);
-  }, [router]);
+    // Pass the first group's ID so invite-members can show the invite code
+    const firstGroup = groups.find(g => !isDemoGroup(g.id));
+    if (firstGroup) {
+      router.push({ pathname: '/invite-members' as never, params: { groupId: firstGroup.id } });
+    } else {
+      // No real groups — prompt to create one first
+      router.push('/create-group' as never);
+    }
+  }, [router, groups]);
 
   const handleGroupPress = useCallback((groupId: string) => {
     router.push({ pathname: '/group-detail' as never, params: { id: groupId } });
@@ -156,7 +162,7 @@ export default function GroupsScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    router.push({ pathname: '/snap-challenge' as never, params: { id: heroActiveGroup.id } });
+    router.push({ pathname: '/snap-challenge' as never, params: { groupId: heroActiveGroup.id } });
   }, [heroActiveGroup, router]);
 
   // Dynamic greeting
@@ -173,7 +179,7 @@ export default function GroupsScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>
-            {greeting.text}, {user.name.split(' ')[0]} {greeting.emoji}
+            {greeting.text}, {user.name?.split(' ')[0] || 'there'} {greeting.emoji}
           </Text>
           <Text style={styles.subtitle}>{subtitleText}</Text>
         </View>

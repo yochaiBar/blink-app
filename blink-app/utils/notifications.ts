@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { registerPushToken } from '@/services/api';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -81,5 +82,66 @@ export async function setBadgeCount(count: number): Promise<void> {
     await Notifications.setBadgeCountAsync(count);
   } catch (error) {
     // console.log('[Notifications] Badge error:', error);
+  }
+}
+
+/**
+ * Registers the device push token with the backend.
+ * Fire-and-forget — errors are silently swallowed so the UI is never blocked.
+ * Safe to call repeatedly; the backend upserts the token.
+ */
+export async function sendPushTokenToServer(): Promise<void> {
+  if (Platform.OS === 'web') return;
+
+  try {
+    const token = await registerForPushNotifications();
+    if (token) {
+      await registerPushToken(token);
+    }
+  } catch {
+    // Fire-and-forget: don't block the app if token registration fails
+  }
+}
+
+/**
+ * Extracts the notification data payload and returns a route path
+ * for expo-router navigation, or null if the payload is unrecognised.
+ */
+export function getNotificationRoute(
+  data: Record<string, any> | undefined,
+): { pathname: string; params?: Record<string, string> } | null {
+  if (!data || !data.type) return null;
+
+  switch (data.type) {
+    case 'challenge':
+      if (data.groupId) {
+        return {
+          pathname: '/group-detail',
+          params: { id: data.groupId },
+        };
+      }
+      return null;
+
+    case 'group':
+      if (data.groupId) {
+        return {
+          pathname: '/group-detail',
+          params: { id: data.groupId },
+        };
+      }
+      return null;
+
+    case 'reaction':
+      if (data.groupId) {
+        return {
+          pathname: '/group-detail',
+          params: { id: data.groupId },
+        };
+      }
+      // If no groupId, fall through to home
+      return { pathname: '/' };
+
+    default:
+      return null;
   }
 }

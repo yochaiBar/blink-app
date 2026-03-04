@@ -8,6 +8,7 @@ import logger from '../utils/logger';
 import crypto from 'crypto';
 import { createNotification } from '../utils/notifications';
 import { emitToGroup } from '../socket';
+import { sendPushToUser } from '../services/pushNotifications';
 
 const router = Router();
 const MAX_FREE_GROUPS = 3;
@@ -20,7 +21,7 @@ router.use(authenticate);
 
 // POST /api/groups - Create a group
 router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { name, icon, category, quiet_hours_start, quiet_hours_end, skip_penalty_type } = req.body;
+  const { name, icon, category, quiet_hours_start, quiet_hours_end, skip_penalty_type, ai_personality } = req.body;
 
   // 3-group free tier limit
   const userGroups = await query(
@@ -34,8 +35,8 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
 
   const inviteCode = generateInviteCode();
   const group = await query(
-    `INSERT INTO groups (name, icon, category, created_by, invite_code, quiet_hours_start, quiet_hours_end, skip_penalty_type)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO groups (name, icon, category, created_by, invite_code, quiet_hours_start, quiet_hours_end, skip_penalty_type, ai_personality)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       name,
@@ -46,6 +47,7 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
       quiet_hours_start || '22:00',
       quiet_hours_end || '08:00',
       skip_penalty_type || 'wanted_poster',
+      ai_personality || 'funny',
     ]
   );
 
@@ -63,7 +65,15 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
 router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await query(
     `SELECT g.*, gm.role,
-       (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) as member_count
+       (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.id) as member_count,
+       EXISTS(
+         SELECT 1 FROM challenges
+         WHERE group_id = g.id AND status = 'active' AND expires_at > NOW()
+       ) as has_active_challenge,
+       (SELECT expires_at FROM challenges
+        WHERE group_id = g.id AND status = 'active' AND expires_at > NOW()
+        ORDER BY expires_at ASC LIMIT 1
+       ) as challenge_expires_at
      FROM groups g
      JOIN group_members gm ON gm.group_id = g.id
      WHERE gm.user_id = $1
@@ -93,10 +103,10 @@ router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   }
 
   const members = await query(
-    `SELECT u.id, u.display_name, u.avatar_url, gm.role, gm.joined_at,
-            gm.current_streak, gm.total_responses, gm.total_challenges,
+    `SELECT u.id as user_id, u.display_name, u.avatar_url, gm.role, gm.joined_at,
+            gm.current_streak as streak, gm.total_responses, gm.total_challenges,
             CASE WHEN gm.total_challenges > 0
-              THEN ROUND(gm.total_responses::numeric / gm.total_challenges * 100)
+              THEN ROUND(gm.total_responses::numeric / gm.total_challenges * 100)::int
               ELSE 0
             END as participation_rate
      FROM group_members gm
@@ -186,6 +196,16 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
     userId: req.userId,
     displayName: joinerName,
   });
+
+  // Fire-and-forget push notification to group creator
+  if (g.created_by && g.created_by !== req.userId) {
+    sendPushToUser(
+      g.created_by,
+      'New Member!',
+      `${joinerName} joined ${g.name}`,
+      { type: 'group_joined', groupId: g.id }
+    ).catch(() => {});
+  }
 
   logger.info('User joined group', { groupId: g.id, userId: req.userId });
   res.json(g);

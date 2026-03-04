@@ -1,0 +1,11 @@
+[build]
+# Build from monorepo root to access both blink-server/ and legal/
+dockerfilePath = "blink-server/Dockerfile"
+watchPatterns = ["blink-server/**", "legal/**"]
+
+[deploy]
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+numReplicas = 1
