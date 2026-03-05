@@ -9,26 +9,33 @@ export default {
 };
 
 export const theme = {
-  bg: '#0A0A0F',
-  bgCard: '#151520',
+  // Backgrounds — warmer dark tones with glassmorphism support
+  bg: '#0C0B10',
+  bgCard: 'rgba(22, 20, 30, 0.65)',
+  bgCardSolid: '#16141E',
   bgCardHover: '#1C1C2A',
-  bgElevated: '#1E1E2E',
-  bgInput: '#12121A',
-  surface: '#1A1A28',
-  surfaceLight: '#252535',
-  border: '#2A2A3A',
-  borderLight: '#35354A',
+  bgElevated: '#1E1C28',
+  bgInput: '#13111B',
+  surface: '#1A1826',
+  surfaceLight: '#252335',
 
+  // Borders — warmer
+  border: '#2A283A',
+  borderLight: '#35334A',
+
+  // Text
   text: '#FAFAFA',
-  textSecondary: '#9999AA',
-  textMuted: '#7A7A8E',
-  textInverse: '#0A0A0F',
+  textSecondary: '#9B99AA',
+  textMuted: '#7A788E',
+  textInverse: '#0C0B10',
 
+  // Primary accent — coral
   coral: '#FF6B4A',
   coralLight: '#FF8A6E',
   coralDark: '#E55535',
   coralMuted: 'rgba(255, 107, 74, 0.15)',
 
+  // Accent colors
   yellow: '#FFD84D',
   yellowMuted: 'rgba(255, 216, 77, 0.15)',
 
@@ -60,11 +67,16 @@ export const theme = {
   info: '#60A5FA',
   infoMuted: 'rgba(96, 165, 250, 0.15)',
 
+  // Glassmorphism specific
+  glassBorder: 'rgba(255, 255, 255, 0.08)',
+  glassHighlight: 'rgba(255, 255, 255, 0.04)',
+
   categoryColors: {
     close_friends: '#FF6B4A',
+    friends: '#FF6B4A',
     family: '#FFD84D',
     students: '#60A5FA',
     work: '#4ADE80',
     custom: '#A78BFA',
   } as Record<string, string>,
-};
+} as const;

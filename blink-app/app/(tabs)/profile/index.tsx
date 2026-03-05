@@ -1,18 +1,33 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Settings, Camera, Flame, Users, Calendar, ChevronRight, Shield, Bell as BellIcon, HelpCircle, Edit3 } from 'lucide-react-native';
+import {
+  Settings,
+  Camera,
+  Flame,
+  Users,
+  ChevronRight,
+  Bell as BellIcon,
+  HelpCircle,
+  Edit3,
+  LogOut,
+  Trash2,
+} from 'lucide-react-native';
 import { theme } from '@/constants/colors';
+import { typography } from '@/constants/typography';
+import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Skeleton } from '@/components/ui';
+import { Skeleton, GlassCard } from '@/components/ui';
+import StreakCalendar from '@/components/StreakCalendar';
+
+const APP_VERSION = '1.0.0';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, refreshGroups, isLoading } = useApp();
+  const { user, refreshGroups, isLoading, logout } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -24,34 +39,51 @@ export default function ProfileScreen() {
     }
   }, [refreshGroups]);
 
-  const stats = [
-    { icon: Camera, label: 'Total Snaps', value: String(user.totalSnaps), color: theme.coral },
-    { icon: Flame, label: 'Longest Streak', value: `${user.longestStreak} days`, color: theme.yellow },
-    { icon: Users, label: 'Groups', value: String(user.groupCount), color: theme.blue },
+  const handleLogout = useCallback(() => {
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: () => logout(),
+      },
+    ]);
+  }, [logout]);
+
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Delete Account',
+      'This action is permanent and cannot be undone. All your data will be deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: () => {
+            // TODO: call delete account API then logout
+            logout();
+          },
+        },
+      ]
+    );
+  }, [logout]);
+
+  const menuItems = [
+    { icon: Edit3, label: 'Edit Profile', color: theme.coral, route: '/edit-profile' },
+    { icon: BellIcon, label: 'Notification Settings', color: theme.yellow, route: '/settings' },
+    { icon: HelpCircle, label: 'Help & FAQ', color: theme.blue, route: '/help-faq' },
   ];
 
-  const menuSections = [
-    {
-      title: 'Account',
-      items: [
-        { icon: Edit3, label: 'Edit Profile', color: theme.coral, route: '/edit-profile' },
-        { icon: BellIcon, label: 'Notifications', color: theme.yellow, route: '/settings' },
-        { icon: Shield, label: 'Privacy', color: theme.green, route: '/settings' },
-      ],
-    },
-    {
-      title: 'More',
-      items: [
-        { icon: Calendar, label: 'Quiet Hours', color: theme.blue, route: '/settings' },
-        { icon: HelpCircle, label: 'Help & FAQ', color: theme.purple, route: '/help-faq' },
-      ],
-    },
+  const destructiveItems = [
+    { icon: LogOut, label: 'Log Out', color: theme.textMuted, onPress: handleLogout },
+    { icon: Trash2, label: 'Delete Account', color: theme.red, onPress: handleDeleteAccount },
   ];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* ── Header ── */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={[typography.headlineLarge, { color: theme.text }]}>You</Text>
         <TouchableOpacity
           style={styles.settingsBtn}
           onPress={() => router.push('/settings' as never)}
@@ -65,99 +97,152 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.coral}
-          />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={theme.coral} />
         }
       >
+        {/* ── Profile Card ── */}
         {isLoading ? (
-          <View style={styles.profileSection}>
-            <Skeleton variant="circle" width={90} height={90} />
-            <View style={{ marginTop: 14, gap: 6, alignItems: 'center' }}>
-              <Skeleton variant="text" width={140} height={20} />
-              <Skeleton variant="text" width={100} height={14} />
-              <Skeleton variant="text" width={180} height={14} />
-            </View>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.profileSection}
-            activeOpacity={0.8}
-            onPress={() => router.push('/edit-profile' as never)}
-          >
-            <View style={styles.avatarContainer}>
-              <Image source={{ uri: user.avatar }} style={styles.avatar} contentFit="cover" />
-              <View style={styles.editAvatarBtn}>
-                <Camera size={14} color={theme.white} />
+          <GlassCard style={styles.profileCard}>
+            <View style={styles.profileCardInner}>
+              <Skeleton variant="circle" width={80} height={80} />
+              <View style={{ marginTop: spacing.md, gap: spacing.xs, alignItems: 'center' }}>
+                <Skeleton variant="text" width={140} height={24} />
+                <Skeleton variant="text" width={100} height={16} />
               </View>
             </View>
-            <Text style={styles.name}>{user.name}</Text>
-            <Text style={styles.username}>{user.username}</Text>
-            <Text style={styles.bio}>{user.bio}</Text>
-          </TouchableOpacity>
+          </GlassCard>
+        ) : (
+          <GlassCard style={styles.profileCard}>
+            <View style={styles.profileCardInner}>
+              <View style={styles.avatarRing}>
+                <Image source={{ uri: user.avatar }} style={styles.avatar} contentFit="cover" />
+              </View>
+              <Text style={[typography.displayMedium, { color: theme.text, marginTop: spacing.md }]}>
+                {user.name}
+              </Text>
+              <Text style={[typography.bodyMedium, { color: theme.textSecondary, marginTop: spacing.xs }]}>
+                {user.username}
+              </Text>
+              <TouchableOpacity
+                style={styles.editProfileBtn}
+                onPress={() => router.push('/edit-profile' as never)}
+                activeOpacity={0.7}
+              >
+                <Edit3 size={13} color={theme.coral} />
+                <Text style={styles.editProfileText}>Edit Profile</Text>
+              </TouchableOpacity>
+            </View>
+          </GlassCard>
         )}
 
+        {/* ── Stats Row ── */}
         {isLoading ? (
-          <View style={styles.statsContainer}>
+          <View style={styles.statsRow}>
             {[0, 1, 2].map((i) => (
-              <View key={i} style={[styles.statCard, { backgroundColor: theme.bgCard }]}>
-                <Skeleton variant="circle" width={20} height={20} />
-                <Skeleton variant="text" width={40} height={18} />
-                <Skeleton variant="text" width={60} height={11} />
-              </View>
+              <GlassCard key={i} style={styles.statCard} padding={spacing.md}>
+                <Skeleton variant="circle" width={24} height={24} />
+                <Skeleton variant="text" width={40} height={28} />
+                <Skeleton variant="text" width={52} height={12} />
+              </GlassCard>
             ))}
           </View>
         ) : (
-          <View style={styles.statsContainer}>
-            {stats.map((stat, i) => {
-              const IconComponent = stat.icon;
-              return (
-                <LinearGradient
-                  key={i}
-                  colors={[`${stat.color}15`, `${stat.color}08`]}
-                  style={styles.statCard}
-                >
-                  <IconComponent size={20} color={stat.color} />
-                  <Text style={styles.statValue}>{stat.value}</Text>
-                  <Text style={styles.statLabel}>{stat.label}</Text>
-                </LinearGradient>
-              );
-            })}
+          <View style={styles.statsRow}>
+            <GlassCard style={styles.statCard} padding={spacing.md}>
+              <Camera size={20} color={theme.coral} />
+              <Text style={[typography.statLarge, { color: theme.text }]}>{user.totalSnaps}</Text>
+              <Text style={[typography.labelSmall, { color: theme.textMuted }]}>Blinks</Text>
+            </GlassCard>
+
+            <GlassCard style={styles.statCard} padding={spacing.md}>
+              <View style={styles.streakIconRow}>
+                <Flame size={20} color={theme.yellow} />
+              </View>
+              <Text style={[typography.statLarge, { color: theme.text }]}>{user.longestStreak}</Text>
+              <Text style={[typography.labelSmall, { color: theme.textMuted }]}>Best Streak</Text>
+            </GlassCard>
+
+            <GlassCard style={styles.statCard} padding={spacing.md}>
+              <Users size={20} color={theme.blue} />
+              <Text style={[typography.statLarge, { color: theme.text }]}>{user.groupCount}</Text>
+              <Text style={[typography.labelSmall, { color: theme.textMuted }]}>Groups</Text>
+            </GlassCard>
           </View>
         )}
 
-        {menuSections.map((section, sectionIndex) => (
-          <View key={sectionIndex} style={styles.menuSection}>
-            <Text style={styles.menuSectionTitle}>{section.title}</Text>
-            <View style={styles.menuCard}>
-              {section.items.map((item, i) => {
-                const IconComponent = item.icon;
-                return (
-                  <TouchableOpacity
-                    key={i}
-                    style={[styles.menuItem, i < section.items.length - 1 && styles.menuItemBorder]}
-                    onPress={() => {
-                      if (item.route) {
-                        router.push(item.route as never);
-                      }
-                    }}
-                  >
-                    <View style={[styles.menuIconBg, { backgroundColor: `${item.color}20` }]}>
-                      <IconComponent size={18} color={item.color} />
-                    </View>
-                    <Text style={styles.menuLabel}>{item.label}</Text>
-                    <ChevronRight size={16} color={theme.textMuted} />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        ))}
+        {/* ── Streak Calendar ── */}
+        {!isLoading && (
+          <StreakCalendar
+            totalSnaps={user.totalSnaps}
+            longestStreak={user.longestStreak}
+            joinDate={user.joinDate}
+          />
+        )}
 
+        {/* ── Menu Section ── */}
+        <GlassCard style={styles.menuCard} padding={0}>
+          {menuItems.map((item, i) => {
+            const IconComponent = item.icon;
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[styles.menuItem, i < menuItems.length - 1 && styles.menuItemBorder]}
+                activeOpacity={0.6}
+                onPress={() => {
+                  if (item.route) {
+                    router.push(item.route as never);
+                  }
+                }}
+              >
+                <View style={[styles.menuIconBg, { backgroundColor: `${item.color}20` }]}>
+                  <IconComponent size={18} color={item.color} />
+                </View>
+                <Text style={[typography.bodyLarge, styles.menuLabel]}>{item.label}</Text>
+                <ChevronRight size={16} color={theme.textMuted} />
+              </TouchableOpacity>
+            );
+          })}
+        </GlassCard>
+
+        {/* ── Destructive Actions ── */}
+        <GlassCard style={styles.destructiveCard} padding={0}>
+          {destructiveItems.map((item, i) => {
+            const IconComponent = item.icon;
+            const isLast = i === destructiveItems.length - 1;
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[styles.menuItem, !isLast && styles.menuItemBorder]}
+                activeOpacity={0.6}
+                onPress={item.onPress}
+              >
+                <IconComponent size={18} color={item.color} />
+                <Text
+                  style={[
+                    typography.bodyLarge,
+                    styles.menuLabel,
+                    { color: item.color === theme.red ? theme.red : theme.textSecondary },
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </GlassCard>
+
+        {/* ── Footer ── */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Member since {new Date(user.joinDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</Text>
+          <Text style={[typography.bodySmall, { color: theme.textMuted }]}>
+            Member since{' '}
+            {new Date(user.joinDate).toLocaleDateString('en-US', {
+              month: 'long',
+              year: 'numeric',
+            })}
+          </Text>
+          <Text style={[typography.bodySmall, { color: theme.textMuted, marginTop: spacing.xs }]}>
+            Blinks v{APP_VERSION}
+          </Text>
         </View>
 
         <View style={{ height: 100 }} />
@@ -175,136 +260,106 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: '800' as const,
-    color: theme.text,
-    letterSpacing: -0.5,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
   },
   settingsBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: borderRadius.full,
     backgroundColor: theme.bgCard,
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
-  profileSection: {
+
+  // Profile card
+  profileCard: {
+    marginBottom: spacing.xl,
+  },
+  profileCardInner: {
     alignItems: 'center',
-    marginBottom: 24,
   },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 14,
-  },
-  avatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+  avatarRing: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
     borderWidth: 3,
     borderColor: theme.coral,
-  },
-  editAvatarBtn: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: theme.coral,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: theme.bg,
   },
-  name: {
-    fontSize: 22,
-    fontWeight: '800' as const,
-    color: theme.text,
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
-  username: {
-    fontSize: 14,
-    color: theme.textMuted,
-    marginTop: 2,
-  },
-  bio: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    marginTop: 6,
-  },
-  statsContainer: {
+  editProfileBtn: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 28,
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  editProfileText: {
+    ...typography.labelLarge,
+    color: theme.coral,
+  },
+
+  // Stats
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
   },
   statCard: {
     flex: 1,
-    borderRadius: 14,
-    padding: 14,
     alignItems: 'center',
-    gap: 6,
+    gap: spacing.xs,
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '800' as const,
-    color: theme.text,
+  streakIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  statLabel: {
-    fontSize: 11,
-    color: theme.textMuted,
-    textAlign: 'center',
-  },
-  menuSection: {
-    marginBottom: 20,
-  },
-  menuSectionTitle: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: theme.textMuted,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-    marginBottom: 10,
-  },
+
+  // Menu
   menuCard: {
-    backgroundColor: theme.bgCard,
-    borderRadius: 14,
-    overflow: 'hidden',
+    marginBottom: spacing.md,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    gap: 12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
   menuItemBorder: {
-    borderBottomWidth: 0.5,
-    borderBottomColor: theme.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.glassBorder,
   },
   menuIconBg: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: borderRadius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
   menuLabel: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: '600' as const,
     color: theme.text,
   },
+
+  // Destructive
+  destructiveCard: {
+    marginBottom: spacing.xl,
+  },
+
+  // Footer
   footer: {
     alignItems: 'center',
-    paddingVertical: 20,
-  },
-  footerText: {
-    fontSize: 12,
-    color: theme.textMuted,
+    paddingVertical: spacing.xl,
   },
 });

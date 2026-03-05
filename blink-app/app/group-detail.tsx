@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, RefreshControl, Modal, Alert, Share, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, RefreshControl, Modal, Alert, Share, Animated, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -7,6 +7,8 @@ import { ArrowLeft, Camera, ChevronRight, Flame, MoreHorizontal, Share2, Trophy,
 import * as Haptics from 'expo-haptics';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
+import { typography } from '@/constants/typography';
+import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
 import SnapCard from '@/components/SnapCard';
 import SpotlightCard from '@/components/SpotlightCard';
@@ -15,6 +17,8 @@ import { categoryLabels } from '@/constants/categories';
 import { api, blockUser, getSpotlight } from '@/services/api';
 import { Users } from 'lucide-react-native';
 import { Skeleton, SnapCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
+import GlassCard from '@/components/ui/GlassCard';
+import AvatarRing from '@/components/ui/AvatarRing';
 import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
 import { apiGroupDetailToGroup, apiResponseToSnap, apiSpotlightToUI, apiMembersToLeaderboard } from '@/utils/adapters';
 import { isDemoGroup, DEMO_GROUP_DETAIL, DEMO_CHALLENGE, DEMO_RESPONSES } from '@/constants/demoData';
@@ -33,12 +37,161 @@ import { AiPersonality } from '@/types';
 type ChallengeType = 'snap' | 'quiz' | 'quiz_food' | 'quiz_most_likely' | 'quiz_rate_day';
 
 const challengeTypes: { type: ChallengeType; emoji: string; label: string }[] = [
-  { type: 'snap', emoji: '📸', label: 'Snap Challenge' },
-  { type: 'quiz_food', emoji: '🍔', label: 'Food Quiz' },
-  { type: 'quiz_most_likely', emoji: '👀', label: 'Most Likely To' },
-  { type: 'quiz_rate_day', emoji: '⭐', label: 'Rate Your Day' },
+  { type: 'snap', emoji: '\u{1F4F8}', label: 'Snap Challenge' },
+  { type: 'quiz_food', emoji: '\u{1F354}', label: 'Food Quiz' },
+  { type: 'quiz_most_likely', emoji: '\u{1F440}', label: 'Most Likely To' },
+  { type: 'quiz_rate_day', emoji: '\u2B50', label: 'Rate Your Day' },
 ];
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const THUMB_COLS = 3;
+const THUMB_GAP = spacing.xs;
+const THUMB_SIZE = (SCREEN_WIDTH - spacing.lg * 2 - THUMB_GAP * (THUMB_COLS - 1)) / THUMB_COLS;
+
+// Helper: get challenge type config
+function getChallengeTypeConfig(type: string): { emoji: string; label: string } {
+  const typeMap: Record<string, { emoji: string; label: string }> = {
+    snap: { emoji: '\u{1F4F8}', label: 'Snap' },
+    quiz_food: { emoji: '\u{1F354}', label: 'Food' },
+    quiz_most_likely: { emoji: '\u{1F440}', label: 'Most Likely' },
+    quiz_rate_day: { emoji: '\u2B50', label: 'Rate Day' },
+    quiz: { emoji: '\u{1F9E0}', label: 'Quiz' },
+  };
+  return typeMap[type] ?? { emoji: '\u{1F4F8}', label: 'Challenge' };
+}
+
+// ----- Member Ring Row sub-component -----
+function MemberRingRow({
+  members,
+  respondedUserIds,
+  hasActiveChallenge,
+}: {
+  members: Array<{ id: string; name: string; avatar: string }>;
+  respondedUserIds: Set<string>;
+  hasActiveChallenge: boolean;
+}) {
+  const [tooltipName, setTooltipName] = useState<string | null>(null);
+
+  const respondedCount = hasActiveChallenge
+    ? members.filter((m) => respondedUserIds.has(m.id)).length
+    : 0;
+
+  return (
+    <View style={s.memberRingSection}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.memberRingRow}
+      >
+        {members.map((member) => {
+          const hasResponded = respondedUserIds.has(member.id);
+          return (
+            <TouchableOpacity
+              key={member.id}
+              onPress={() => setTooltipName(tooltipName === member.name ? null : member.name)}
+              activeOpacity={0.7}
+              style={s.memberRingItem}
+            >
+              <AvatarRing
+                uri={member.avatar}
+                name={member.name}
+                size={46}
+                hasResponded={hasResponded}
+                showStatus={hasActiveChallenge}
+                isActive={hasActiveChallenge && !hasResponded}
+              />
+              {tooltipName === member.name && (
+                <View style={s.memberTooltip}>
+                  <Text style={s.memberTooltipText} numberOfLines={1}>
+                    {member.name}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+      {hasActiveChallenge && members.length > 0 && (
+        <Text style={s.respondedCount}>
+          {respondedCount}/{members.length} responded
+        </Text>
+      )}
+    </View>
+  );
+}
+
+// ----- Past Challenge Thumbnail Grid -----
+interface PastChallenge {
+  id: string;
+  type: string;
+  photo_url?: string | null;
+  prompt?: string | null;
+}
+
+function PastChallengeGrid({
+  challenges,
+  groupId,
+  onSeeAll,
+}: {
+  challenges: PastChallenge[];
+  groupId: string;
+  onSeeAll: () => void;
+}) {
+  const router = useRouter();
+  if (challenges.length === 0) return null;
+
+  const visible = challenges.slice(0, 9);
+
+  return (
+    <View style={s.pastSection}>
+      <View style={s.pastHeader}>
+        <Text style={[typography.headlineMedium, { color: theme.text }]}>Past Challenges</Text>
+        <TouchableOpacity onPress={onSeeAll} style={s.seeAllBtn}>
+          <Text style={s.seeAllText}>See all</Text>
+          <ChevronRight size={14} color={theme.textMuted} />
+        </TouchableOpacity>
+      </View>
+      <View style={s.thumbGrid}>
+        {visible.map((ch) => {
+          const config = getChallengeTypeConfig(ch.type);
+          return (
+            <TouchableOpacity
+              key={ch.id}
+              style={s.thumbItem}
+              activeOpacity={0.8}
+              onPress={() =>
+                router.push({
+                  pathname: '/challenge-history' as never,
+                  params: { groupId },
+                })
+              }
+            >
+              {ch.photo_url ? (
+                <Image
+                  source={{ uri: ch.photo_url }}
+                  style={s.thumbImage}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View style={[s.thumbImage, s.thumbPlaceholder]}>
+                  <Text style={s.thumbPlaceholderEmoji}>{config.emoji}</Text>
+                </View>
+              )}
+              <View style={s.thumbOverlay}>
+                <Text style={s.thumbEmojiOverlay}>{config.emoji}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ===========================
+// MAIN GROUP DETAIL SCREEN
+// ===========================
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -83,6 +236,20 @@ export default function GroupDetailScreen() {
     topReactionEmoji?: string;
     respondedUsers: Array<{ displayName: string; avatarUrl?: string }>;
   } | null>(null);
+
+  // Pulsing timer animation
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulseAnim]);
 
   // Fetch full group detail with members
   const groupQuery = useQuery({
@@ -139,6 +306,20 @@ export default function GroupDetailScreen() {
   const spotlight = spotlightQuery.data
     ? apiSpotlightToUI(spotlightQuery.data, id)
     : null;
+
+  // Fetch past challenges for thumbnail grid
+  const pastChallengesQuery = useQuery({
+    queryKey: ['challenge-history', id],
+    queryFn: async () => {
+      const data = await api(`/challenges/groups/${id}/challenges/history?limit=9`);
+      return (data ?? []) as PastChallenge[];
+    },
+    enabled: !!id && !isDemo,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const pastChallenges: PastChallenge[] = pastChallengesQuery.data ?? [];
 
   // Fetch challenge progress for ActivityPulse
   useEffect(() => {
@@ -254,7 +435,6 @@ export default function GroupDetailScreen() {
   const leaderboard = groupQuery.data?.members
     ? apiMembersToLeaderboard(groupQuery.data.members)
     : [];
-  const leaderboardTop3 = leaderboard.slice(0, 3);
 
   const snaps = (responsesQuery.data ?? []).map((r) => ({
     ...apiResponseToSnap(r),
@@ -272,10 +452,8 @@ export default function GroupDetailScreen() {
   const challengeTriggerInfo = React.useMemo(() => {
     if (!activeChallenge) return null;
     if (!activeChallenge.triggered_by) {
-      // AI-generated challenge
       return { isAi: true as const, name: 'Blink AI' };
     }
-    // Look up the user in group members
     const member = groupQuery.data?.members?.find((m) => m.user_id === activeChallenge.triggered_by);
     return { isAi: false as const, name: member?.display_name ?? 'Someone' };
   }, [activeChallenge, groupQuery.data?.members]);
@@ -313,6 +491,22 @@ export default function GroupDetailScreen() {
       respondents: respondents[i] ?? [],
     }));
   }, [responsesQuery.data, quizOptions, isQuizChallenge]);
+
+  // Set of user IDs that have responded to the active challenge
+  const respondedUserIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    if (responsesQuery.data) {
+      for (const r of responsesQuery.data) {
+        ids.add(r.user_id);
+      }
+    }
+    if (progressData?.responded) {
+      for (const r of progressData.responded) {
+        ids.add(r.userId);
+      }
+    }
+    return ids;
+  }, [responsesQuery.data, progressData]);
 
   // Ring mutation: create a new challenge
   const ringMutation = useMutation({
@@ -380,10 +574,8 @@ export default function GroupDetailScreen() {
 
   const handleDeleteGroup = useCallback(() => {
     setShowGroupMenu(false);
-    // Use setTimeout to let the modal close before showing the confirm dialog
     setTimeout(() => {
       if (Platform.OS === 'web') {
-        // On web, window.confirm is more reliable than Alert.alert with button callbacks
         const confirmed = window.confirm('Delete Group?\n\nAre you sure? This action cannot be undone and all members will lose access.');
         if (confirmed) {
           deleteMutation.mutate();
@@ -491,7 +683,6 @@ export default function GroupDetailScreen() {
         },
       });
     } else {
-      // Fallback for unknown types
       router.push({ pathname: '/group-prompt' as never, params: { groupId: id } });
     }
   }, [router, id, activeChallenge, isDemo, advanceTour]);
@@ -511,7 +702,6 @@ export default function GroupDetailScreen() {
         await blockUser(userId);
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert('Blocked', `${userName} has been blocked. You won't see their content anymore.`);
-        // Refresh responses to filter out blocked user
         responsesQuery.refetch();
       } catch {
         Alert.alert('Error', 'Could not block user. Please try again.');
@@ -556,40 +746,47 @@ export default function GroupDetailScreen() {
     router.back();
   }, [advanceTour, router]);
 
+  // Compute group streak for banner
+  const groupStreak = group
+    ? group.members.reduce((min, m) => Math.min(min, m.streak), group.members[0]?.streak ?? 0)
+    : 0;
+  const longestGroupStreak = group
+    ? Math.max(...group.members.map((m) => m.streak), 0)
+    : 0;
+
+  // ---- LOADING STATE ----
   if (groupQuery.isLoading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <View style={[s.container, { paddingTop: insets.top }]}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
             <ArrowLeft size={22} color={theme.text} />
           </TouchableOpacity>
+          <View style={s.headerCenter}>
+            <Skeleton variant="text" width={120} height={20} />
+          </View>
+          <View style={{ width: 36 }} />
         </View>
-        <View style={{ paddingHorizontal: 20, paddingTop: 12, gap: 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Skeleton variant="circle" width={36} height={36} borderRadius={10} />
-            <View style={{ gap: 6 }}>
-              <Skeleton variant="text" width={140} height={16} />
-              <Skeleton variant="text" width={80} height={12} />
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} variant="circle" width={28} height={28} />
+        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.lg }}>
+          {/* Avatar ring skeleton */}
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} variant="circle" width={50} height={50} />
             ))}
-            <Skeleton variant="text" width={70} height={14} />
           </View>
-          <SnapCardSkeleton />
+          <Skeleton variant="text" width={SCREEN_WIDTH - 64} height={100} borderRadius={20} />
           <SnapCardSkeleton />
         </View>
       </View>
     );
   }
 
+  // ---- ERROR STATE ----
   if (groupQuery.isError) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <View style={[s.container, { paddingTop: insets.top }]}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
             <ArrowLeft size={22} color={theme.text} />
           </TouchableOpacity>
         </View>
@@ -601,16 +798,17 @@ export default function GroupDetailScreen() {
     );
   }
 
+  // ---- EMPTY STATE ----
   if (!group) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <View style={[s.container, { paddingTop: insets.top }]}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
             <ArrowLeft size={22} color={theme.text} />
           </TouchableOpacity>
         </View>
         <EmptyState
-          emoji="😅"
+          emoji="\u{1F605}"
           title="Group not found"
           subtitle="It may have been deleted or you lost access."
         />
@@ -618,175 +816,42 @@ export default function GroupDetailScreen() {
     );
   }
 
+  // =============================
+  // MAIN RENDER
+  // =============================
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} testID="back-btn">
+    <View style={[s.container, { paddingTop: insets.top }]}>
+      {/* ===== 1. SIMPLIFIED HEADER ===== */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} testID="back-btn">
           <ArrowLeft size={22} color={theme.text} />
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerEmoji}>{group.emoji}</Text>
-          <Text style={styles.headerTitle}>{group.name}</Text>
-        </View>
-        <View style={styles.headerActions}>
+
+        <TouchableOpacity
+          style={s.headerCenter}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (!isDemo) {
+              // Tappable to edit - could navigate to group settings
+            }
+          }}
+        >
+          <Text style={s.headerEmoji}>{group.emoji}</Text>
+          <Text style={s.headerTitle} numberOfLines={1}>{group.name}</Text>
+        </TouchableOpacity>
+
+        <View style={s.headerRight}>
           {!isDemo && (
-            <>
-              <TouchableOpacity
-                style={styles.headerActionBtn}
-                onPress={() => router.push({ pathname: '/invite-members' as never, params: { groupId: id } })}
-              >
-                <UserPlus size={18} color={theme.text} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.headerActionBtn} onPress={handleGroupMenu}>
-                <MoreHorizontal size={18} color={theme.text} />
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.groupMeta}>
-        <View style={styles.metaBadgesRow}>
-          <View style={[styles.categoryBadge, { backgroundColor: `${group.color}20` }]}>
-            <Text style={[styles.categoryText, { color: group.color }]}>
-              {categoryLabels[group.category]}
-            </Text>
-          </View>
-          {group.aiPersonality && (
-            <AiPersonalityPill personality={group.aiPersonality} />
-          )}
-        </View>
-        <View style={styles.membersPreview}>
-          {group.members.slice(0, 6).map((member, i) => (
-            <Image
-              key={member.id}
-              source={{ uri: member.avatar }}
-              style={[styles.memberAvatar, { marginLeft: i > 0 ? -8 : 0, zIndex: 6 - i }]}
-              contentFit="cover"
-            />
-          ))}
-          <Text style={styles.memberCount}>{group.members.length} members</Text>
-        </View>
-      </View>
-
-      {!isDemo && (
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={[styles.quickAction, { backgroundColor: theme.yellowMuted }]}
-            onPress={() => router.push({ pathname: '/group-leaderboard' as never, params: { groupId: id } })}
-          >
-            <Trophy size={16} color={theme.yellow} />
-            <Text style={[styles.quickActionText, { color: theme.yellow }]}>Leaderboard</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.quickAction, { backgroundColor: theme.greenMuted }]}
-            onPress={() => router.push({ pathname: '/invite-members' as never, params: { groupId: id } })}
-          >
-            <Share2 size={16} color={theme.green} />
-            <Text style={[styles.quickActionText, { color: theme.green }]}>Invite</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.quickAction, { backgroundColor: theme.purpleMuted }]}
-            onPress={() => router.push({ pathname: '/challenge-history' as never, params: { groupId: id } })}
-          >
-            <Clock size={16} color={theme.purple} />
-            <Text style={[styles.quickActionText, { color: theme.purple }]}>History</Text>
-          </TouchableOpacity>
-
-          {!activeChallenge && (
-            <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: theme.coralMuted }]}
-              onPress={handleRing}
-            >
-              <Zap size={16} color={theme.coral} />
-              <Text style={[styles.quickActionText, { color: theme.coral }]}>Ring!</Text>
+            <TouchableOpacity style={s.menuBtn} onPress={handleGroupMenu}>
+              <MoreHorizontal size={20} color={theme.text} />
             </TouchableOpacity>
           )}
         </View>
-      )}
-
-      {/* Group Streak Banner */}
-      {!isDemo && group && (
-        <GroupStreakBanner
-          groupStreak={group.members.reduce((min, m) => Math.min(min, m.streak), group.members[0]?.streak ?? 0)}
-          longestGroupStreak={Math.max(...group.members.map((m) => m.streak), 0)}
-        />
-      )}
-
-      {group.hasActiveChallenge && !hasSubmittedToday && (
-        <View ref={challengeBarRef} collapsable={false}>
-          <TouchableOpacity
-            style={[styles.challengeBar, isQuizChallenge && { backgroundColor: theme.purple }]}
-            onPress={handleSnapChallenge}
-            activeOpacity={0.85}
-            testID="snap-challenge-btn"
-          >
-            <View style={styles.challengeContent}>
-              {isQuizChallenge ? (
-                <Zap size={20} color={theme.white} />
-              ) : (
-                <Camera size={20} color={theme.white} />
-              )}
-              <View>
-                <Text style={styles.challengeTitle}>
-                  {activeChallenge?.type === 'snap' ? 'Snap Challenge Active!' :
-                   activeChallenge?.type === 'quiz' ? 'Quiz Active!' : 'Challenge Active!'}
-                </Text>
-                <Text style={styles.challengeSubtitle}>Tap to respond</Text>
-              </View>
-            </View>
-            <View style={styles.challengeTimer}>
-              <Text style={styles.challengeTimerText}>{countdown}</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Challenge trigger indicator */}
-      {activeChallenge && challengeTriggerInfo && (
-        <View style={styles.triggerRow}>
-          {challengeTriggerInfo.isAi ? (
-            <BlinkAiAvatar size={20} />
-          ) : (
-            <View style={styles.triggerDot} />
-          )}
-          <Text style={styles.triggerText}>
-            {challengeTriggerInfo.isAi ? 'Blink AI started this challenge' : `${challengeTriggerInfo.name} started this challenge`}
-          </Text>
-        </View>
-      )}
-
-      {/* Activity Pulse — shows progress below challenge bar */}
-      {activeChallenge && !isDemo && progressData && (
-        <View style={styles.activityPulseWrapper}>
-          <ActivityPulse
-            respondedUsers={progressData.responded}
-            totalMembers={progressData.totalMembers}
-            currentUserId={user.id}
-            hasResponded={hasSubmittedToday}
-          />
-        </View>
-      )}
-
-      {hasSubmittedToday && activeChallenge && (
-        <View style={styles.submittedBanner}>
-          <View style={styles.submittedRow}>
-            <Text style={styles.submittedText}>You submitted! Check out your crew's snaps</Text>
-            {countdown ? (
-              <View style={styles.countdownBadge}>
-                <Clock size={12} color={theme.green} />
-                <Text style={styles.countdownText}>{countdown}</Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
-      )}
+      </View>
 
       <ScrollView
-        style={styles.feed}
-        contentContainerStyle={styles.feedContent}
+        style={s.scrollView}
+        contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -796,51 +861,100 @@ export default function GroupDetailScreen() {
           />
         }
       >
+        {/* ===== 2. MEMBER RING ROW ===== */}
+        <MemberRingRow
+          members={group.members.map((m) => ({ id: m.id, name: m.name, avatar: m.avatar }))}
+          respondedUserIds={respondedUserIds}
+          hasActiveChallenge={group.hasActiveChallenge}
+        />
+
+        {/* AI Personality pill (subtle) */}
+        {group.aiPersonality && (
+          <View style={s.personalityRow}>
+            <AiPersonalityPill personality={group.aiPersonality} />
+          </View>
+        )}
+
+        {/* ===== 3. ACTIVE CHALLENGE SECTION ===== */}
+        {activeChallenge && (
+          <View ref={challengeBarRef} collapsable={false}>
+            <GlassCard style={s.challengeCard} padding={spacing.lg}>
+              {/* AI trigger label */}
+              {challengeTriggerInfo?.isAi && (
+                <View style={s.aiTriggerRow}>
+                  <BlinkAiAvatar size={18} />
+                  <Text style={s.aiTriggerText}>Blink AI</Text>
+                </View>
+              )}
+              {!challengeTriggerInfo?.isAi && challengeTriggerInfo && (
+                <Text style={s.humanTriggerText}>
+                  {challengeTriggerInfo.name} started this
+                </Text>
+              )}
+
+              {/* Challenge prompt */}
+              <Text style={s.challengePrompt}>
+                {activeChallenge.prompt_text ?? activeChallenge.prompt ?? (
+                  isQuizChallenge ? 'Quiz time!' : 'Snap Challenge!'
+                )}
+              </Text>
+
+              {/* Timer row */}
+              {countdown ? (
+                <View style={s.timerRow}>
+                  <Animated.View style={[s.timerDot, { opacity: pulseAnim }]} />
+                  <Text style={s.timerText}>{countdown} remaining</Text>
+                </View>
+              ) : null}
+
+              {/* Respond button OR ActivityPulse */}
+              {!hasSubmittedToday ? (
+                <TouchableOpacity
+                  style={s.respondBtn}
+                  onPress={handleSnapChallenge}
+                  activeOpacity={0.85}
+                  testID="snap-challenge-btn"
+                >
+                  {isQuizChallenge ? (
+                    <Zap size={18} color={theme.white} />
+                  ) : (
+                    <Camera size={18} color={theme.white} />
+                  )}
+                  <Text style={s.respondBtnText}>Respond</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={s.activityPulseInCard}>
+                  {progressData && (
+                    <ActivityPulse
+                      respondedUsers={progressData.responded}
+                      totalMembers={progressData.totalMembers}
+                      currentUserId={user.id}
+                      hasResponded={hasSubmittedToday}
+                    />
+                  )}
+                  <View style={s.submittedInlineRow}>
+                    <Text style={s.submittedInlineText}>You responded</Text>
+                    {countdown ? (
+                      <View style={s.countdownBadge}>
+                        <Clock size={11} color={theme.green} />
+                        <Text style={s.countdownBadgeText}>{countdown}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              )}
+            </GlassCard>
+          </View>
+        )}
+
+        {/* ===== 4. CHALLENGE RESPONSES ===== */}
+
         {/* Daily Spotlight */}
         {spotlight && !isDemo && (
           <SpotlightCard spotlight={spotlight} />
         )}
 
-        {/* Leaderboard Preview (top 3) */}
-        {leaderboardTop3.length > 0 && !isDemo && (
-          <View style={styles.leaderboardPreview}>
-            <TouchableOpacity
-              style={styles.leaderboardPreviewHeader}
-              onPress={() => router.push({ pathname: '/group-leaderboard' as never, params: { groupId: id } })}
-              activeOpacity={0.7}
-            >
-              <View style={styles.leaderboardPreviewTitleRow}>
-                <Trophy size={16} color={theme.yellow} />
-                <Text style={styles.leaderboardPreviewTitle}>Leaderboard</Text>
-              </View>
-              <View style={styles.leaderboardSeeAll}>
-                <Text style={styles.leaderboardSeeAllText}>See all</Text>
-                <ChevronRight size={14} color={theme.textMuted} />
-              </View>
-            </TouchableOpacity>
-            {leaderboardTop3.map((entry, i) => {
-              const isMe = entry.userId === user.id;
-              const rankEmojis = ['🥇', '🥈', '🥉'];
-              return (
-                <View key={entry.userId} style={[styles.leaderboardRow, isMe && styles.leaderboardRowMe]}>
-                  <Text style={styles.leaderboardRank}>{rankEmojis[i]}</Text>
-                  <Image source={{ uri: entry.userAvatar }} style={styles.leaderboardAvatar} contentFit="cover" />
-                  <View style={styles.leaderboardInfo}>
-                    <Text style={[styles.leaderboardName, isMe && { color: theme.coral }]} numberOfLines={1}>
-                      {entry.userName}{isMe ? ' (you)' : ''}
-                    </Text>
-                    <View style={styles.leaderboardStreakRow}>
-                      <Flame size={11} color={theme.yellow} />
-                      <Text style={styles.leaderboardStreakText}>{entry.streak} day streak</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.leaderboardScore}>{entry.score}</Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
+        {/* Blurred preview if user hasn't responded */}
         {!hasSubmittedToday && activeChallenge && !isDemo && (previewData || snaps.length > 0) && (
           <BlurredPreviewCard
             respondedCount={previewData?.respondedCount ?? snaps.length}
@@ -849,7 +963,7 @@ export default function GroupDetailScreen() {
             topReactionEmoji={previewData?.topReactionEmoji}
             respondedUsers={
               previewData?.respondedUsers ??
-              snaps.map((s) => ({ displayName: s.userName, avatarUrl: s.userAvatar }))
+              snaps.map((sn) => ({ displayName: sn.userName, avatarUrl: sn.userAvatar }))
             }
             onRespond={handleSnapChallenge}
             activityPulseProps={
@@ -865,6 +979,7 @@ export default function GroupDetailScreen() {
           />
         )}
 
+        {/* Loading / Error / Quiz Results / Snap Cards */}
         {responsesQuery.isLoading && activeChallenge ? (
           <>
             <SnapCardSkeleton />
@@ -879,55 +994,55 @@ export default function GroupDetailScreen() {
         ) : isQuizChallenge && activeChallenge ? (
           /* Quiz Results Inline */
           hasSubmittedToday && quizDistribution.length > 0 ? (
-            <View style={styles.quizResultsContainer}>
-              <View style={styles.quizResultsHeader}>
-                <Text style={styles.quizPromptText}>
+            <View style={s.quizResultsContainer}>
+              <GlassCard style={s.quizHeaderCard}>
+                <Text style={[typography.headlineMedium, { color: theme.text }]}>
                   {activeChallenge.prompt_text ?? activeChallenge.prompt ?? 'Quiz'}
                 </Text>
-                <View style={styles.quizResponseCount}>
+                <View style={s.quizResponseCount}>
                   <Users size={14} color={theme.textMuted} />
-                  <Text style={styles.quizResponseCountText}>
+                  <Text style={s.quizResponseCountText}>
                     {(responsesQuery.data ?? []).length} {(responsesQuery.data ?? []).length === 1 ? 'response' : 'responses'}
                   </Text>
                 </View>
-              </View>
+              </GlassCard>
               {quizDistribution.map((item, i) => {
                 const isTopAnswer = quizDistribution.every((d) => item.count >= d.count) && item.count > 0;
                 const myResponse = (responsesQuery.data ?? []).find((r) => r.user_id === user.id);
                 const isMyPick = myResponse?.answer_index === i;
                 return (
-                  <View key={i} style={styles.quizResultRow}>
-                    <View style={styles.quizResultHeader}>
-                      <View style={styles.quizResultLabelRow}>
-                        <Text style={[styles.quizResultLabel, isTopAnswer && { color: theme.coral }]}>
+                  <View key={i} style={s.quizResultRow}>
+                    <View style={s.quizResultHeader}>
+                      <View style={s.quizResultLabelRow}>
+                        <Text style={[s.quizResultLabel, isTopAnswer && { color: theme.coral }]}>
                           {item.label}
                         </Text>
                         {isMyPick && (
-                          <View style={styles.quizMyPickBadge}>
-                            <Text style={styles.quizMyPickText}>You</Text>
+                          <View style={s.quizMyPickBadge}>
+                            <Text style={s.quizMyPickText}>You</Text>
                           </View>
                         )}
                       </View>
-                      <Text style={styles.quizResultPercent}>{item.percentage}%</Text>
+                      <Text style={s.quizResultPercent}>{item.percentage}%</Text>
                     </View>
-                    <View style={styles.quizProgressBg}>
+                    <View style={s.quizProgressBg}>
                       <View style={[
-                        styles.quizProgressFill,
+                        s.quizProgressFill,
                         { width: `${item.percentage}%`, backgroundColor: isTopAnswer ? theme.coral : theme.surfaceLight },
                       ]} />
                     </View>
                     {item.respondents.length > 0 && (
-                      <View style={styles.quizRespondentsRow}>
+                      <View style={s.quizRespondentsRow}>
                         {item.respondents.slice(0, 5).map((r, ri) => (
                           <Image
                             key={ri}
                             source={{ uri: r.avatar }}
-                            style={[styles.quizRespondentAvatar, { marginLeft: ri > 0 ? -6 : 0, zIndex: 5 - ri }]}
+                            style={[s.quizRespondentAvatar, { marginLeft: ri > 0 ? -6 : 0, zIndex: 5 - ri }]}
                             contentFit="cover"
                           />
                         ))}
                         {item.respondents.length > 5 && (
-                          <Text style={styles.quizMoreRespondents}>+{item.respondents.length - 5}</Text>
+                          <Text style={s.quizMoreRespondents}>+{item.respondents.length - 5}</Text>
                         )}
                       </View>
                     )}
@@ -937,45 +1052,93 @@ export default function GroupDetailScreen() {
             </View>
           ) : !hasSubmittedToday ? (
             <EmptyState
-              emoji="🧠"
+              emoji="\u{1F9E0}"
               title="Quiz active!"
               subtitle="Tap the challenge bar to answer"
             />
           ) : (
             <EmptyState
-              emoji="⏳"
+              emoji="\u23F3"
               title="Waiting for responses"
               subtitle="Results appear when others answer"
             />
           )
-        ) : snaps.length === 0 ? (
-          <EmptyState
-            emoji="📸"
-            title="No snaps yet"
-            subtitle="Start a challenge to see snaps here!"
-          />
-        ) : (
+        ) : hasSubmittedToday && snaps.length > 0 ? (
           snaps.map(snap => (
             <SnapCard
               key={snap.id}
               snap={snap}
-              isLocked={isDemo ? false : !hasSubmittedToday}
+              isLocked={false}
               onReact={handleReaction}
               onReport={handleReportSnap}
               onBlock={handleBlockUser}
             />
           ))
-        )}
+        ) : snaps.length === 0 && !activeChallenge ? (
+          <EmptyState
+            emoji="\u{1F4F8}"
+            title="No snaps yet"
+            subtitle="Start a challenge to see snaps here!"
+          />
+        ) : snaps.length > 0 && !hasSubmittedToday ? (
+          // User hasn't submitted but there are snaps (locked view handled by BlurredPreviewCard above)
+          null
+        ) : null}
 
         {/* AI Commentary Card */}
         {aiCommentary && (
           <AiCommentaryCard commentary={aiCommentary.commentary} />
         )}
 
+        {/* ===== 5. PAST CHALLENGES THUMBNAIL GRID ===== */}
+        {!isDemo && (
+          <PastChallengeGrid
+            challenges={pastChallenges}
+            groupId={id ?? ''}
+            onSeeAll={() => router.push({ pathname: '/challenge-history' as never, params: { groupId: id } })}
+          />
+        )}
+
+        {/* ===== 6. QUICK ACTIONS (BOTTOM) ===== */}
+        <View style={s.bottomActions}>
+          {/* Group Streak Banner */}
+          {!isDemo && groupStreak > 0 && (
+            <GroupStreakBanner
+              groupStreak={groupStreak}
+              longestGroupStreak={longestGroupStreak}
+            />
+          )}
+
+          {/* Challenge Now button */}
+          {!isDemo && !activeChallenge && (
+            <TouchableOpacity
+              style={s.challengeNowBtn}
+              onPress={handleRing}
+              activeOpacity={0.85}
+            >
+              <Zap size={20} color={theme.white} />
+              <Text style={s.challengeNowText}>Challenge Now</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Leaderboard link */}
+          {!isDemo && leaderboard.length > 0 && (
+            <TouchableOpacity
+              style={s.leaderboardLink}
+              onPress={() => router.push({ pathname: '/group-leaderboard' as never, params: { groupId: id } })}
+              activeOpacity={0.7}
+            >
+              <Trophy size={16} color={theme.yellow} />
+              <Text style={s.leaderboardLinkText}>View Leaderboard</Text>
+              <ChevronRight size={14} color={theme.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Tour Tooltip: Step 2 — Challenge bar */}
+      {/* Tour Tooltip: Step 2 -- Challenge bar */}
       <Tooltip
         visible={isDemo && tourStep === 'group_detail'}
         message={tourMessages.group_detail}
@@ -988,21 +1151,21 @@ export default function GroupDetailScreen() {
         totalSteps={3}
       />
 
-      {/* Ring Modal — Challenge Type Picker */}
+      {/* Ring Modal -- Challenge Type Picker */}
       <Modal visible={showRingModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Start a Challenge</Text>
-              <TouchableOpacity onPress={() => setShowRingModal(false)} style={styles.modalClose}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={[typography.headlineLarge, { color: theme.text }]}>Start a Challenge</Text>
+              <TouchableOpacity onPress={() => setShowRingModal(false)} style={s.modalClose}>
                 <X size={20} color={theme.text} />
               </TouchableOpacity>
             </View>
-            <View style={styles.challengeGrid}>
+            <View style={s.challengeGrid}>
               {challengeTypes.map((ct) => (
                 <TouchableOpacity
                   key={ct.type}
-                  style={styles.challengeTypeBtn}
+                  style={s.challengeTypeBtn}
                   onPress={() => {
                     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     ringMutation.mutate(ct.type);
@@ -1010,8 +1173,8 @@ export default function GroupDetailScreen() {
                   disabled={ringMutation.isPending}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.challengeTypeEmoji}>{ct.emoji}</Text>
-                  <Text style={styles.challengeTypeLabel}>{ct.label}</Text>
+                  <Text style={s.challengeTypeEmoji}>{ct.emoji}</Text>
+                  <Text style={s.challengeTypeLabel}>{ct.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -1021,48 +1184,48 @@ export default function GroupDetailScreen() {
 
       {/* Group Menu Modal */}
       <Modal visible={showGroupMenu} transparent animationType="slide">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowGroupMenu(false)}>
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{group.name}</Text>
-              <TouchableOpacity onPress={() => setShowGroupMenu(false)} style={styles.modalClose}>
+        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setShowGroupMenu(false)}>
+          <View style={s.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={s.modalHeader}>
+              <Text style={[typography.headlineLarge, { color: theme.text }]}>{group.name}</Text>
+              <TouchableOpacity onPress={() => setShowGroupMenu(false)} style={s.modalClose}>
                 <X size={20} color={theme.text} />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.menuList}>
+            <View style={s.menuList}>
               <TouchableOpacity
-                style={styles.menuItem}
+                style={s.menuItem}
                 onPress={() => {
                   setShowGroupMenu(false);
                   router.push({ pathname: '/invite-members' as never, params: { groupId: id } });
                 }}
               >
                 <UserPlus size={20} color={theme.text} />
-                <Text style={styles.menuItemText}>Invite Members</Text>
+                <Text style={s.menuItemText}>Invite Members</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem} onPress={handleShareGroup}>
+              <TouchableOpacity style={s.menuItem} onPress={handleShareGroup}>
                 <Share2 size={20} color={theme.text} />
-                <Text style={styles.menuItemText}>Share Group</Text>
+                <Text style={s.menuItemText}>Share Group</Text>
               </TouchableOpacity>
 
               {isAdmin && (
-                <TouchableOpacity style={styles.menuItem} onPress={handleDeleteGroup}>
+                <TouchableOpacity style={s.menuItem} onPress={handleDeleteGroup}>
                   <Trash2 size={20} color={theme.red} />
-                  <Text style={[styles.menuItemText, { color: theme.red }]}>Delete Group</Text>
+                  <Text style={[s.menuItemText, { color: theme.red }]}>Delete Group</Text>
                 </TouchableOpacity>
               )}
 
               {!isAdmin && (
-                <TouchableOpacity style={styles.menuItem} onPress={handleLeaveGroup}>
+                <TouchableOpacity style={s.menuItem} onPress={handleLeaveGroup}>
                   <LogOut size={20} color={theme.red} />
-                  <Text style={[styles.menuItemText, { color: theme.red }]}>Leave Group</Text>
+                  <Text style={[s.menuItemText, { color: theme.red }]}>Leave Group</Text>
                 </TouchableOpacity>
               )}
 
               <TouchableOpacity
-                style={styles.menuItem}
+                style={s.menuItem}
                 onPress={() => {
                   setShowGroupMenu(false);
                   setReportTarget({ contentType: 'group', reportedContentId: id });
@@ -1070,7 +1233,7 @@ export default function GroupDetailScreen() {
                 }}
               >
                 <Flag size={20} color={theme.yellow} />
-                <Text style={[styles.menuItemText, { color: theme.yellow }]}>Report Group</Text>
+                <Text style={[s.menuItemText, { color: theme.yellow }]}>Report Group</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1097,257 +1260,201 @@ export default function GroupDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// ===========================
+// STYLES
+// ===========================
+const s = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.bg,
   },
-  errorText: {
-    fontSize: 16,
-    color: theme.textMuted,
-    textAlign: 'center',
-    marginTop: 40,
-  },
+
+  // ---- Header ----
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: theme.bgCard,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerCenter: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.sm,
   },
   headerEmoji: {
-    fontSize: 22,
+    fontSize: 24,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '800' as const,
+    ...typography.headlineLarge,
     color: theme.text,
+    maxWidth: 180,
   },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 8,
+  headerRight: {
+    width: 38,
+    alignItems: 'flex-end',
   },
-  headerActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  menuBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: theme.bgCard,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  groupMeta: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-    gap: 10,
+
+  // ---- ScrollView ----
+  scrollView: {
+    flex: 1,
   },
-  metaBadgesRow: {
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+  },
+
+  // ---- Member Ring Row ----
+  memberRingSection: {
+    marginBottom: spacing.lg,
+  },
+  memberRingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  categoryBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  categoryText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-  },
-  membersPreview: {
-    flexDirection: 'row',
+  memberRingItem: {
     alignItems: 'center',
   },
-  memberAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: theme.bg,
+  memberTooltip: {
+    position: 'absolute',
+    bottom: -20,
+    backgroundColor: theme.bgCardSolid,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
-  memberCount: {
-    fontSize: 13,
-    color: theme.textSecondary,
-    marginLeft: 10,
+  memberTooltipText: {
+    ...typography.bodySmall,
+    color: theme.text,
+    fontWeight: '600',
   },
-  quickActions: {
+  respondedCount: {
+    ...typography.bodySmall,
+    color: theme.textMuted,
+    marginTop: spacing.sm,
+  },
+
+  // ---- AI Personality ----
+  personalityRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 20,
-    gap: 8,
-    paddingVertical: 10,
+    marginBottom: spacing.md,
   },
-  quickAction: {
+
+  // ---- Active Challenge Card ----
+  challengeCard: {
+    marginBottom: spacing.lg,
+  },
+  aiTriggerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
   },
-  quickActionText: {
-    fontSize: 13,
-    fontWeight: '700' as const,
+  aiTriggerText: {
+    ...typography.labelSmall,
+    color: theme.purple,
   },
-  challengeBar: {
-    marginHorizontal: 20,
-    marginBottom: 12,
+  humanTriggerText: {
+    ...typography.bodySmall,
+    color: theme.textMuted,
+    marginBottom: spacing.sm,
+  },
+  challengePrompt: {
+    ...typography.headlineMedium,
+    color: theme.text,
+    marginBottom: spacing.md,
+  },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  timerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: theme.coral,
-    borderRadius: 14,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  challengeContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  challengeTitle: {
-    fontSize: 15,
-    fontWeight: '800' as const,
-    color: theme.white,
-  },
-  challengeSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 1,
-  },
-  challengeTimer: {
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  challengeTimerText: {
-    fontSize: 16,
-    fontWeight: '800' as const,
-    color: theme.white,
+  timerText: {
+    ...typography.bodySmall,
+    color: theme.textSecondary,
     fontVariant: ['tabular-nums'],
   },
-  submittedBanner: {
-    marginHorizontal: 20,
-    marginBottom: 12,
-    backgroundColor: theme.greenMuted,
-    borderRadius: 12,
-    padding: 12,
-  },
-  submittedRow: {
+  respondBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: spacing.sm,
+    backgroundColor: theme.coral,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
   },
-  submittedText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
+  respondBtnText: {
+    ...typography.labelLarge,
+    color: theme.white,
+  },
+  activityPulseInCard: {
+    gap: spacing.sm,
+  },
+  submittedInlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  submittedInlineText: {
+    ...typography.bodySmall,
     color: theme.green,
+    fontWeight: '600',
   },
   countdownBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: 'rgba(0,0,0,0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
   },
-  countdownText: {
-    fontSize: 13,
-    fontWeight: '800' as const,
+  countdownBadgeText: {
+    ...typography.bodySmall,
     color: theme.green,
+    fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
-  triggerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    marginBottom: 8,
-  },
-  triggerDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: theme.surfaceLight,
-  },
-  triggerText: {
-    fontSize: 12,
-    color: theme.textMuted,
-    fontWeight: '500' as const,
-  },
-  activityPulseWrapper: {
-    paddingHorizontal: 20,
-    marginBottom: 8,
-  },
-  feed: {
-    flex: 1,
-  },
-  feedContent: {
-    paddingHorizontal: 20,
-  },
-  peekNotice: {
-    backgroundColor: theme.yellowMuted,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-  },
-  peekNoticeText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: theme.yellow,
-    textAlign: 'center',
-  },
-  empty: {
-    alignItems: 'center',
-    paddingTop: 60,
-    gap: 8,
-  },
-  emptyEmoji: {
-    fontSize: 48,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: theme.text,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: theme.textMuted,
-  },
-  // Quiz results styles
+
+  // ---- Quiz Results ----
   quizResultsContainer: {
-    gap: 10,
-    marginBottom: 16,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
-  quizResultsHeader: {
-    backgroundColor: theme.bgCard,
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
-    marginBottom: 4,
-  },
-  quizPromptText: {
-    fontSize: 17,
-    fontWeight: '800' as const,
-    color: theme.text,
-    lineHeight: 24,
+  quizHeaderCard: {
+    marginBottom: spacing.xs,
   },
   quizResponseCount: {
     flexDirection: 'row',
@@ -1355,15 +1462,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   quizResponseCountText: {
-    fontSize: 13,
+    ...typography.bodySmall,
     color: theme.textMuted,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   quizResultRow: {
     backgroundColor: theme.bgCard,
-    borderRadius: 14,
-    padding: 14,
-    gap: 8,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   quizResultHeader: {
     flexDirection: 'row',
@@ -1374,38 +1481,37 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   quizResultLabel: {
-    fontSize: 15,
-    fontWeight: '700' as const,
+    ...typography.bodyLarge,
+    fontWeight: '700',
     color: theme.text,
   },
   quizResultPercent: {
-    fontSize: 17,
-    fontWeight: '800' as const,
+    ...typography.headlineMedium,
     color: theme.textSecondary,
-    fontVariant: ['tabular-nums'] as const,
+    fontVariant: ['tabular-nums'],
   },
   quizMyPickBadge: {
     backgroundColor: theme.blueMuted,
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: borderRadius.sm,
   },
   quizMyPickText: {
     fontSize: 11,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: theme.blue,
   },
   quizProgressBg: {
     height: 6,
     borderRadius: 3,
     backgroundColor: theme.surface,
-    overflow: 'hidden' as const,
+    overflow: 'hidden',
   },
   quizProgressFill: {
-    height: '100%' as const,
+    height: '100%',
     borderRadius: 3,
   },
   quizRespondentsRow: {
@@ -1420,111 +1526,121 @@ const styles = StyleSheet.create({
     borderColor: theme.bgCard,
   },
   quizMoreRespondents: {
-    fontSize: 11,
+    ...typography.bodySmall,
     color: theme.textMuted,
     marginLeft: 6,
   },
-  // Leaderboard preview styles
-  leaderboardPreview: {
-    backgroundColor: theme.bgCard,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
-    gap: 6,
+
+  // ---- Past Challenges Grid ----
+  pastSection: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.lg,
   },
-  leaderboardPreviewHeader: {
+  pastHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.md,
   },
-  leaderboardPreviewTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  leaderboardPreviewTitle: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: theme.text,
-  },
-  leaderboardSeeAll: {
+  seeAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
   },
-  leaderboardSeeAllText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
+  seeAllText: {
+    ...typography.bodySmall,
     color: theme.textMuted,
+    fontWeight: '600',
   },
-  leaderboardRow: {
+  thumbGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: THUMB_GAP,
+  },
+  thumbItem: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    backgroundColor: theme.surface,
+  },
+  thumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.surfaceLight,
+  },
+  thumbPlaceholderEmoji: {
+    fontSize: 28,
+  },
+  thumbOverlay: {
+    position: 'absolute',
+    bottom: spacing.xs,
+    right: spacing.xs,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  thumbEmojiOverlay: {
+    fontSize: 12,
+  },
+
+  // ---- Bottom Actions ----
+  bottomActions: {
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  challengeNowBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 10,
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: theme.coral,
+    paddingVertical: 14,
+    borderRadius: borderRadius.lg,
   },
-  leaderboardRowMe: {
-    backgroundColor: `${theme.coral}10`,
+  challengeNowText: {
+    ...typography.labelLarge,
+    color: theme.white,
+    fontWeight: '800',
   },
-  leaderboardRank: {
-    fontSize: 18,
-    width: 28,
-    textAlign: 'center',
-  },
-  leaderboardAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-  },
-  leaderboardInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  leaderboardName: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    color: theme.text,
-  },
-  leaderboardStreakRow: {
+  leaderboardLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
   },
-  leaderboardStreakText: {
-    fontSize: 11,
+  leaderboardLinkText: {
+    ...typography.bodyMedium,
     color: theme.textMuted,
+    fontWeight: '600',
   },
-  leaderboardScore: {
-    fontSize: 16,
-    fontWeight: '800' as const,
-    color: theme.text,
-  },
-  // Ring modal styles
+
+  // ---- Modals ----
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: theme.bgCard,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
+    backgroundColor: theme.bgCardSolid,
+    borderTopLeftRadius: borderRadius.xxl,
+    borderTopRightRadius: borderRadius.xxl,
+    padding: spacing.xxl,
     paddingBottom: 40,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800' as const,
-    color: theme.text,
+    marginBottom: spacing.xl,
   },
   modalClose: {
     width: 36,
@@ -1537,38 +1653,38 @@ const styles = StyleSheet.create({
   challengeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing.md,
   },
   challengeTypeBtn: {
     width: '47%',
     backgroundColor: theme.surface,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xl,
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   challengeTypeEmoji: {
     fontSize: 32,
   },
   challengeTypeLabel: {
-    fontSize: 14,
-    fontWeight: '700' as const,
+    ...typography.labelLarge,
     color: theme.text,
   },
-  // Group menu styles
+
+  // ---- Group Menu ----
   menuList: {
-    gap: 4,
+    gap: spacing.xs,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     paddingVertical: 14,
-    paddingHorizontal: 4,
+    paddingHorizontal: spacing.xs,
   },
   menuItemText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+    ...typography.bodyLarge,
+    fontWeight: '600',
     color: theme.text,
   },
 });
