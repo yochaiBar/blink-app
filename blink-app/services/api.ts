@@ -11,9 +11,9 @@ const configApiUrl = Constants.expoConfig?.extra?.apiUrl as string | undefined;
 function resolveApiUrl(): string {
   if (configApiUrl) return configApiUrl;
   if (__DEV__) {
-    return Platform.OS === 'web' ? 'http://localhost:3000/api' : 'http://192.168.68.120:3000/api';
+    return Platform.OS === 'web' ? 'http://localhost:3000/api' : 'https://blink-api-production.up.railway.app/api'; // was 192.168.68.120:3000
   }
-  return 'https://blink-server.up.railway.app/api';
+  return 'https://blink-api-production.up.railway.app/api';
 }
 
 export const API_URL = resolveApiUrl();
@@ -150,6 +150,11 @@ export async function uploadPhoto(base64DataUri: string, groupId: string, challe
   }
 
   return presign.publicUrl;
+}
+
+// ── User Stats ──
+export async function getUserStats(): Promise<{ total_snaps: number; longest_streak: number; group_count: number }> {
+  return api('/auth/stats');
 }
 
 // ── Activity ──

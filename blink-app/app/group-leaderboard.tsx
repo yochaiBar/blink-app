@@ -176,20 +176,18 @@ export default function GroupLeaderboardScreen() {
           title="No rankings yet"
           subtitle="Start participating to climb the leaderboard!"
         />
-      ) : (
+      ) : topThree.length >= 3 ? (
         <>
-          {topThree.length >= 3 && (
-            <LinearGradient
-              colors={['rgba(255, 215, 0, 0.06)', 'transparent']}
-              style={styles.podium}
-            >
-              <View style={styles.podiumRow}>
-                {renderPodiumItem(topThree[1], 1)}
-                {renderPodiumItem(topThree[0], 0)}
-                {renderPodiumItem(topThree[2], 2)}
-              </View>
-            </LinearGradient>
-          )}
+          <LinearGradient
+            colors={['rgba(255, 215, 0, 0.06)', 'transparent']}
+            style={styles.podium}
+          >
+            <View style={styles.podiumRow}>
+              {renderPodiumItem(topThree[1], 1)}
+              {renderPodiumItem(topThree[0], 0)}
+              {renderPodiumItem(topThree[2], 2)}
+            </View>
+          </LinearGradient>
 
           <FlatList
             data={rest}
@@ -199,6 +197,14 @@ export default function GroupLeaderboardScreen() {
             showsVerticalScrollIndicator={false}
           />
         </>
+      ) : (
+        <FlatList
+          data={leaderboard}
+          renderItem={renderListItem}
+          keyExtractor={(item) => item.userId}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+        />
       )}
     </View>
   );

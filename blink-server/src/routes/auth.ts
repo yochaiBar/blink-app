@@ -202,6 +202,26 @@ router.get(
   })
 );
 
+// ── GET /api/auth/stats ──────────────────────────────────────────
+// Returns aggregate stats for the current user across all groups
+router.get(
+  '/stats',
+  authenticate,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const result = await query(
+      `SELECT
+         COALESCE(SUM(total_responses), 0)::int AS total_snaps,
+         COALESCE(MAX(current_streak), 0)::int AS longest_streak,
+         COUNT(*)::int AS group_count
+       FROM group_members
+       WHERE user_id = $1`,
+      [req.userId]
+    );
+
+    res.json(result.rows[0]);
+  })
+);
+
 // ── PATCH /api/auth/profile ──────────────────────────────────────
 router.patch(
   '/profile',

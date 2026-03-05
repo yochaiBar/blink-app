@@ -269,8 +269,12 @@ router.get('/groups/:groupId/challenges/active', asyncHandler(async (req: AuthRe
     [groupId]
   );
 
+  // Return active challenges OR completed/expired ones still within their countdown window
   const result = await query(
-    `SELECT ${CHALLENGE_SELECT} FROM challenges WHERE group_id = $1 AND status = 'active' LIMIT 1`,
+    `SELECT ${CHALLENGE_SELECT} FROM challenges
+     WHERE group_id = $1
+       AND (status = 'active' OR (status IN ('completed', 'expired') AND expires_at > NOW()))
+     ORDER BY created_at DESC LIMIT 1`,
     [groupId]
   );
 

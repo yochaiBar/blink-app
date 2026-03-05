@@ -13,6 +13,7 @@ import SpotlightCard from '@/components/SpotlightCard';
 import ReportModal from '@/components/ReportModal';
 import { categoryLabels } from '@/constants/categories';
 import { api, blockUser, getSpotlight } from '@/services/api';
+import { Users } from 'lucide-react-native';
 import { Skeleton, SnapCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
 import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
 import { apiGroupDetailToGroup, apiResponseToSnap, apiSpotlightToUI, apiMembersToLeaderboard } from '@/utils/adapters';
@@ -125,7 +126,46 @@ export default function GroupDetailScreen() {
     groupId: id ?? '',
   }));
 
-  const hasSubmittedToday = isDemo ? false : snaps.some((s) => s.userId === user.id);
+  const hasSubmittedToday = isDemo ? false : (
+    snaps.some((s) => s.userId === user.id) ||
+    (responsesQuery.data ?? []).some((r) => r.user_id === user.id)
+  );
+
+  const isQuizChallenge = activeChallenge?.type && activeChallenge.type !== 'snap';
+
+  // Compute quiz result distribution
+  const quizOptions: string[] = React.useMemo(() => {
+    if (!isQuizChallenge || !activeChallenge) return [];
+    const opts = activeChallenge.options_json ?? activeChallenge.options ?? [];
+    if (typeof opts === 'string') {
+      try { return JSON.parse(opts); } catch { return []; }
+    }
+    return Array.isArray(opts) ? opts : [];
+  }, [activeChallenge, isQuizChallenge]);
+
+  const quizDistribution = React.useMemo(() => {
+    if (!isQuizChallenge || !responsesQuery.data || quizOptions.length === 0) return [];
+    const counts = quizOptions.map(() => 0);
+    const respondents: Record<number, { name: string; avatar: string }[]> = {};
+    for (const r of responsesQuery.data) {
+      const idx = r.answer_index;
+      if (idx !== null && idx !== undefined && idx < counts.length) {
+        counts[idx]++;
+        if (!respondents[idx]) respondents[idx] = [];
+        respondents[idx].push({
+          name: r.display_name ?? 'User',
+          avatar: r.avatar_url ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
+        });
+      }
+    }
+    const total = counts.reduce((a, b) => a + b, 0);
+    return quizOptions.map((opt: string, i: number) => ({
+      label: opt,
+      count: counts[i],
+      percentage: total > 0 ? Math.round((counts[i] / total) * 100) : 0,
+      respondents: respondents[i] ?? [],
+    }));
+  }, [responsesQuery.data, quizOptions, isQuizChallenge]);
 
   // Ring mutation: create a new challenge
   const ringMutation = useMutation({
@@ -518,16 +558,21 @@ export default function GroupDetailScreen() {
       {group.hasActiveChallenge && !hasSubmittedToday && (
         <View ref={challengeBarRef} collapsable={false}>
           <TouchableOpacity
-            style={styles.challengeBar}
+            style={[styles.challengeBar, isQuizChallenge && { backgroundColor: theme.purple }]}
             onPress={handleSnapChallenge}
             activeOpacity={0.85}
             testID="snap-challenge-btn"
           >
             <View style={styles.challengeContent}>
-              <Camera size={20} color={theme.white} />
+              {isQuizChallenge ? (
+                <Zap size={20} color={theme.white} />
+              ) : (
+                <Camera size={20} color={theme.white} />
+              )}
               <View>
                 <Text style={styles.challengeTitle}>
-                  {activeChallenge?.type === 'snap' ? 'Snap Challenge Active!' : 'Challenge Active!'}
+                  {activeChallenge?.type === 'snap' ? 'Snap Challenge Active!' :
+                   activeChallenge?.type === 'quiz' ? 'Quiz Active!' : 'Challenge Active!'}
                 </Text>
                 <Text style={styles.challengeSubtitle}>Tap to respond</Text>
               </View>
@@ -539,9 +584,17 @@ export default function GroupDetailScreen() {
         </View>
       )}
 
-      {hasSubmittedToday && (
+      {hasSubmittedToday && activeChallenge && (
         <View style={styles.submittedBanner}>
-          <Text style={styles.submittedText}>You submitted today! Check out your crew's snaps.</Text>
+          <View style={styles.submittedRow}>
+            <Text style={styles.submittedText}>You submitted! Check out your crew's snaps</Text>
+            {countdown ? (
+              <View style={styles.countdownBadge}>
+                <Clock size={12} color={theme.green} />
+                <Text style={styles.countdownText}>{countdown}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
       )}
 
@@ -619,6 +672,78 @@ export default function GroupDetailScreen() {
             onRetry={() => responsesQuery.refetch()}
             compact
           />
+        ) : isQuizChallenge && activeChallenge ? (
+          /* Quiz Results Inline */
+          hasSubmittedToday && quizDistribution.length > 0 ? (
+            <View style={styles.quizResultsContainer}>
+              <View style={styles.quizResultsHeader}>
+                <Text style={styles.quizPromptText}>
+                  {activeChallenge.prompt_text ?? activeChallenge.prompt ?? 'Quiz'}
+                </Text>
+                <View style={styles.quizResponseCount}>
+                  <Users size={14} color={theme.textMuted} />
+                  <Text style={styles.quizResponseCountText}>
+                    {(responsesQuery.data ?? []).length} {(responsesQuery.data ?? []).length === 1 ? 'response' : 'responses'}
+                  </Text>
+                </View>
+              </View>
+              {quizDistribution.map((item, i) => {
+                const isTopAnswer = quizDistribution.every((d) => item.count >= d.count) && item.count > 0;
+                const myResponse = (responsesQuery.data ?? []).find((r) => r.user_id === user.id);
+                const isMyPick = myResponse?.answer_index === i;
+                return (
+                  <View key={i} style={styles.quizResultRow}>
+                    <View style={styles.quizResultHeader}>
+                      <View style={styles.quizResultLabelRow}>
+                        <Text style={[styles.quizResultLabel, isTopAnswer && { color: theme.coral }]}>
+                          {item.label}
+                        </Text>
+                        {isMyPick && (
+                          <View style={styles.quizMyPickBadge}>
+                            <Text style={styles.quizMyPickText}>You</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.quizResultPercent}>{item.percentage}%</Text>
+                    </View>
+                    <View style={styles.quizProgressBg}>
+                      <View style={[
+                        styles.quizProgressFill,
+                        { width: `${item.percentage}%`, backgroundColor: isTopAnswer ? theme.coral : theme.surfaceLight },
+                      ]} />
+                    </View>
+                    {item.respondents.length > 0 && (
+                      <View style={styles.quizRespondentsRow}>
+                        {item.respondents.slice(0, 5).map((r, ri) => (
+                          <Image
+                            key={ri}
+                            source={{ uri: r.avatar }}
+                            style={[styles.quizRespondentAvatar, { marginLeft: ri > 0 ? -6 : 0, zIndex: 5 - ri }]}
+                            contentFit="cover"
+                          />
+                        ))}
+                        {item.respondents.length > 5 && (
+                          <Text style={styles.quizMoreRespondents}>+{item.respondents.length - 5}</Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          ) : !hasSubmittedToday ? (
+            <EmptyState
+              emoji="🧠"
+              title="Quiz active!"
+              subtitle="Tap the challenge bar to answer"
+            />
+          ) : (
+            <EmptyState
+              emoji="⏳"
+              title="Waiting for responses"
+              subtitle="Results appear when others answer"
+            />
+          )
         ) : snaps.length === 0 ? (
           <EmptyState
             emoji="📸"
@@ -900,11 +1025,31 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
   },
+  submittedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
   submittedText: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: theme.green,
-    textAlign: 'center',
+  },
+  countdownBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  countdownText: {
+    fontSize: 13,
+    fontWeight: '800' as const,
+    color: theme.green,
+    fontVariant: ['tabular-nums'],
   },
   feed: {
     flex: 1,
@@ -940,6 +1085,99 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: theme.textMuted,
+  },
+  // Quiz results styles
+  quizResultsContainer: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  quizResultsHeader: {
+    backgroundColor: theme.bgCard,
+    borderRadius: 16,
+    padding: 16,
+    gap: 8,
+    marginBottom: 4,
+  },
+  quizPromptText: {
+    fontSize: 17,
+    fontWeight: '800' as const,
+    color: theme.text,
+    lineHeight: 24,
+  },
+  quizResponseCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  quizResponseCountText: {
+    fontSize: 13,
+    color: theme.textMuted,
+    fontWeight: '600' as const,
+  },
+  quizResultRow: {
+    backgroundColor: theme.bgCard,
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  quizResultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  quizResultLabelRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quizResultLabel: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: theme.text,
+  },
+  quizResultPercent: {
+    fontSize: 17,
+    fontWeight: '800' as const,
+    color: theme.textSecondary,
+    fontVariant: ['tabular-nums'] as const,
+  },
+  quizMyPickBadge: {
+    backgroundColor: theme.blueMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  quizMyPickText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: theme.blue,
+  },
+  quizProgressBg: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.surface,
+    overflow: 'hidden' as const,
+  },
+  quizProgressFill: {
+    height: '100%' as const,
+    borderRadius: 3,
+  },
+  quizRespondentsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quizRespondentAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: theme.bgCard,
+  },
+  quizMoreRespondents: {
+    fontSize: 11,
+    color: theme.textMuted,
+    marginLeft: 6,
   },
   // Leaderboard preview styles
   leaderboardPreview: {

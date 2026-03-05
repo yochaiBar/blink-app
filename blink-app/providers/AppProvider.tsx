@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { Group, ActivityItem, NotificationItem, PromptResponse, UserProfile } from '@/types';
-import { api, uploadPhoto, getActivity, getNotifications, markNotificationsRead as markNotificationsReadApi, addReactionApi, removeReactionApi } from '@/services/api';
+import { api, uploadPhoto, getActivity, getNotifications, markNotificationsRead as markNotificationsReadApi, addReactionApi, removeReactionApi, getUserStats } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { apiGroupListToGroup, apiUserToProfile } from '@/utils/adapters';
@@ -45,11 +45,22 @@ export const [AppProvider, useApp] = createContextHook(() => {
     return realGroups;
   }, [realGroups, shouldShowDemoGroup]);
 
+  // ── User stats (aggregate across all groups) ──
+  const statsQuery = useQuery({
+    queryKey: ['userStats'],
+    queryFn: getUserStats,
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+  });
+
   // ── User profile mapped to UI shape ──
   const user: UserProfile = useMemo(() => {
+    const stats = statsQuery.data;
     if (authUser) {
       return {
         ...apiUserToProfile(authUser),
+        totalSnaps: stats?.total_snaps ?? 0,
+        longestStreak: stats?.longest_streak ?? 0,
         groupCount: groups.length,
       };
     }
@@ -66,7 +77,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       notificationsEnabled: true,
       privacyMode: 'everyone' as const,
     };
-  }, [authUser, groups.length]);
+  }, [authUser, groups.length, statsQuery.data]);
 
   // ── Activity (backend wired via React Query) ──
   const activityQuery = useQuery({
@@ -165,6 +176,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     onSuccess: (_data, { groupId }) => {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       queryClient.invalidateQueries({ queryKey: ['responses'] });
+      queryClient.invalidateQueries({ queryKey: ['userStats'] });
       // Track activity
       const group = groups.find(g => g.id === groupId);
       addActivityItem('snap', group?.name ?? 'Group', groupId, 'submitted a snap');

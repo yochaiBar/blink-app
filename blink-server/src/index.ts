@@ -36,6 +36,11 @@ import { initSocket } from './socket';
 
 const app = express();
 
+// Trust proxy (Railway/cloud deployments sit behind a reverse proxy)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 app.use(helmet());
 app.use(cors({
   origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:8081', 'http://localhost:19006'],

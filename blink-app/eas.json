@@ -18,7 +18,7 @@
       "distribution": "internal",
       "env": {
         "EX_FIREBASE": "1",
-        "API_URL": "https://blink-server-preview.up.railway.app/api"
+        "API_URL": "https://blink-api-production.up.railway.app/api"
       },
       "ios": {
         "simulator": false
@@ -31,7 +31,7 @@
       "autoIncrement": true,
       "env": {
         "EX_FIREBASE": "1",
-        "API_URL": "https://blink-server.up.railway.app/api"
+        "API_URL": "https://blink-api-production.up.railway.app/api"
       },
       "ios": {
         "image": "latest"

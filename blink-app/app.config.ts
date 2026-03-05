@@ -2,7 +2,7 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 
 // API_URL is set per EAS build profile (see eas.json).
 // Falls back to localhost for local web dev and LAN IP for device dev.
-const API_URL = process.env.API_URL || 'http://192.168.68.120:3000/api';
+const API_URL = process.env.API_URL || 'https://blink-api-production.up.railway.app/api';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,

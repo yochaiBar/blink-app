@@ -172,7 +172,7 @@ function SummaryCard({ user, groupCount }: { user: UserProfile; groupCount: numb
         <Animated.View style={{ opacity: glowOpacity }}>
           <Star size={16} color={theme.yellow} fill={theme.yellow} />
         </Animated.View>
-        <Text style={styles.starTitle}>TODAY'S STAR</Text>
+        <Text style={styles.starTitle}>YOUR ACTIVITY</Text>
       </View>
 
       <View style={styles.profileRow}>
@@ -180,7 +180,7 @@ function SummaryCard({ user, groupCount }: { user: UserProfile; groupCount: numb
           <Image source={{ uri: user.avatar }} style={styles.ringAvatar} contentFit="cover" />
         </View>
         <Text style={styles.profileName}>
-          {user.totalSnaps > 0 ? user.name.split(' ')[0] : 'Be the first to snap!'}
+          {user.name ? user.name.split(' ')[0] : 'Welcome!'}
         </Text>
       </View>
 
