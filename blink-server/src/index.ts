@@ -33,6 +33,7 @@ import moderationRoutes from './routes/moderation';
 import logger from './utils/logger';
 import { RATE_LIMITS, OTP_RATE_LIMIT_PER_HOUR } from './utils/constants';
 import { initSocket } from './socket';
+import { startChallengeScheduler } from './jobs/challengeScheduler';
 
 const app = express();
 
@@ -170,6 +171,9 @@ server.listen(PORT, () => {
   if (OTP_RATE_LIMIT_PER_HOUR > 10) {
     logger.warn(`OTP rate limit is set to ${OTP_RATE_LIMIT_PER_HOUR}/hour. This is above the recommended production value of 3. Ensure OTP_RATE_LIMIT_PER_HOUR is not set in production.`);
   }
+
+  // Start AI-powered challenge scheduler
+  startChallengeScheduler();
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────

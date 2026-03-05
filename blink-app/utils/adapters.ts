@@ -1,4 +1,4 @@
-import { Group, GroupMember, UserProfile, DailySpotlight, SnapSubmission, LeaderboardEntry } from '@/types';
+import { Group, GroupMember, UserProfile, DailySpotlight, SnapSubmission, LeaderboardEntry, AiPersonality } from '@/types';
 import { ApiGroupListItem, ApiGroupDetail, ApiGroupMember, ApiSpotlight, ApiChallengeResponse } from '@/types/api';
 import { theme } from '@/constants/colors';
 
@@ -64,6 +64,7 @@ export function apiGroupDetailToGroup(detail: ApiGroupDetail, activeChallenge?: 
     inviteCode: detail.invite_code,
     createdAt: detail.created_at,
     createdBy: detail.created_by,
+    aiPersonality: (detail.ai_personality as AiPersonality) ?? undefined,
   };
 }
 

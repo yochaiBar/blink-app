@@ -12,6 +12,16 @@ import { Button } from '@/components/ui';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Sample lifestyle photos for the animated collage
+const COLLAGE_PHOTOS = [
+  'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=200&h=200&fit=crop',
+  'https://images.unsplash.com/photo-1516302752625-fcc3c50ae61f?w=200&h=200&fit=crop',
+  'https://images.unsplash.com/photo-1543807535-eceef0bc6599?w=200&h=200&fit=crop',
+  'https://images.unsplash.com/photo-1506869640319-fe1a24fd76cb?w=200&h=200&fit=crop',
+  'https://images.unsplash.com/photo-1522543558187-768b6df7c25c?w=200&h=200&fit=crop',
+  'https://images.unsplash.com/photo-1523301343968-6a6ebf63c672?w=200&h=200&fit=crop',
+];
+
 const COUNTRY_CODES = [
   { code: '+972', flag: 'IL', label: 'Israel (+972)' },
   { code: '+1', flag: 'US', label: 'United States (+1)' },
@@ -51,6 +61,71 @@ export default function OnboardingScreen() {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const otpInputRefs = useRef<Array<TextInput | null>>(Array(OTP_LENGTH).fill(null));
   const phoneInputRef = useRef<TextInput | null>(null);
+
+  // Welcome screen animations
+  const collageOpacity = useRef(new Animated.Value(0)).current;
+  const collageScale = useRef(new Animated.Value(0.9)).current;
+  const collageSpin = useRef(new Animated.Value(0)).current;
+  const featureAnims = useRef(
+    [0, 1, 2].map(() => ({
+      opacity: new Animated.Value(0),
+      translateY: new Animated.Value(24),
+    }))
+  ).current;
+  const socialProofOpacity = useRef(new Animated.Value(0)).current;
+  const titleOpacity = useRef(new Animated.Value(0)).current;
+  const titleTranslateY = useRef(new Animated.Value(16)).current;
+  const subtitleOpacity = useRef(new Animated.Value(0)).current;
+
+  // Run welcome entrance animations
+  useEffect(() => {
+    if (step !== 'welcome') return;
+
+    // Reset all values
+    collageOpacity.setValue(0);
+    collageScale.setValue(0.9);
+    collageSpin.setValue(0);
+    titleOpacity.setValue(0);
+    titleTranslateY.setValue(16);
+    subtitleOpacity.setValue(0);
+    socialProofOpacity.setValue(0);
+    featureAnims.forEach((a) => {
+      a.opacity.setValue(0);
+      a.translateY.setValue(24);
+    });
+
+    // Collage fades in first
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(collageOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(collageScale, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ]),
+      // Title and subtitle
+      Animated.parallel([
+        Animated.timing(titleOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
+        Animated.timing(titleTranslateY, { toValue: 0, duration: 350, useNativeDriver: true }),
+      ]),
+      Animated.timing(subtitleOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      // Staggered feature cards
+      ...featureAnims.map((a) =>
+        Animated.parallel([
+          Animated.timing(a.opacity, { toValue: 1, duration: 250, useNativeDriver: true }),
+          Animated.timing(a.translateY, { toValue: 0, duration: 250, useNativeDriver: true }),
+        ])
+      ),
+      Animated.timing(socialProofOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+    ]).start();
+
+    // Slow continuous rotation for collage
+    Animated.loop(
+      Animated.timing(collageSpin, { toValue: 1, duration: 20000, useNativeDriver: true })
+    ).start();
+  }, [step]);
+
+  const collageRotation = collageSpin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   // Derive the full OTP string from individual digits
   const otp = otpDigits.join('');
@@ -213,9 +288,9 @@ export default function OnboardingScreen() {
     (step === 'terms' && !termsAccepted);
 
   const features = [
-    { icon: Camera, label: 'Snap Challenges', desc: 'Capture moments with your crew' },
-    { icon: Users, label: 'Friend Groups', desc: 'Stay connected with who matters' },
-    { icon: Zap, label: 'Daily Prompts', desc: 'Fun questions & quizzes every day' },
+    { icon: Camera, label: 'Snap Challenges', desc: 'Drop everything. Capture the chaos.', color: theme.coral },
+    { icon: Users, label: 'Friend Groups', desc: 'Your inner circle, zero randoms.', color: theme.purple },
+    { icon: Zap, label: 'Daily Prompts', desc: 'Unhinged questions. Real answers.', color: theme.blue },
   ];
 
   const getButtonText = () => {
@@ -257,35 +332,94 @@ export default function OnboardingScreen() {
           <Animated.View style={[styles.stepContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
             {step === 'welcome' && (
               <View style={styles.centerContent}>
-                <View style={styles.logoContainer}>
+                {/* Animated photo collage */}
+                <Animated.View
+                  style={[
+                    styles.collageContainer,
+                    {
+                      opacity: collageOpacity,
+                      transform: [{ scale: collageScale }, { rotate: collageRotation }],
+                    },
+                  ]}
+                >
+                  {COLLAGE_PHOTOS.map((uri, i) => {
+                    const angle = (i * 60) * (Math.PI / 180);
+                    const radius = 52;
+                    const offsetX = Math.cos(angle) * radius;
+                    const offsetY = Math.sin(angle) * radius;
+                    const rotation = `${(i * 15) - 30}deg`;
+                    return (
+                      <Animated.Image
+                        key={i}
+                        source={{ uri }}
+                        style={[
+                          styles.collagePhoto,
+                          {
+                            transform: [
+                              { translateX: offsetX },
+                              { translateY: offsetY },
+                              { rotate: rotation },
+                            ],
+                          },
+                        ]}
+                      />
+                    );
+                  })}
                   <LinearGradient
-                    colors={[theme.coral, '#FF8A6E']}
-                    style={styles.logoBg}
+                    colors={[theme.coral, theme.pink]}
+                    style={styles.collageCenter}
                   >
-                    <Sparkles size={40} color={theme.white} />
+                    <Sparkles size={28} color="#fff" />
                   </LinearGradient>
-                </View>
-                <Text style={styles.welcomeTitle}>Welcome to Blink</Text>
-                <Text style={styles.welcomeSubtitle}>
-                  Spontaneous moments with your favorite people
-                </Text>
+                </Animated.View>
+
+                <Animated.Text
+                  style={[
+                    styles.welcomeTitle,
+                    {
+                      opacity: titleOpacity,
+                      transform: [{ translateY: titleTranslateY }],
+                    },
+                  ]}
+                >
+                  Welcome to Blink
+                </Animated.Text>
+                <Animated.Text
+                  style={[styles.welcomeSubtitle, { opacity: subtitleOpacity }]}
+                >
+                  Be real. Be random.{'\n'}Your friends are waiting.
+                </Animated.Text>
 
                 <View style={styles.featureList}>
                   {features.map((feat, i) => {
                     const IconComp = feat.icon;
                     return (
-                      <View key={i} style={styles.featureRow}>
-                        <View style={[styles.featureIcon, { backgroundColor: `${theme.coral}18` }]}>
-                          <IconComp size={20} color={theme.coral} />
+                      <Animated.View
+                        key={i}
+                        style={[
+                          styles.featureRow,
+                          {
+                            opacity: featureAnims[i].opacity,
+                            transform: [{ translateY: featureAnims[i].translateY }],
+                          },
+                        ]}
+                      >
+                        <View style={[styles.featureIcon, { backgroundColor: `${feat.color}18` }]}>
+                          <IconComp size={20} color={feat.color} />
                         </View>
                         <View style={styles.featureText}>
                           <Text style={styles.featureLabel}>{feat.label}</Text>
                           <Text style={styles.featureDesc}>{feat.desc}</Text>
                         </View>
-                      </View>
+                      </Animated.View>
                     );
                   })}
                 </View>
+
+                {/* Social proof */}
+                <Animated.Text style={[styles.socialProof, { opacity: socialProofOpacity }]}>
+                  Join 1,000+ friend groups already blinking
+                </Animated.Text>
               </View>
             )}
 
@@ -533,11 +667,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   welcomeSubtitle: {
-    fontSize: 16,
+    fontSize: 17,
     color: theme.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 40,
+    lineHeight: 24,
+    marginBottom: 32,
   },
   featureList: {
     width: '100%',
@@ -570,6 +704,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.textMuted,
     marginTop: 2,
+  },
+  collageContainer: {
+    width: 180,
+    height: 180,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  collagePhoto: {
+    position: 'absolute',
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#1a1a2e',
+  },
+  collageCenter: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: theme.coral,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  socialProof: {
+    fontSize: 13,
+    color: theme.textMuted,
+    textAlign: 'center',
+    marginTop: 28,
+    letterSpacing: 0.2,
   },
   inputStep: {
     alignItems: 'center',

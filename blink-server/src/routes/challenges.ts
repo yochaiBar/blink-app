@@ -10,6 +10,7 @@ import { createNotification } from '../utils/notifications';
 import { emitToGroup } from '../socket';
 import { sendPushToGroup, sendPushToUser } from '../services/pushNotifications';
 import { moderateImage, deleteS3Object, extractS3Key, logModerationResult } from '../services/contentModeration';
+import { generateSkipPenalty, commentOnResponses, AiPersonality } from '../services/aiService';
 
 const router = Router();
 
@@ -61,9 +62,9 @@ async function processSkipsForChallenge(challengeId: string, groupId: string) {
     [groupId]
   );
 
-  // Get who responded
+  // Get who responded (non-skip)
   const responded = await query(
-    `SELECT user_id FROM challenge_responses WHERE challenge_id = $1`,
+    `SELECT user_id FROM challenge_responses WHERE challenge_id = $1 AND response_type != 'skip'`,
     [challengeId]
   );
   const respondedIds = new Set(responded.rows.map((r: any) => r.user_id));
@@ -78,6 +79,9 @@ async function processSkipsForChallenge(challengeId: string, groupId: string) {
     [groupId]
   );
 
+  let anyoneSkipped = false;
+  let firstSkipperId: string | null = null;
+
   for (const member of members.rows) {
     if (respondedIds.has(member.user_id)) {
       // Responded: increment stats and streak
@@ -89,7 +93,10 @@ async function processSkipsForChallenge(challengeId: string, groupId: string) {
         [groupId, member.user_id]
       );
     } else {
-      // Skipped: insert skip response, reset streak, apply penalty
+      anyoneSkipped = true;
+      if (!firstSkipperId) firstSkipperId = member.user_id;
+
+      // Skipped: insert skip response
       await query(
         `INSERT INTO challenge_responses (challenge_id, user_id, response_type)
          VALUES ($1, $2, 'skip')
@@ -97,28 +104,75 @@ async function processSkipsForChallenge(challengeId: string, groupId: string) {
         [challengeId, member.user_id]
       );
 
-      await query(
-        `UPDATE group_members SET current_streak = 0
-         WHERE group_id = $1 AND user_id = $2`,
+      // ── Streak Shield: check before resetting streak ──
+      const currentStreakResult = await query(
+        `SELECT current_streak FROM group_members WHERE group_id = $1 AND user_id = $2`,
         [groupId, member.user_id]
       );
+      const currentStreak = currentStreakResult.rows[0]?.current_streak || 0;
+
+      const shield = await query(
+        `SELECT id FROM streak_shields WHERE user_id = $1 AND group_id = $2 AND used_at IS NULL ORDER BY earned_at LIMIT 1`,
+        [member.user_id, groupId]
+      );
+
+      if (shield.rows.length > 0 && currentStreak > 0) {
+        // Use the shield instead of resetting
+        await query(
+          `UPDATE streak_shields SET used_at = NOW(), used_for_challenge_id = $1 WHERE id = $2`,
+          [challengeId, shield.rows[0].id]
+        );
+
+        // Count remaining shields
+        const remainingShields = await query(
+          `SELECT COUNT(*) FROM streak_shields WHERE user_id = $1 AND group_id = $2 AND used_at IS NULL`,
+          [member.user_id, groupId]
+        );
+        const remaining = parseInt(remainingShields.rows[0].count);
+
+        // Fire-and-forget push about shield usage
+        sendPushToUser(
+          member.user_id,
+          'Streak Shield Activated!',
+          `Your streak shield saved your ${currentStreak}-day streak! (${remaining} shield${remaining !== 1 ? 's' : ''} remaining)`,
+          { type: 'streak_shield_used', groupId, challengeId }
+        ).catch(() => {});
+
+        logger.info('Streak shield used', { userId: member.user_id, groupId, challengeId, streak: currentStreak });
+      } else {
+        // No shield: reset streak
+        await query(
+          `UPDATE group_members SET current_streak = 0
+           WHERE group_id = $1 AND user_id = $2`,
+          [groupId, member.user_id]
+        );
+      }
 
       // Apply penalty if not 'none'
       if (penaltyType !== 'none') {
         const SILLY_AVATARS = ['🤡', '🐸', '💩', '👻', '🤖', '👽', '🦄', '🐔'];
-        const WANTED_TEXTS = [
-          "WANTED: Last seen dodging group challenges",
-          "MISSING IN ACTION: Probably napping",
-          "WANTED: For crimes against group participation",
-          "MIA: May have been abducted by aliens",
-          "WANTED: Failed to blink in time",
-        ];
 
-        const penaltyData = penaltyType === 'avatar_change'
-          ? { silly_avatar: SILLY_AVATARS[Math.floor(Math.random() * SILLY_AVATARS.length)] }
-          : penaltyType === 'wanted_poster'
-          ? { text: WANTED_TEXTS[Math.floor(Math.random() * WANTED_TEXTS.length)] }
-          : { text: `${member.user_id} is the group's servant today! Send them tasks.` };
+        // Fetch group personality and user display name for AI penalty generation
+        let penaltyData: any;
+        if (penaltyType === 'avatar_change') {
+          penaltyData = { silly_avatar: SILLY_AVATARS[Math.floor(Math.random() * SILLY_AVATARS.length)] };
+        } else {
+          // Use AI to generate penalty text (falls back to hardcoded internally)
+          try {
+            const groupPersonalityResult = await query(`SELECT ai_personality FROM groups WHERE id = $1`, [groupId]);
+            const personality: AiPersonality = groupPersonalityResult.rows[0]?.ai_personality || 'funny';
+            const userNameResult = await query(`SELECT display_name FROM users WHERE id = $1`, [member.user_id]);
+            const userName = userNameResult.rows[0]?.display_name || 'Someone';
+            const validPenaltyType = penaltyType as 'wanted_poster' | 'avatar_change' | 'servant';
+            const aiPenalty = await generateSkipPenalty(userName, validPenaltyType, personality);
+            penaltyData = { text: aiPenalty.text };
+          } catch {
+            // Hardcoded fallback if AI call itself throws
+            penaltyData = penaltyType === 'wanted_poster'
+              ? { text: 'WANTED: Last seen dodging group challenges' }
+              : { text: `${member.user_id} is the group's servant today! Send them tasks.` };
+          }
+        }
 
         await query(
           `INSERT INTO active_penalties (group_id, user_id, penalty_type, penalty_data, expires_at)
@@ -126,6 +180,36 @@ async function processSkipsForChallenge(challengeId: string, groupId: string) {
           [groupId, member.user_id, penaltyType, JSON.stringify(penaltyData)]
         );
       }
+    }
+  }
+
+  // ── Group Streak: update based on whether everyone responded ──
+  if (!anyoneSkipped && members.rows.length > 0) {
+    await query(
+      `UPDATE groups SET group_streak = group_streak + 1, longest_group_streak = GREATEST(longest_group_streak, group_streak + 1) WHERE id = $1`,
+      [groupId]
+    );
+    emitToGroup(groupId, 'group:streak_update', { groupId, groupStreak: null, brokenBy: null });
+    // Fetch updated value for socket event
+    const updatedGroup = await query(`SELECT group_streak FROM groups WHERE id = $1`, [groupId]);
+    emitToGroup(groupId, 'group:streak_update', { groupId, groupStreak: updatedGroup.rows[0]?.group_streak || 0, brokenBy: null });
+  } else if (anyoneSkipped) {
+    // Get current group streak before resetting (for notification)
+    const groupStreakResult = await query(`SELECT group_streak FROM groups WHERE id = $1`, [groupId]);
+    const brokenStreak = groupStreakResult.rows[0]?.group_streak || 0;
+
+    await query(`UPDATE groups SET group_streak = 0 WHERE id = $1`, [groupId]);
+    emitToGroup(groupId, 'group:streak_update', { groupId, groupStreak: 0, brokenBy: firstSkipperId });
+
+    if (brokenStreak > 0 && firstSkipperId) {
+      const skipperName = await query(`SELECT display_name FROM users WHERE id = $1`, [firstSkipperId]);
+      const name = skipperName.rows[0]?.display_name || 'Someone';
+      sendPushToGroup(
+        groupId,
+        'Group Streak Broken!',
+        `Group streak broken at ${brokenStreak} days! ${name} missed the challenge.`,
+        { type: 'group_streak_broken', groupId, brokenStreak }
+      ).catch(() => {});
     }
   }
 }
@@ -398,6 +482,130 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
     response: result.rows[0],
   });
 
+  // ── Social Obligation Loop: notify non-responders ──────────────
+  try {
+    // Get all group members with names
+    const allMembers = await query(
+      `SELECT gm.user_id, u.display_name, u.avatar_url
+       FROM group_members gm
+       JOIN users u ON u.id = gm.user_id
+       WHERE gm.group_id = $1`,
+      [c.group_id]
+    );
+
+    // Get who has responded so far (non-skip)
+    const allResponded = await query(
+      `SELECT cr.user_id, u.display_name, u.avatar_url
+       FROM challenge_responses cr
+       JOIN users u ON u.id = cr.user_id
+       WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
+      [id]
+    );
+    const respondedUserIds = new Set(allResponded.rows.map((r: any) => r.user_id));
+
+    // Emit challenge:progress socket event
+    emitToGroup(c.group_id, 'challenge:progress', {
+      challengeId: id,
+      respondedCount: allResponded.rows.length,
+      totalMembers: allMembers.rows.length,
+      respondedUsers: allResponded.rows.map((r: any) => ({
+        userId: r.user_id,
+        displayName: r.display_name,
+        avatarUrl: r.avatar_url,
+      })),
+    });
+
+    // Build personalized push messages for non-responders
+    const respondedNames = allResponded.rows.map((r: any) => r.display_name || 'Someone');
+    const nonResponders = allMembers.rows.filter((m: any) => !respondedUserIds.has(m.user_id));
+
+    for (const pending of nonResponders) {
+      let pushBody: string;
+      if (respondedNames.length === 1) {
+        pushBody = `${respondedNames[0]} already responded. Your turn!`;
+      } else if (respondedNames.length === 2) {
+        pushBody = `${respondedNames[0]} and ${respondedNames[1]} already responded — don't leave them hanging!`;
+      } else {
+        const othersCount = respondedNames.length - 2;
+        pushBody = `${respondedNames[0]}, ${respondedNames[1]} and ${othersCount} other${othersCount > 1 ? 's' : ''} responded — you're the only ones left!`;
+      }
+
+      sendPushToUser(
+        pending.user_id,
+        'Your friends are waiting!',
+        pushBody,
+        { type: 'social_obligation', groupId: c.group_id, challengeId: id }
+      ).catch(() => {});
+    }
+  } catch (err: any) {
+    logger.error('Social obligation loop error', { error: err.message, challengeId: id });
+  }
+
+  // ── Streak Shield Earning + Milestone Checks ──────────────────
+  try {
+    // Get the user's current streak (before this challenge's processSkips runs)
+    const streakResult = await query(
+      `SELECT current_streak FROM group_members WHERE group_id = $1 AND user_id = $2`,
+      [c.group_id, req.userId]
+    );
+    const currentStreak = streakResult.rows[0]?.current_streak || 0;
+    // The streak will be incremented by processSkipsForChallenge, so the "new" streak = currentStreak + 1
+    // But processSkips hasn't run yet for active challenges, so we simulate the upcoming value
+    const upcomingStreak = currentStreak + 1;
+
+    // Streak Shield: earned every 7-day streak
+    if (upcomingStreak > 0 && upcomingStreak % 7 === 0) {
+      await query(
+        `INSERT INTO streak_shields (user_id, group_id) VALUES ($1, $2)`,
+        [req.userId, c.group_id]
+      );
+      sendPushToUser(
+        req.userId!,
+        'Streak Shield Earned!',
+        "You earned a Streak Shield! It'll protect your streak if you miss a challenge.",
+        { type: 'streak_shield_earned', groupId: c.group_id }
+      ).catch(() => {});
+      logger.info('Streak shield earned', { userId: req.userId, groupId: c.group_id, streak: upcomingStreak });
+    }
+
+    // Streak Milestones
+    const MILESTONES = [3, 7, 14, 30, 50, 100];
+    if (MILESTONES.includes(upcomingStreak)) {
+      await query(
+        `INSERT INTO streak_milestones (user_id, group_id, milestone) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [req.userId, c.group_id, upcomingStreak]
+      );
+
+      const userName = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+      const displayName = userName.rows[0]?.display_name || 'Someone';
+
+      sendPushToUser(
+        req.userId!,
+        'Streak Milestone!',
+        `Amazing! You hit a ${upcomingStreak}-day streak!`,
+        { type: 'streak_milestone', groupId: c.group_id, milestone: upcomingStreak }
+      ).catch(() => {});
+
+      // Notify the group
+      sendPushToGroup(
+        c.group_id,
+        'Streak Milestone!',
+        `${displayName} just hit a ${upcomingStreak}-day streak! 🔥`,
+        { type: 'streak_milestone', groupId: c.group_id, userId: req.userId, milestone: upcomingStreak },
+        req.userId
+      ).catch(() => {});
+
+      emitToGroup(c.group_id, 'streak:milestone', {
+        userId: req.userId,
+        displayName,
+        milestone: upcomingStreak,
+        groupId: c.group_id,
+      });
+    }
+  } catch (err: any) {
+    logger.error('Streak enhancement error', { error: err.message, challengeId: id, userId: req.userId });
+  }
+
   // Check if all responded -> complete
   const totalMembers = await query(
     `SELECT COUNT(*) FROM group_members WHERE group_id = $1`,
@@ -413,6 +621,30 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
 
     // Emit challenge completed event
     emitToGroup(c.group_id, 'challenge:completed', { challengeId: id, groupId: c.group_id });
+
+    // AI commentary on challenge results (fire-and-forget)
+    try {
+      const groupPersonalityResult = await query(`SELECT ai_personality FROM groups WHERE id = $1`, [c.group_id]);
+      const personality: AiPersonality = groupPersonalityResult.rows[0]?.ai_personality || 'funny';
+      const allResponsesForCommentary = await query(
+        `SELECT cr.answer_text, cr.response_time_ms, u.display_name
+         FROM challenge_responses cr
+         JOIN users u ON u.id = cr.user_id
+         WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
+        [id]
+      );
+      const responsesData = allResponsesForCommentary.rows.map((r: any) => ({
+        userName: r.display_name || 'Someone',
+        answerText: r.answer_text || undefined,
+        responseTimeMs: r.response_time_ms || undefined,
+      }));
+      if (responsesData.length > 0) {
+        const commentary = await commentOnResponses(responsesData, personality);
+        emitToGroup(c.group_id, 'challenge:commentary', { challengeId: id, commentary: commentary.commentary });
+      }
+    } catch (err: any) {
+      logger.error('AI commentary generation failed', { error: err.message, challengeId: id });
+    }
   }
 
   logger.info('Challenge response submitted', { challengeId: id, userId: req.userId });
@@ -592,6 +824,139 @@ router.delete('/responses/:responseId/reactions/:emoji', asyncHandler(async (req
 
   logger.info('Reaction removed', { responseId, userId: req.userId, emoji });
   res.json({ message: 'Reaction removed' });
+}));
+
+// ── GET /api/challenges/:id/progress — Who responded (no can't-peek gate) ──
+router.get('/:id/progress', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+
+  // Verify challenge exists
+  const challenge = await query(`SELECT group_id FROM challenges WHERE id = $1`, [id]);
+  if (challenge.rows.length === 0) {
+    res.status(404).json({ error: 'Challenge not found' });
+    return;
+  }
+  const groupId = challenge.rows[0].group_id;
+
+  // Verify user is a group member
+  const membership = await query(
+    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    [groupId, req.userId]
+  );
+  if (membership.rows.length === 0) {
+    res.status(403).json({ error: 'Not a member of this group' });
+    return;
+  }
+
+  // Get all group members
+  const allMembers = await query(
+    `SELECT gm.user_id, u.display_name, u.avatar_url
+     FROM group_members gm
+     JOIN users u ON u.id = gm.user_id
+     WHERE gm.group_id = $1`,
+    [groupId]
+  );
+
+  // Get who responded (non-skip)
+  const responded = await query(
+    `SELECT cr.user_id, u.display_name, u.avatar_url
+     FROM challenge_responses cr
+     JOIN users u ON u.id = cr.user_id
+     WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
+    [id]
+  );
+  const respondedIds = new Set(responded.rows.map((r: any) => r.user_id));
+
+  const pendingUsers = allMembers.rows
+    .filter((m: any) => !respondedIds.has(m.user_id))
+    .map((m: any) => ({ userId: m.user_id, displayName: m.display_name, avatarUrl: m.avatar_url }));
+
+  res.json({
+    challengeId: id,
+    respondedCount: responded.rows.length,
+    totalMembers: allMembers.rows.length,
+    respondedUsers: responded.rows.map((r: any) => ({
+      userId: r.user_id,
+      displayName: r.display_name,
+      avatarUrl: r.avatar_url,
+    })),
+    pendingUsers,
+  });
+}));
+
+// ── GET /api/challenges/:id/preview — Tease data without content ──
+router.get('/:id/preview', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+
+  // Verify challenge exists
+  const challenge = await query(`SELECT group_id FROM challenges WHERE id = $1`, [id]);
+  if (challenge.rows.length === 0) {
+    res.status(404).json({ error: 'Challenge not found' });
+    return;
+  }
+  const groupId = challenge.rows[0].group_id;
+
+  // Verify user is a group member
+  const membership = await query(
+    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    [groupId, req.userId]
+  );
+  if (membership.rows.length === 0) {
+    res.status(403).json({ error: 'Not a member of this group' });
+    return;
+  }
+
+  // Total members
+  const totalMembersResult = await query(
+    `SELECT COUNT(*)::int as count FROM group_members WHERE group_id = $1`,
+    [groupId]
+  );
+  const totalMembers = totalMembersResult.rows[0].count;
+
+  // Who responded (non-skip)
+  const responded = await query(
+    `SELECT cr.user_id, u.display_name, u.avatar_url
+     FROM challenge_responses cr
+     JOIN users u ON u.id = cr.user_id
+     WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
+    [id]
+  );
+
+  // Total reactions across all responses in this challenge
+  const reactionsResult = await query(
+    `SELECT COUNT(*)::int as total_reactions
+     FROM reactions r
+     JOIN challenge_responses cr ON cr.id = r.response_id
+     WHERE cr.challenge_id = $1`,
+    [id]
+  );
+  const totalReactions = reactionsResult.rows[0]?.total_reactions || 0;
+
+  // Top reaction emoji
+  const topEmojiResult = await query(
+    `SELECT r.emoji, COUNT(*) as cnt
+     FROM reactions r
+     JOIN challenge_responses cr ON cr.id = r.response_id
+     WHERE cr.challenge_id = $1
+     GROUP BY r.emoji
+     ORDER BY cnt DESC
+     LIMIT 1`,
+    [id]
+  );
+  const topReactionEmoji = topEmojiResult.rows[0]?.emoji || null;
+
+  res.json({
+    challengeId: id,
+    respondedCount: responded.rows.length,
+    totalMembers,
+    totalReactions,
+    topReactionEmoji,
+    respondedUsers: responded.rows.map((r: any) => ({
+      userId: r.user_id,
+      displayName: r.display_name,
+      avatarUrl: r.avatar_url,
+    })),
+  });
 }));
 
 export default router;

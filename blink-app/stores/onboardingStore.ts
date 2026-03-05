@@ -12,6 +12,13 @@ interface OnboardingState {
   hydrate: () => Promise<void>;
 }
 
+/** Default tooltip messages for each tour step. */
+export const tourMessages: Record<Exclude<TourStep, null>, string> = {
+  home: 'Meet your demo crew! Tap to see their latest snaps',
+  group_detail: 'This is a challenge! Everyone snaps their view right now',
+  fab: 'Ready for real? Create your first group!',
+};
+
 const STORAGE_KEY = 'onboarding_tour_complete';
 
 const storage = {

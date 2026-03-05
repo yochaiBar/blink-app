@@ -191,6 +191,60 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS idx_content_moderation_log_user ON content_moderation_log(user_id);
     CREATE INDEX IF NOT EXISTS idx_content_moderation_log_safe ON content_moderation_log(safe);
+
+    -- ── Engagement Features: Group Streaks + Streak Shields ──────────
+
+    -- Group-level streak tracking
+    ALTER TABLE groups ADD COLUMN IF NOT EXISTS group_streak INT DEFAULT 0;
+    ALTER TABLE groups ADD COLUMN IF NOT EXISTS longest_group_streak INT DEFAULT 0;
+
+    -- Streak shields for users
+    CREATE TABLE IF NOT EXISTS streak_shields (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+      earned_at TIMESTAMP DEFAULT NOW(),
+      used_at TIMESTAMP,
+      used_for_challenge_id UUID REFERENCES challenges(id),
+      UNIQUE(user_id, group_id, earned_at)
+    );
+    CREATE INDEX IF NOT EXISTS idx_streak_shields_user_group ON streak_shields(user_id, group_id);
+
+    -- Streak milestones log
+    CREATE TABLE IF NOT EXISTS streak_milestones (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+      milestone INT NOT NULL,
+      reached_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id, group_id, milestone)
+    );
+    CREATE INDEX IF NOT EXISTS idx_streak_milestones_user_group ON streak_milestones(user_id, group_id);
+
+    -- ── AI Foundation: auto-generated challenges + generation log ──
+
+    ALTER TABLE challenges ADD COLUMN IF NOT EXISTS is_auto_generated BOOLEAN DEFAULT FALSE;
+    ALTER TABLE challenges ADD COLUMN IF NOT EXISTS ai_generated_prompt TEXT;
+
+    CREATE TABLE IF NOT EXISTS challenge_schedule (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      group_id UUID UNIQUE REFERENCES groups(id) ON DELETE CASCADE,
+      last_auto_challenge_at TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_challenge_schedule_group ON challenge_schedule(group_id);
+
+    CREATE TABLE IF NOT EXISTS ai_generation_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+      function_name VARCHAR(50) NOT NULL,
+      personality VARCHAR(30),
+      tokens_used INT,
+      latency_ms INT,
+      fallback_used BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_gen_log_group ON ai_generation_log(group_id);
   `);
 
   logger.info('Migrations complete!');

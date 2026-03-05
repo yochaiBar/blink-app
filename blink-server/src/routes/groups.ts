@@ -296,4 +296,76 @@ router.delete('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   res.json({ message: 'Group deleted successfully' });
 }));
 
+// ── GET /api/groups/:id/streaks — Group streak + member streaks + shields ──
+router.get('/:id/streaks', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  // Verify membership
+  const membership = await query(
+    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    [id, req.userId]
+  );
+  if (membership.rows.length === 0) {
+    res.status(403).json({ error: 'Not a member of this group' });
+    return;
+  }
+
+  // Get group streak info
+  const groupResult = await query(
+    `SELECT group_streak, longest_group_streak FROM groups WHERE id = $1`,
+    [id]
+  );
+  const groupStreak = groupResult.rows[0]?.group_streak || 0;
+  const longestGroupStreak = groupResult.rows[0]?.longest_group_streak || 0;
+
+  // Get all members with streaks
+  const members = await query(
+    `SELECT gm.user_id, u.display_name, u.avatar_url, gm.current_streak as streak
+     FROM group_members gm
+     JOIN users u ON u.id = gm.user_id
+     WHERE gm.group_id = $1
+     ORDER BY gm.current_streak DESC`,
+    [id]
+  );
+
+  // Get shields remaining per member
+  const shields = await query(
+    `SELECT user_id, COUNT(*)::int as shields_remaining
+     FROM streak_shields
+     WHERE group_id = $1 AND used_at IS NULL
+     GROUP BY user_id`,
+    [id]
+  );
+  const shieldsMap: Record<string, number> = {};
+  for (const row of shields.rows) {
+    shieldsMap[row.user_id] = row.shields_remaining;
+  }
+
+  // Get milestones per member
+  const milestones = await query(
+    `SELECT user_id, ARRAY_AGG(milestone ORDER BY milestone) as milestones
+     FROM streak_milestones
+     WHERE group_id = $1
+     GROUP BY user_id`,
+    [id]
+  );
+  const milestonesMap: Record<string, number[]> = {};
+  for (const row of milestones.rows) {
+    milestonesMap[row.user_id] = row.milestones;
+  }
+
+  res.json({
+    groupStreak,
+    longestGroupStreak,
+    members: members.rows.map((m: any) => ({
+      userId: m.user_id,
+      displayName: m.display_name,
+      avatarUrl: m.avatar_url,
+      streak: m.streak,
+      shieldsRemaining: shieldsMap[m.user_id] || 0,
+      milestones: milestonesMap[m.user_id] || [],
+    })),
+  });
+}));
+
 export default router;

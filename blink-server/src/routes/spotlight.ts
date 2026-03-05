@@ -3,6 +3,7 @@ import { query } from '../config/database';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import logger from '../utils/logger';
+import { generateSpotlightSuperlative, AiPersonality } from '../services/aiService';
 
 const router = Router();
 
@@ -85,20 +86,41 @@ router.get('/:groupId', asyncHandler(async (req: AuthRequest, res: Response) => 
   }
 
   const member = featured.rows[0];
-  const superlative = SUPERLATIVES[Math.floor(Math.random() * SUPERLATIVES.length)];
   const participationRate = member.total_challenges > 0
     ? Math.round((member.total_responses / member.total_challenges) * 100)
     : 0;
+
+  // Use AI to generate superlative and fun fact, with hardcoded fallback
+  let superlative: string;
+  let funFact: string;
+  try {
+    const groupPersonalityResult = await query(`SELECT ai_personality FROM groups WHERE id = $1`, [groupId]);
+    const personality: AiPersonality = groupPersonalityResult.rows[0]?.ai_personality || 'funny';
+    const aiResult = await generateSpotlightSuperlative(
+      {
+        displayName: member.display_name || 'Anonymous',
+        streak: member.current_streak || 0,
+        totalResponses: member.total_responses || 0,
+        participationRate,
+      },
+      personality
+    );
+    superlative = aiResult.superlative;
+    funFact = aiResult.funFact;
+  } catch {
+    superlative = SUPERLATIVES[Math.floor(Math.random() * SUPERLATIVES.length)];
+    funFact = participationRate >= 80
+      ? `Answered ${participationRate}% of all challenges. Legend.`
+      : participationRate >= 50
+      ? `Shows up more than half the time. Respectable.`
+      : `A mysterious figure. Only appears ${participationRate}% of the time.`;
+  }
 
   const statsJson = {
     streak: member.current_streak,
     total_responses: member.total_responses,
     participation_rate: participationRate,
-    fun_fact: participationRate >= 80
-      ? `Answered ${participationRate}% of all challenges. Legend.`
-      : participationRate >= 50
-      ? `Shows up more than half the time. Respectable.`
-      : `A mysterious figure. Only appears ${participationRate}% of the time.`,
+    fun_fact: funFact,
   };
 
   const spotlight = await query(

@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, RefreshControl, Modal, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, RefreshControl, Modal, Alert, Share, Animated } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -18,8 +18,17 @@ import { Skeleton, SnapCardSkeleton, EmptyState, ErrorState } from '@/components
 import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
 import { apiGroupDetailToGroup, apiResponseToSnap, apiSpotlightToUI, apiMembersToLeaderboard } from '@/utils/adapters';
 import { isDemoGroup, DEMO_GROUP_DETAIL, DEMO_CHALLENGE, DEMO_RESPONSES } from '@/constants/demoData';
-import { useOnboardingStore } from '@/stores/onboardingStore';
+import { useOnboardingStore, tourMessages } from '@/stores/onboardingStore';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
+import ActivityPulse from '@/components/ActivityPulse';
+import GroupStreakBanner from '@/components/GroupStreakBanner';
+import BlurredPreviewCard from '@/components/BlurredPreviewCard';
+import StreakCelebration from '@/components/StreakCelebration';
+import BlinkAiAvatar from '@/components/BlinkAiAvatar';
+import AiCommentaryCard from '@/components/AiCommentaryCard';
+import AiPersonalityPill from '@/components/AiPersonalityPill';
+import { getSocket } from '@/services/socket';
+import { AiPersonality } from '@/types';
 
 type ChallengeType = 'snap' | 'quiz' | 'quiz_food' | 'quiz_most_likely' | 'quiz_rate_day';
 
@@ -53,6 +62,27 @@ export default function GroupDetailScreen() {
   }>({ contentType: 'photo' });
   const [challengeBarLayout, setChallengeBarLayout] = useState<TargetLayout | null>(null);
   const challengeBarRef = useRef<View>(null);
+
+  // Streak celebration state
+  const [streakCelebration, setStreakCelebration] = useState<{ userName: string; streakDays: number } | null>(null);
+
+  // AI commentary state
+  const [aiCommentary, setAiCommentary] = useState<{ challengeId: string; commentary: string } | null>(null);
+
+  // Challenge progress state for ActivityPulse
+  const [progressData, setProgressData] = useState<{
+    responded: Array<{ userId: string; displayName: string; avatarUrl?: string }>;
+    totalMembers: number;
+  } | null>(null);
+
+  // Blurred preview state
+  const [previewData, setPreviewData] = useState<{
+    respondedCount: number;
+    totalMembers: number;
+    totalReactions: number;
+    topReactionEmoji?: string;
+    respondedUsers: Array<{ displayName: string; avatarUrl?: string }>;
+  } | null>(null);
 
   // Fetch full group detail with members
   const groupQuery = useQuery({
@@ -110,6 +140,111 @@ export default function GroupDetailScreen() {
     ? apiSpotlightToUI(spotlightQuery.data, id)
     : null;
 
+  // Fetch challenge progress for ActivityPulse
+  useEffect(() => {
+    if (!activeChallenge?.id || isDemo) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api(`/challenges/${activeChallenge.id}/progress`);
+        if (!cancelled && data) {
+          setProgressData({
+            responded: data.responded ?? [],
+            totalMembers: data.totalMembers ?? 0,
+          });
+        }
+      } catch {
+        // Endpoint may not exist yet — silently ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeChallenge?.id, isDemo]);
+
+  // Fetch blurred preview for non-responded users
+  useEffect(() => {
+    if (!activeChallenge?.id || isDemo) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api(`/challenges/${activeChallenge.id}/preview`);
+        if (!cancelled && data) {
+          setPreviewData({
+            respondedCount: data.respondedCount ?? 0,
+            totalMembers: data.totalMembers ?? 0,
+            totalReactions: data.totalReactions ?? 0,
+            topReactionEmoji: data.topReactionEmoji,
+            respondedUsers: data.respondedUsers ?? [],
+          });
+        }
+      } catch {
+        // Endpoint may not exist yet — silently ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeChallenge?.id, isDemo]);
+
+  // Socket listeners for real-time updates
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || isDemo) return;
+
+    const handleChallengeProgress = (data: {
+      responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>;
+      totalMembers?: number;
+    }) => {
+      if (data.responded && data.totalMembers) {
+        setProgressData({
+          responded: data.responded,
+          totalMembers: data.totalMembers,
+        });
+      }
+    };
+
+    const handleChallengeResponse = () => {
+      // Refresh responses and progress
+      if (activeChallenge?.id) {
+        responsesQuery.refetch();
+        api(`/challenges/${activeChallenge.id}/progress`)
+          .then((data) => {
+            if (data) {
+              setProgressData({
+                responded: data.responded ?? [],
+                totalMembers: data.totalMembers ?? 0,
+              });
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    const handleStreakMilestone = (data: { userName?: string; streakDays?: number }) => {
+      if (data.userName && data.streakDays) {
+        setStreakCelebration({ userName: data.userName, streakDays: data.streakDays });
+        if (Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+    };
+
+    const handleChallengeCommentary = (data: { challengeId?: string; commentary?: string }) => {
+      if (data.challengeId && data.commentary) {
+        setAiCommentary({ challengeId: data.challengeId, commentary: data.commentary });
+      }
+    };
+
+    socket.on('challenge:progress', handleChallengeProgress);
+    socket.on('challenge:response', handleChallengeResponse);
+    socket.on('streak:milestone', handleStreakMilestone);
+    socket.on('challenge:commentary', handleChallengeCommentary);
+
+    return () => {
+      socket.off('challenge:progress', handleChallengeProgress);
+      socket.off('challenge:response', handleChallengeResponse);
+      socket.off('streak:milestone', handleStreakMilestone);
+      socket.off('challenge:commentary', handleChallengeCommentary);
+    };
+  }, [isDemo, activeChallenge?.id, responsesQuery]);
+
   // Build UI group from API detail
   const group = groupQuery.data
     ? apiGroupDetailToGroup(groupQuery.data, activeChallenge)
@@ -132,6 +267,18 @@ export default function GroupDetailScreen() {
   );
 
   const isQuizChallenge = activeChallenge?.type && activeChallenge.type !== 'snap';
+
+  // Resolve who triggered the active challenge
+  const challengeTriggerInfo = React.useMemo(() => {
+    if (!activeChallenge) return null;
+    if (!activeChallenge.triggered_by) {
+      // AI-generated challenge
+      return { isAi: true as const, name: 'Blink AI' };
+    }
+    // Look up the user in group members
+    const member = groupQuery.data?.members?.find((m) => m.user_id === activeChallenge.triggered_by);
+    return { isAi: false as const, name: member?.display_name ?? 'Someone' };
+  }, [activeChallenge, groupQuery.data?.members]);
 
   // Compute quiz result distribution
   const quizOptions: string[] = React.useMemo(() => {
@@ -499,10 +646,15 @@ export default function GroupDetailScreen() {
       </View>
 
       <View style={styles.groupMeta}>
-        <View style={[styles.categoryBadge, { backgroundColor: `${group.color}20` }]}>
-          <Text style={[styles.categoryText, { color: group.color }]}>
-            {categoryLabels[group.category]}
-          </Text>
+        <View style={styles.metaBadgesRow}>
+          <View style={[styles.categoryBadge, { backgroundColor: `${group.color}20` }]}>
+            <Text style={[styles.categoryText, { color: group.color }]}>
+              {categoryLabels[group.category]}
+            </Text>
+          </View>
+          {group.aiPersonality && (
+            <AiPersonalityPill personality={group.aiPersonality} />
+          )}
         </View>
         <View style={styles.membersPreview}>
           {group.members.slice(0, 6).map((member, i) => (
@@ -555,6 +707,14 @@ export default function GroupDetailScreen() {
         </View>
       )}
 
+      {/* Group Streak Banner */}
+      {!isDemo && group && (
+        <GroupStreakBanner
+          groupStreak={group.members.reduce((min, m) => Math.min(min, m.streak), group.members[0]?.streak ?? 0)}
+          longestGroupStreak={Math.max(...group.members.map((m) => m.streak), 0)}
+        />
+      )}
+
       {group.hasActiveChallenge && !hasSubmittedToday && (
         <View ref={challengeBarRef} collapsable={false}>
           <TouchableOpacity
@@ -581,6 +741,32 @@ export default function GroupDetailScreen() {
               <Text style={styles.challengeTimerText}>{countdown}</Text>
             </View>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Challenge trigger indicator */}
+      {activeChallenge && challengeTriggerInfo && (
+        <View style={styles.triggerRow}>
+          {challengeTriggerInfo.isAi ? (
+            <BlinkAiAvatar size={20} />
+          ) : (
+            <View style={styles.triggerDot} />
+          )}
+          <Text style={styles.triggerText}>
+            {challengeTriggerInfo.isAi ? 'Blink AI started this challenge' : `${challengeTriggerInfo.name} started this challenge`}
+          </Text>
+        </View>
+      )}
+
+      {/* Activity Pulse — shows progress below challenge bar */}
+      {activeChallenge && !isDemo && progressData && (
+        <View style={styles.activityPulseWrapper}>
+          <ActivityPulse
+            respondedUsers={progressData.responded}
+            totalMembers={progressData.totalMembers}
+            currentUserId={user.id}
+            hasResponded={hasSubmittedToday}
+          />
         </View>
       )}
 
@@ -655,10 +841,28 @@ export default function GroupDetailScreen() {
           </View>
         )}
 
-        {!hasSubmittedToday && snaps.length > 0 && !isDemo && (
-          <View style={styles.peekNotice}>
-            <Text style={styles.peekNoticeText}>Submit your snap to see what everyone shared!</Text>
-          </View>
+        {!hasSubmittedToday && activeChallenge && !isDemo && (previewData || snaps.length > 0) && (
+          <BlurredPreviewCard
+            respondedCount={previewData?.respondedCount ?? snaps.length}
+            totalMembers={previewData?.totalMembers ?? (group?.members.length ?? 0)}
+            totalReactions={previewData?.totalReactions ?? 0}
+            topReactionEmoji={previewData?.topReactionEmoji}
+            respondedUsers={
+              previewData?.respondedUsers ??
+              snaps.map((s) => ({ displayName: s.userName, avatarUrl: s.userAvatar }))
+            }
+            onRespond={handleSnapChallenge}
+            activityPulseProps={
+              progressData
+                ? {
+                    respondedUsers: progressData.responded,
+                    totalMembers: progressData.totalMembers,
+                    currentUserId: user.id,
+                    hasResponded: false,
+                  }
+                : undefined
+            }
+          />
         )}
 
         {responsesQuery.isLoading && activeChallenge ? (
@@ -763,13 +967,18 @@ export default function GroupDetailScreen() {
           ))
         )}
 
+        {/* AI Commentary Card */}
+        {aiCommentary && (
+          <AiCommentaryCard commentary={aiCommentary.commentary} />
+        )}
+
         <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* Tour Tooltip: Step 2 — Challenge bar */}
       <Tooltip
         visible={isDemo && tourStep === 'group_detail'}
-        message="Your friends posted snaps — take yours!"
+        message={tourMessages.group_detail}
         targetLayout={challengeBarLayout}
         position="below"
         onNext={handleGroupDetailTourNext}
@@ -876,6 +1085,14 @@ export default function GroupDetailScreen() {
         reportedContentId={reportTarget.reportedContentId}
         contentType={reportTarget.contentType}
       />
+
+      {/* Streak Celebration Overlay */}
+      <StreakCelebration
+        visible={!!streakCelebration}
+        userName={streakCelebration?.userName ?? ''}
+        streakDays={streakCelebration?.streakDays ?? 0}
+        onDismiss={() => setStreakCelebration(null)}
+      />
     </View>
   );
 }
@@ -935,6 +1152,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 8,
     gap: 10,
+  },
+  metaBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   categoryBadge: {
     alignSelf: 'flex-start',
@@ -1050,6 +1273,28 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     color: theme.green,
     fontVariant: ['tabular-nums'],
+  },
+  triggerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  triggerDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: theme.surfaceLight,
+  },
+  triggerText: {
+    fontSize: 12,
+    color: theme.textMuted,
+    fontWeight: '500' as const,
+  },
+  activityPulseWrapper: {
+    paddingHorizontal: 20,
+    marginBottom: 8,
   },
   feed: {
     flex: 1,

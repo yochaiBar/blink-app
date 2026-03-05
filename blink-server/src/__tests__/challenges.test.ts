@@ -177,6 +177,9 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([]))                      // no existing response
       .mockResolvedValueOnce(queryResult([response]))              // INSERT response
       // No notification queries since triggered_by === req.userId
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allMembers
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allResponded
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // streak check
       .mockResolvedValueOnce(queryResult([{ count: '2' }]))        // total members
       .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // total responses
 
@@ -201,6 +204,9 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([response]))
       .mockResolvedValueOnce(queryResult([makeUser()]))            // responder name for notification
       // createNotification mock is handled globally
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allMembers
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allResponded
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // streak check
       .mockResolvedValueOnce(queryResult([{ count: '2' }]))
       .mockResolvedValueOnce(queryResult([{ count: '1' }]));
 
@@ -226,6 +232,9 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([makeMembership()]))
       .mockResolvedValueOnce(queryResult([]))
       .mockResolvedValueOnce(queryResult([response]))
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allMembers
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allResponded
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // streak check
       .mockResolvedValueOnce(queryResult([{ count: '5' }]))
       .mockResolvedValueOnce(queryResult([{ count: '1' }]));
 
@@ -246,6 +255,9 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([makeMembership()]))
       .mockResolvedValueOnce(queryResult([]))
       .mockResolvedValueOnce(queryResult([response]))
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allMembers
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allResponded
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // streak check
       .mockResolvedValueOnce(queryResult([{ count: '3' }]))
       .mockResolvedValueOnce(queryResult([{ count: '1' }]));
 

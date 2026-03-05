@@ -42,6 +42,7 @@ export interface ApiGroupDetail {
   created_by: string;
   created_at: string;
   members: ApiGroupMember[];
+  ai_personality?: string | null;
 }
 
 export interface ApiChallenge {
@@ -52,7 +53,7 @@ export interface ApiChallenge {
   prompt_text: string | null;
   options: string[] | null;
   options_json: string[] | null;
-  triggered_by: string;
+  triggered_by: string | null;
   triggered_at: string;
   expires_at: string;
   status: 'active' | 'completed' | 'expired';

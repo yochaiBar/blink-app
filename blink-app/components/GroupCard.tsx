@@ -8,6 +8,7 @@ import { categoryLabels } from '@/constants/categories';
 import { getRelativeTime } from '@/utils/time';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
+import StreakIcon from '@/components/StreakIcon';
 
 interface GroupCardProps {
   group: Group;
@@ -111,6 +112,18 @@ export default React.memo(function GroupCard({ group, onPress }: GroupCardProps)
           </View>
 
           <View style={styles.metaArea}>
+            {(() => {
+              const topStreak = group.members.reduce((max, m) => Math.max(max, m.streak), 0);
+              if (topStreak >= 3) {
+                return (
+                  <View style={styles.streakBadge}>
+                    <StreakIcon streak={topStreak} size={14} />
+                    <Text style={styles.streakNumber}>{topStreak}</Text>
+                  </View>
+                );
+              }
+              return null;
+            })()}
             {group.hasActiveChallenge ? (
               <View style={styles.challengeBadge}>
                 <Clock size={12} color={theme.coral} />
@@ -210,6 +223,18 @@ const styles = StyleSheet.create({
   },
   metaArea: {
     alignItems: 'flex-end',
+    gap: 6,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  streakNumber: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: theme.yellow,
+    fontVariant: ['tabular-nums'],
   },
   challengeBadge: {
     flexDirection: 'row',

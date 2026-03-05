@@ -1,5 +1,13 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, Dimensions } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  Dimensions,
+  Animated,
+} from 'react-native';
 import { theme } from '@/constants/colors';
 
 export interface TargetLayout {
@@ -37,6 +45,56 @@ export default function Tooltip({
   step,
   totalSteps,
 }: TooltipProps) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.92)).current;
+  const pulseAnim = useRef(new Animated.Value(0.6)).current;
+  const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    if (visible && targetLayout) {
+      // Reset values before animating in
+      fadeAnim.setValue(0);
+      scaleAnim.setValue(0.92);
+
+      // Fade-in + scale-up entrance
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 80,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Spotlight pulse loop
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.6,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      pulseRef.current = pulse;
+      pulse.start();
+
+      return () => {
+        pulse.stop();
+      };
+    }
+  }, [visible, targetLayout, step]);
+
   if (!visible || !targetLayout) return null;
 
   const spotlightStyle = {
@@ -93,15 +151,30 @@ export default function Tooltip({
 
   return (
     <TouchableWithoutFeedback onPress={onDismiss}>
-      <View style={styles.overlay}>
-        {/* Spotlight cutout border */}
-        <View style={[styles.spotlight, spotlightStyle]} pointerEvents="none" />
+      <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+        {/* Spotlight cutout border with pulse */}
+        <Animated.View
+          style={[styles.spotlight, spotlightStyle, { opacity: pulseAnim }]}
+          pointerEvents="none"
+        />
 
         {/* Arrow */}
-        <View style={[styles.arrow, arrowStyle]} pointerEvents="none" />
+        <Animated.View
+          style={[styles.arrow, arrowStyle, { opacity: fadeAnim }]}
+          pointerEvents="none"
+        />
 
-        {/* Tooltip bubble */}
-        <View style={[styles.tooltip, tooltipStyle]}>
+        {/* Tooltip bubble with scale animation */}
+        <Animated.View
+          style={[
+            styles.tooltip,
+            tooltipStyle,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
           <Text style={styles.message}>{message}</Text>
           <View style={styles.footer}>
             <Text style={styles.stepIndicator}>
@@ -111,8 +184,9 @@ export default function Tooltip({
               <Text style={styles.nextButtonText}>{nextLabel}</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
+          <Text style={styles.dismissHint}>tap anywhere to skip</Text>
+        </Animated.View>
+      </Animated.View>
     </TouchableWithoutFeedback>
   );
 }
@@ -120,7 +194,7 @@ export default function Tooltip({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     zIndex: 1000,
   },
   spotlight: {
@@ -172,5 +246,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: theme.white,
+  },
+  dismissHint: {
+    fontSize: 11,
+    color: theme.textMuted,
+    textAlign: 'center',
+    marginTop: 10,
+    letterSpacing: 0.3,
   },
 });

@@ -11,7 +11,7 @@ import GroupCard from '@/components/GroupCard';
 import HomeHeroCard from '@/components/HomeHeroCard';
 import QuickActionCards from '@/components/QuickActionCards';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
-import { useOnboardingStore } from '@/stores/onboardingStore';
+import { useOnboardingStore, tourMessages } from '@/stores/onboardingStore';
 import { isDemoGroup } from '@/constants/demoData';
 import { getTimeGreeting } from '@/utils/time';
 import { GroupCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
@@ -324,7 +324,7 @@ export default function GroupsScreen() {
       {/* Tour Tooltip: Step 1 — Demo group card */}
       <Tooltip
         visible={tourStep === 'home'}
-        message="This is your crew! Tap to see what's happening"
+        message={tourMessages.home}
         targetLayout={demoCardLayout}
         position="below"
         onNext={handleHomeTourNext}
@@ -337,7 +337,7 @@ export default function GroupsScreen() {
       {/* Tour Tooltip: Step 3 — FAB */}
       <Tooltip
         visible={tourStep === 'fab'}
-        message="Create your own group to get started!"
+        message={tourMessages.fab}
         targetLayout={fabLayout}
         position="above"
         onNext={handleFabTourNext}
