@@ -1,37 +1,191 @@
-import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Platform, RefreshControl } from 'react-native';
+import React, { useCallback, useMemo, useRef, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  RefreshControl,
+  Animated,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, UserPlus, Users } from 'lucide-react-native';
+import { Users, Plus, UserPlus } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
+import { typography } from '@/constants/typography';
+import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
-import GroupCard from '@/components/GroupCard';
-import HomeHeroCard from '@/components/HomeHeroCard';
-import QuickActionCards from '@/components/QuickActionCards';
+import { getRelativeTime } from '@/utils/time';
+import { Group } from '@/types';
+import GlassCard from '@/components/ui/GlassCard';
+import AvatarRing from '@/components/ui/AvatarRing';
+import { GroupCardSkeleton } from '@/components/ui';
+import StreakIcon from '@/components/StreakIcon';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
 import { useOnboardingStore, tourMessages } from '@/stores/onboardingStore';
 import { isDemoGroup } from '@/constants/demoData';
-import { GroupCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
+
+// ── Simplified Group Card ──
+
+const GroupListCard = React.memo(function GroupListCard({
+  group,
+  onPress,
+}: {
+  group: Group;
+  onPress: () => void;
+}) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = useCallback(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  }, [scaleAnim]);
+
+  const handlePressOut = useCallback(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  }, [scaleAnim]);
+
+  const handlePress = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    onPress();
+  }, [onPress]);
+
+  const topStreak = useMemo(
+    () => group.members.reduce((max, m) => Math.max(max, m.streak), 0),
+    [group.members],
+  );
+
+  const displayedMembers = group.members.slice(0, 5);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={handlePress}
+        testID={`group-card-${group.id}`}
+      >
+        <GlassCard
+          style={styles.groupCard}
+          padding={0}
+          borderRadius={borderRadius.xl}
+        >
+          <View style={styles.groupCardInner}>
+            {/* Top section: emoji, name, meta */}
+            <View style={styles.groupTopRow}>
+              <View style={styles.groupEmojiCircle}>
+                <Text style={styles.groupEmoji}>{group.emoji}</Text>
+              </View>
+
+              <View style={styles.groupInfo}>
+                <View style={styles.groupNameRow}>
+                  <Text style={styles.groupName} numberOfLines={1}>
+                    {group.name}
+                  </Text>
+                  {group.hasActiveChallenge && (
+                    <View style={styles.activeDot} />
+                  )}
+                </View>
+
+                <View style={styles.groupMetaRow}>
+                  <Text style={styles.groupMeta}>
+                    {group.members.length} member
+                    {group.members.length !== 1 ? 's' : ''}
+                  </Text>
+
+                  {topStreak > 0 && (
+                    <>
+                      <Text style={styles.groupMetaDot}>{'\u00B7'}</Text>
+                      <StreakIcon streak={topStreak} size={13} />
+                      <Text style={styles.streakText}>{topStreak} days</Text>
+                    </>
+                  )}
+
+                  <Text style={styles.groupMetaDot}>{'\u00B7'}</Text>
+                  <Text style={styles.groupMeta}>
+                    {getRelativeTime(group.lastActive)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Bottom section: member avatars */}
+            <View style={styles.memberRow}>
+              {displayedMembers.map((member, i) => (
+                <View
+                  key={member.id}
+                  style={[
+                    styles.memberAvatar,
+                    { marginLeft: i > 0 ? -6 : 0, zIndex: 10 - i },
+                  ]}
+                >
+                  <AvatarRing
+                    uri={member.avatar}
+                    name={member.name}
+                    size={24}
+                    ringColor={
+                      member.isOnline ? theme.green : theme.border
+                    }
+                    showStatus
+                    hasResponded={member.isOnline}
+                  />
+                </View>
+              ))}
+              {group.members.length > 5 && (
+                <View style={styles.moreMembers}>
+                  <Text style={styles.moreMembersText}>
+                    +{group.members.length - 5}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </GlassCard>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+// ── Main Groups Screen ──
 
 export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { groups, user, refreshGroups, isRefreshing, isLoading, shouldShowDemoGroup } = useApp();
-  const fabScale = useRef(new Animated.Value(1)).current;
+  const {
+    groups,
+    refreshGroups,
+    isRefreshing,
+    isLoading,
+    shouldShowDemoGroup,
+  } = useApp();
 
+  // Onboarding tour
   const tourStep = useOnboardingStore((s) => s.tourStep);
   const tourComplete = useOnboardingStore((s) => s.tourComplete);
   const startTour = useOnboardingStore((s) => s.startTour);
   const advanceTour = useOnboardingStore((s) => s.advanceTour);
   const completeTour = useOnboardingStore((s) => s.completeTour);
 
-  const [demoCardLayout, setDemoCardLayout] = useState<TargetLayout | null>(null);
-  const [fabLayout, setFabLayout] = useState<TargetLayout | null>(null);
+  const [demoCardLayout, setDemoCardLayout] = useState<TargetLayout | null>(
+    null,
+  );
   const demoCardRef = useRef<View>(null);
-  const fabRef = useRef<View>(null);
 
-  // Start tour when demo group is showing and tour hasn't begun
   useEffect(() => {
     if (shouldShowDemoGroup && !tourComplete && tourStep === null) {
       const timer = setTimeout(() => startTour(), 500);
@@ -39,24 +193,11 @@ export default function GroupsScreen() {
     }
   }, [shouldShowDemoGroup, tourComplete, tourStep, startTour]);
 
-  // Measure demo card position for tooltip
   useEffect(() => {
     if (tourStep === 'home' && demoCardRef.current) {
       const timer = setTimeout(() => {
         demoCardRef.current?.measureInWindow((x, y, width, height) => {
           if (width > 0) setDemoCardLayout({ x, y, width, height });
-        });
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [tourStep]);
-
-  // Measure FAB position for tooltip
-  useEffect(() => {
-    if (tourStep === 'fab' && fabRef.current) {
-      const timer = setTimeout(() => {
-        fabRef.current?.measureInWindow((x, y, width, height) => {
-          if (width > 0) setFabLayout({ x, y, width, height });
         });
       }, 100);
       return () => clearTimeout(timer);
@@ -77,100 +218,169 @@ export default function GroupsScreen() {
     router.push('/join-group' as never);
   }, [router]);
 
-  const handleInviteFriends = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    const firstGroup = groups.find(g => !isDemoGroup(g.id));
-    if (firstGroup) {
-      router.push({ pathname: '/invite-members' as never, params: { groupId: firstGroup.id } });
-    } else {
-      router.push('/create-group' as never);
-    }
-  }, [router, groups]);
+  const handleGroupPress = useCallback(
+    (groupId: string) => {
+      router.push({
+        pathname: '/group-detail' as never,
+        params: { id: groupId },
+      });
+    },
+    [router],
+  );
 
-  const handleGroupPress = useCallback((groupId: string) => {
-    router.push({ pathname: '/group-detail' as never, params: { id: groupId } });
-  }, [router]);
-
-  const handleFabPressIn = useCallback(() => {
-    Animated.spring(fabScale, {
-      toValue: 0.9,
-      useNativeDriver: true,
-      speed: 50,
-      bounciness: 4,
-    }).start();
-  }, [fabScale]);
-
-  const handleFabPressOut = useCallback(() => {
-    Animated.spring(fabScale, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 50,
-      bounciness: 4,
-    }).start();
-  }, [fabScale]);
-
-  // Tour tooltip handlers
   const handleHomeTourNext = useCallback(() => {
     advanceTour('group_detail');
     const demoGroup = groups.find((g) => isDemoGroup(g.id));
     if (demoGroup) {
-      router.push({ pathname: '/group-detail' as never, params: { id: demoGroup.id } });
+      router.push({
+        pathname: '/group-detail' as never,
+        params: { id: demoGroup.id },
+      });
     }
   }, [advanceTour, groups, router]);
 
-  const handleFabTourNext = useCallback(() => {
-    completeTour();
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    router.push('/create-group' as never);
-  }, [completeTour, router]);
+  // Sort: active challenge groups first, then by last active
+  const sortedGroups = useMemo(() => {
+    return [...groups].sort((a, b) => {
+      if (a.hasActiveChallenge && !b.hasActiveChallenge) return -1;
+      if (!a.hasActiveChallenge && b.hasActiveChallenge) return 1;
+      return (
+        new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime()
+      );
+    });
+  }, [groups]);
 
-  const activeGroups = groups.filter(g => g.hasActiveChallenge);
-  const otherGroups = groups.filter(g => !g.hasActiveChallenge);
-
-  // Sort active groups by soonest deadline
-  const sortedActiveGroups = useMemo(() =>
-    [...activeGroups].sort((a, b) => (a.challengeEndTime ?? Infinity) - (b.challengeEndTime ?? Infinity)),
-    [activeGroups]
+  const renderGroup = useCallback(
+    ({ item, index }: { item: Group; index: number }) => {
+      const isDemo = isDemoGroup(item.id);
+      return (
+        <View
+          ref={isDemo ? demoCardRef : undefined}
+          collapsable={false}
+        >
+          <GroupListCard
+            group={item}
+            onPress={() => handleGroupPress(item.id)}
+          />
+        </View>
+      );
+    },
+    [handleGroupPress],
   );
 
-  // Determine hero mode
-  const heroMode = useMemo(() => {
-    if (groups.length === 0) return 'welcome' as const;
-    if (sortedActiveGroups.length > 0) return 'challenge' as const;
-    return 'summary' as const;
-  }, [groups.length, sortedActiveGroups.length]);
+  const keyExtractor = useCallback((item: Group) => item.id, []);
 
-  // The first active group drives the challenge hero
-  const heroActiveGroup = sortedActiveGroups[0];
-  // Remaining active groups render as normal cards
-  const remainingActiveGroups = sortedActiveGroups.slice(1);
+  const hasGroups = groups.length > 0;
 
-  const handleRespondChallenge = useCallback(() => {
-    if (!heroActiveGroup) return;
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  // ── List Footer: Create/Join buttons + spacer ──
+  const ListFooter = useMemo(() => {
+    return (
+      <View style={styles.footerSection}>
+        {/* Create Group button */}
+        <TouchableOpacity
+          style={styles.createBtn}
+          onPress={handleCreateGroup}
+          activeOpacity={0.85}
+        >
+          <LinearGradient
+            colors={[theme.coral, theme.coralDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.createBtnGradient}
+          >
+            <Plus size={20} color={theme.white} />
+            <Text style={styles.createBtnText}>Create Group</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Join with Code */}
+        <TouchableOpacity
+          style={styles.joinBtn}
+          onPress={handleJoinGroup}
+          activeOpacity={0.7}
+        >
+          <UserPlus size={16} color={theme.coral} />
+          <Text style={styles.joinBtnText}>Join with Code</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 100 }} />
+      </View>
+    );
+  }, [handleCreateGroup, handleJoinGroup]);
+
+  // ── List Empty ──
+  const ListEmpty = useMemo(() => {
+    if (isLoading) {
+      return (
+        <View style={styles.skeletonContainer}>
+          <GroupCardSkeleton />
+          <GroupCardSkeleton />
+          <GroupCardSkeleton />
+        </View>
+      );
     }
-    router.push({ pathname: '/snap-challenge' as never, params: { groupId: heroActiveGroup.id } });
-  }, [heroActiveGroup, router]);
+
+    return (
+      <View style={styles.emptyState}>
+        <View style={styles.emptyIconContainer}>
+          <Users size={48} color={theme.textMuted} />
+        </View>
+        <Text style={styles.emptyTitle}>No groups yet</Text>
+        <Text style={styles.emptySubtitle}>
+          Create or join a group to start sharing blinks with friends
+        </Text>
+
+        <TouchableOpacity
+          style={styles.emptyCreateBtn}
+          onPress={handleCreateGroup}
+          activeOpacity={0.85}
+        >
+          <LinearGradient
+            colors={[theme.coral, theme.coralDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.emptyCreateBtnGradient}
+          >
+            <Plus size={20} color={theme.white} />
+            <Text style={styles.emptyCreateBtnText}>Create Group</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.emptyJoinBtn}
+          onPress={handleJoinGroup}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.emptyJoinBtnText}>Join with Code</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [isLoading, handleCreateGroup, handleJoinGroup]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Simpler header: just "Groups" title */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Users size={22} color={theme.coral} />
           <Text style={styles.headerTitle}>Groups</Text>
         </View>
+        {hasGroups && (
+          <Text style={styles.groupCount}>
+            {groups.length} group{groups.length !== 1 ? 's' : ''}
+          </Text>
+        )}
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+      {/* Group List */}
+      <FlatList
+        data={hasGroups ? sortedGroups : []}
+        renderItem={renderGroup}
+        keyExtractor={keyExtractor}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={ListEmpty}
+        ListFooterComponent={hasGroups ? ListFooter : null}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -178,113 +388,12 @@ export default function GroupsScreen() {
             tintColor={theme.coral}
           />
         }
-      >
-        <HomeHeroCard
-          mode={heroMode}
-          user={user}
-          activeGroup={heroActiveGroup}
-          groupCount={groups.length}
-          onCreateGroup={handleCreateGroup}
-          onJoinGroup={handleJoinGroup}
-          onRespondChallenge={handleRespondChallenge}
-        />
+        removeClippedSubviews={Platform.OS !== 'web'}
+        maxToRenderPerBatch={10}
+        initialNumToRender={8}
+      />
 
-        {heroMode === 'summary' && (
-          <QuickActionCards
-            onInviteFriends={handleInviteFriends}
-            onCreateGroup={handleCreateGroup}
-            onJoinGroup={handleJoinGroup}
-          />
-        )}
-
-        {isLoading ? (
-          <View style={styles.section}>
-            <GroupCardSkeleton />
-            <GroupCardSkeleton />
-            <GroupCardSkeleton />
-          </View>
-        ) : groups.length === 0 && !shouldShowDemoGroup ? (
-          <EmptyState
-            emoji="👋"
-            title="Welcome to Blink!"
-            subtitle="Create or join a group to get started"
-            actionLabel="Create Group"
-            onAction={handleCreateGroup}
-          />
-        ) : (
-          <>
-            {remainingActiveGroups.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <View style={styles.liveDot} />
-                  <Text style={styles.sectionTitle}>Active Challenges</Text>
-                </View>
-                {remainingActiveGroups.map(group => (
-                  <View
-                    key={group.id}
-                    ref={isDemoGroup(group.id) ? demoCardRef : undefined}
-                    collapsable={false}
-                  >
-                    <GroupCard
-                      group={group}
-                      onPress={() => handleGroupPress(group.id)}
-                    />
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {otherGroups.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Your Groups</Text>
-                {otherGroups.map(group => (
-                  <View
-                    key={group.id}
-                    ref={isDemoGroup(group.id) ? demoCardRef : undefined}
-                    collapsable={false}
-                  >
-                    <GroupCard
-                      group={group}
-                      onPress={() => handleGroupPress(group.id)}
-                    />
-                  </View>
-                ))}
-              </View>
-            )}
-          </>
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {heroMode !== 'welcome' && (
-        <View style={[styles.fabColumn, { bottom: 24 + insets.bottom }]}>
-          <TouchableOpacity
-            style={styles.fabSecondary}
-            onPress={handleJoinGroup}
-            activeOpacity={0.85}
-            testID="join-group-fab"
-          >
-            <UserPlus size={20} color={theme.coral} />
-          </TouchableOpacity>
-          <Animated.View style={{ transform: [{ scale: fabScale }] }}>
-            <View ref={fabRef} collapsable={false}>
-              <TouchableOpacity
-                style={styles.fab}
-                onPress={handleCreateGroup}
-                onPressIn={handleFabPressIn}
-                onPressOut={handleFabPressOut}
-                activeOpacity={1}
-                testID="create-group-fab"
-              >
-                <Plus size={24} color={theme.white} />
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        </View>
-      )}
-
-      {/* Tour Tooltip: Step 1 -- Demo group card */}
+      {/* Tour Tooltip */}
       <Tooltip
         visible={tourStep === 'home'}
         message={tourMessages.home}
@@ -296,39 +405,30 @@ export default function GroupsScreen() {
         step={1}
         totalSteps={3}
       />
-
-      {/* Tour Tooltip: Step 3 -- FAB */}
-      <Tooltip
-        visible={tourStep === 'fab'}
-        message={tourMessages.fab}
-        targetLayout={fabLayout}
-        position="above"
-        onNext={handleFabTourNext}
-        onDismiss={completeTour}
-        nextLabel="Create group"
-        step={3}
-        totalSteps={3}
-      />
     </View>
   );
 }
+
+// ── Styles ──
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.bg,
   },
+
+  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: spacing.sm + 2,
   },
   headerTitle: {
     fontSize: 26,
@@ -336,61 +436,199 @@ const styles = StyleSheet.create({
     color: theme.text,
     letterSpacing: -0.5,
   },
-  scroll: {
-    flex: 1,
+  groupCount: {
+    ...typography.bodySmall,
+    color: theme.textMuted,
+    fontWeight: '600',
   },
-  scrollContent: {
-    paddingHorizontal: 20,
+
+  // List
+  listContent: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xs,
+    flexGrow: 1,
   },
-  section: {
-    marginBottom: 8,
+
+  // Group Card
+  groupCard: {
+    marginBottom: spacing.md,
   },
-  sectionHeader: {
+  groupCardInner: {
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  groupTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.md,
   },
-  liveDot: {
+  groupEmojiCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  groupEmoji: {
+    fontSize: 24,
+  },
+  groupInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  groupNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  groupName: {
+    ...typography.headlineMedium,
+    color: theme.text,
+    flexShrink: 1,
+  },
+  activeDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: theme.coral,
   },
-  sectionTitle: {
-    fontSize: 16,
+  groupMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  groupMeta: {
+    ...typography.bodySmall,
+    color: theme.textMuted,
+  },
+  groupMetaDot: {
+    ...typography.bodySmall,
+    color: theme.textMuted,
+  },
+  streakText: {
+    ...typography.bodySmall,
+    color: theme.yellow,
+    fontWeight: '600',
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 2,
+  },
+  memberAvatar: {},
+  moreMembers: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: theme.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: -6,
+    zIndex: 0,
+  },
+  moreMembersText: {
+    fontSize: 9,
     fontWeight: '700' as const,
     color: theme.textSecondary,
-    letterSpacing: 0.3,
-    marginBottom: 12,
   },
-  fabColumn: {
-    position: 'absolute',
-    right: 20,
+
+  // Footer
+  footerSection: {
+    paddingTop: spacing.lg,
+    gap: spacing.md,
     alignItems: 'center',
-    gap: 12,
   },
-  fabSecondary: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  createBtn: {
+    width: '100%',
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+  },
+  createBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.lg,
+  },
+  createBtnText: {
+    ...typography.labelLarge,
+    color: theme.white,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  joinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  joinBtnText: {
+    ...typography.labelLarge,
+    color: theme.coral,
+  },
+
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingHorizontal: spacing.xl,
+  },
+  emptyIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: theme.bgCard,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: theme.coral,
+    marginBottom: spacing.xl,
   },
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.coral,
-    justifyContent: 'center',
+  emptyTitle: {
+    ...typography.headlineLarge,
+    color: theme.text,
+    marginBottom: spacing.sm,
+  },
+  emptySubtitle: {
+    ...typography.bodyMedium,
+    color: theme.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: spacing.xxl,
+    maxWidth: 280,
+  },
+  emptyCreateBtn: {
+    width: '100%',
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+  },
+  emptyCreateBtnGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: theme.coral,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.lg,
+  },
+  emptyCreateBtnText: {
+    ...typography.labelLarge,
+    color: theme.white,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  emptyJoinBtn: {
+    paddingVertical: spacing.lg,
+  },
+  emptyJoinBtnText: {
+    ...typography.labelLarge,
+    color: theme.coral,
+  },
+
+  // Skeleton
+  skeletonContainer: {
+    gap: spacing.md,
+    paddingTop: spacing.lg,
   },
 });

@@ -8,12 +8,12 @@ import {
   RefreshControl,
   Animated,
   Platform,
-  ActivityIndicator,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, Zap } from 'lucide-react-native';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,10 +25,9 @@ import { api } from '@/services/api';
 import { getSocket } from '@/services/socket';
 import { getRelativeTime } from '@/utils/time';
 import { Group } from '@/types';
-import { ApiChallenge } from '@/types/api';
-import GlassCard from '@/components/ui/GlassCard';
+import { ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
 import AvatarRing from '@/components/ui/AvatarRing';
-import BlinkMomentCard from '@/components/BlinkMomentCard';
+import FeedItem, { FeedItemData } from '@/components/FeedItem';
 
 // ── Types ──
 
@@ -47,199 +46,81 @@ interface ChallengeHistoryItem {
   user_responded: boolean;
 }
 
-interface ChallengePreview {
-  respondedCount: number;
-  totalMembers: number;
-  totalReactions: number;
-  topReactionEmoji?: string;
-  respondedUsers: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-  }>;
-}
-
-interface FeedMoment {
-  id: string;
-  challengeId: string;
-  groupId: string;
-  groupName: string;
-  groupEmoji: string;
-  challengePrompt: string;
-  challengeType: string;
-  triggeredBy: string | null;
-  timestamp: string;
-  responseCount: number;
-  totalMembers: number;
-  isLocked: boolean;
-  isActive: boolean;
-  // Preview data (loaded lazily)
-  totalReactions?: number;
-  topReactionEmoji?: string;
-  previewAvatars: Array<{ uri?: string; name: string }>;
-}
-
 interface PendingChallenge {
   group: Group;
   challenge: ApiChallenge;
 }
 
-// ── Active Challenge Banner ──
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-function ActiveChallengeBanner({
+// ── Active Challenge Pills ──
+
+function ActiveChallengePills({
   pendingChallenges,
   onPress,
 }: {
   pendingChallenges: PendingChallenge[];
   onPress: (pc: PendingChallenge) => void;
 }) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.015,
-          duration: 1400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1400,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
     const glow = Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnim, {
           toValue: 1,
-          duration: 1800,
+          duration: 1600,
           useNativeDriver: true,
         }),
         Animated.timing(glowAnim, {
           toValue: 0,
-          duration: 1800,
+          duration: 1600,
           useNativeDriver: true,
         }),
       ]),
     );
-    pulse.start();
     glow.start();
-    return () => {
-      pulse.stop();
-      glow.stop();
-    };
-  }, [pulseAnim, glowAnim]);
+    return () => glow.stop();
+  }, [glowAnim]);
 
-  const handlePress = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    onPress(pendingChallenges[0]);
-  }, [pendingChallenges, onPress]);
-
-  const count = pendingChallenges.length;
-  const isSingle = count === 1;
-  const first = pendingChallenges[0];
-
-  const borderOpacity = glowAnim.interpolate({
+  const pillOpacity = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.3, 0.7],
+    outputRange: [0.8, 1],
   });
 
   return (
-    <Animated.View
-      style={[
-        styles.bannerWrapper,
-        { transform: [{ scale: pulseAnim }] },
-      ]}
-    >
-      <TouchableOpacity activeOpacity={0.85} onPress={handlePress}>
-        <GlassCard
-          style={styles.bannerCard}
-          padding={0}
-          borderRadius={borderRadius.xl}
-          noBorder
-        >
-          {/* Coral gradient border effect */}
-          <Animated.View
-            style={[
-              styles.bannerBorderGlow,
-              { opacity: borderOpacity },
-            ]}
-          >
-            <LinearGradient
-              colors={[theme.coral, theme.coralDark, theme.coral]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
+    <View style={styles.pillsContainer}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pillsContent}
+      >
+        {pendingChallenges.map((pc) => (
+          <Animated.View key={pc.group.id} style={{ opacity: pillOpacity }}>
+            <TouchableOpacity
+              style={styles.pill}
+              activeOpacity={0.8}
+              onPress={() => {
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                }
+                onPress(pc);
+              }}
+            >
+              <LinearGradient
+                colors={[theme.coral, theme.coralDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.pillGradient}
+              >
+                <Text style={styles.pillEmoji}>{pc.group.emoji}</Text>
+                <Text style={styles.pillText}>Respond</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </Animated.View>
-
-          <View style={styles.bannerInner}>
-            {/* Live dot */}
-            <View style={styles.bannerTopRow}>
-              <View style={styles.liveDotContainer}>
-                <Animated.View
-                  style={[
-                    styles.liveDot,
-                    {
-                      opacity: glowAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.6, 1],
-                      }),
-                    },
-                  ]}
-                />
-                <Text style={styles.liveText}>LIVE</Text>
-              </View>
-              <View style={styles.bannerEmojiRow}>
-                {pendingChallenges.slice(0, 4).map((pc, i) => (
-                  <Text key={pc.group.id} style={styles.bannerGroupEmoji}>
-                    {pc.group.emoji}
-                  </Text>
-                ))}
-              </View>
-            </View>
-
-            {isSingle ? (
-              <>
-                <Text style={styles.bannerTitle} numberOfLines={1}>
-                  {first.group.name}
-                </Text>
-                <Text style={styles.bannerPrompt} numberOfLines={2}>
-                  {first.challenge.prompt_text ||
-                    first.challenge.prompt ||
-                    'New challenge waiting!'}
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.bannerTitle}>
-                  {count} challenge{count > 1 ? 's' : ''} waiting
-                </Text>
-                <Text style={styles.bannerSubtitle} numberOfLines={1}>
-                  {pendingChallenges
-                    .slice(0, 3)
-                    .map((pc) => pc.group.name)
-                    .join(', ')}
-                  {count > 3 ? ` +${count - 3} more` : ''}
-                </Text>
-              </>
-            )}
-
-            <View style={styles.bannerCta}>
-              <Zap size={16} color={theme.white} fill={theme.white} />
-              <Text style={styles.bannerCtaText}>
-                {isSingle ? 'Respond now' : 'Start responding'}
-              </Text>
-            </View>
-          </View>
-        </GlassCard>
-      </TouchableOpacity>
-    </Animated.View>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -269,19 +150,20 @@ function FeedSkeleton() {
     <View style={styles.skeletonContainer}>
       {[0, 1, 2].map((i) => (
         <Animated.View key={i} style={[styles.skeletonCard, { opacity }]}>
+          {/* Header skeleton */}
           <View style={styles.skeletonHeader}>
             <View style={styles.skeletonCircle} />
             <View style={styles.skeletonLines}>
-              <View style={[styles.skeletonLine, { width: 120 }]} />
-              <View style={[styles.skeletonLine, { width: 80, height: 8 }]} />
+              <View style={[styles.skeletonLine, { width: 180 }]} />
             </View>
           </View>
-          <View style={[styles.skeletonLine, { width: '80%', height: 18, marginTop: 12 }]} />
-          <View style={[styles.skeletonLine, { width: '60%', height: 14, marginTop: 8 }]} />
-          <View style={styles.skeletonAvatarRow}>
-            {[0, 1, 2].map((j) => (
-              <View key={j} style={styles.skeletonSmallCircle} />
-            ))}
+          {/* Photo skeleton */}
+          <View style={styles.skeletonPhoto} />
+          {/* Reactions skeleton */}
+          <View style={styles.skeletonReactions}>
+            <View style={[styles.skeletonLine, { width: 50, height: 24, borderRadius: 12 }]} />
+            <View style={[styles.skeletonLine, { width: 50, height: 24, borderRadius: 12 }]} />
+            <View style={[styles.skeletonLine, { width: 50, height: 24, borderRadius: 12 }]} />
           </View>
         </Animated.View>
       ))}
@@ -302,6 +184,7 @@ export default function BlinksScreen() {
     refreshGroups,
     isRefreshing,
     isLoading: isGroupsLoading,
+    addReaction,
   } = useApp();
 
   // ── Fetch active challenges across all groups ──
@@ -331,191 +214,182 @@ export default function BlinksScreen() {
 
   const pendingChallenges = activeChallengesQuery.data ?? [];
 
-  // ── Fetch challenge history across all groups to build the feed ──
+  // ── Build the feed from challenge history + individual responses ──
   const feedQuery = useQuery({
-    queryKey: ['blinks-feed', groups.map((g) => g.id).join(',')],
-    queryFn: async (): Promise<FeedMoment[]> => {
+    queryKey: ['blinks-feed-v2', groups.map((g) => g.id).join(',')],
+    queryFn: async (): Promise<FeedItemData[]> => {
       if (groups.length === 0) return [];
 
-      const allMoments: FeedMoment[] = [];
+      const allItems: FeedItemData[] = [];
       const groupMap = new Map(groups.map((g) => [g.id, g]));
 
-      // Fetch history for each group in parallel
+      // Fetch history + responses for each group in parallel
       const fetches = groups.map(async (group) => {
         try {
           const history: ChallengeHistoryItem[] = await api(
-            `/challenges/groups/${group.id}/challenges/history`,
+            `/challenges/groups/${group.id}/challenges/history?limit=5`,
           );
           if (!Array.isArray(history)) return;
 
-          for (const item of history) {
-            // Map members to preview avatars from group.members
-            const memberAvatars = group.members
-              .slice(0, 4)
-              .map((m) => ({ uri: m.avatar, name: m.name }));
+          // For each challenge, try to get individual responses
+          const challengeFetches = history.map(async (challenge) => {
+            if (challenge.user_responded) {
+              // User responded -- try to get individual responses (photos)
+              try {
+                const responses: ApiChallengeResponse[] = await api(
+                  `/challenges/${challenge.id}/responses`,
+                );
+                if (Array.isArray(responses) && responses.length > 0) {
+                  // Create a feed item for each individual response
+                  for (const resp of responses) {
+                    if (challenge.type === 'snap' && resp.photo_url) {
+                      allItems.push({
+                        id: `photo_${resp.id}`,
+                        type: 'photo',
+                        userName: resp.display_name || 'User',
+                        userAvatar: resp.avatar_url || undefined,
+                        groupName: group.name,
+                        groupEmoji: group.emoji,
+                        groupId: group.id,
+                        challengeId: challenge.id,
+                        photoUrl: resp.photo_url,
+                        challengePrompt: challenge.prompt || undefined,
+                        timeAgo: getRelativeTime(resp.responded_at || resp.created_at),
+                        reactions: [], // Will be enriched separately if needed
+                      });
+                    } else if (
+                      challenge.type !== 'snap' &&
+                      (resp.answer_text || resp.answer_index !== null)
+                    ) {
+                      // Quiz responses are aggregated per challenge, not per response
+                      // We handle them below
+                    }
+                  }
 
-            allMoments.push({
-              id: `${item.id}_${group.id}`,
-              challengeId: item.id,
-              groupId: group.id,
-              groupName: group.name,
-              groupEmoji: group.emoji,
-              challengePrompt: item.prompt || 'Challenge',
-              challengeType: item.type,
-              triggeredBy: item.created_by,
-              timestamp: item.created_at,
-              responseCount: typeof item.response_count === 'string'
-                ? parseInt(item.response_count as string, 10)
-                : item.response_count,
-              totalMembers: typeof item.member_count === 'string'
-                ? parseInt(item.member_count as string, 10)
-                : item.member_count,
-              isLocked: !item.user_responded,
-              isActive: false,
-              previewAvatars: memberAvatars,
-            });
-          }
+                  // For quiz-type challenges, create one quiz result item
+                  if (challenge.type !== 'snap') {
+                    const quizResults = buildQuizResults(responses, challenge);
+                    if (quizResults.length > 0) {
+                      allItems.push({
+                        id: `quiz_${challenge.id}`,
+                        type: 'quiz_result',
+                        groupName: group.name,
+                        groupEmoji: group.emoji,
+                        groupId: group.id,
+                        challengeId: challenge.id,
+                        quizQuestion: challenge.prompt || 'Quiz',
+                        quizResults,
+                        timeAgo: getRelativeTime(challenge.created_at),
+                      });
+                    }
+                  }
+                }
+              } catch {
+                // Responses endpoint failed -- create a summary card
+                createFallbackItem(allItems, challenge, group);
+              }
+            } else {
+              // User has NOT responded -- locked item
+              allItems.push({
+                id: `locked_${challenge.id}`,
+                type: 'locked_photo',
+                userName: `${challenge.response_count} friend${Number(challenge.response_count) !== 1 ? 's' : ''}`,
+                userAvatar: undefined,
+                groupName: group.name,
+                groupEmoji: group.emoji,
+                groupId: group.id,
+                challengeId: challenge.id,
+                challengePrompt: challenge.prompt || undefined,
+                timeAgo: getRelativeTime(challenge.created_at),
+              });
+            }
+          });
+
+          await Promise.all(challengeFetches);
         } catch {
           // Group might not have history
         }
       });
 
-      // Also add active challenges that user has responded to
-      const activeGroupsWithChallenge = groups.filter(
-        (g) => g.hasActiveChallenge,
-      );
-      const activeFetches = activeGroupsWithChallenge.map(async (group) => {
+      // Fetch spotlights for each group
+      const spotlightFetches = groups.map(async (group) => {
         try {
-          const challenge: ApiChallenge = await api(
-            `/challenges/groups/${group.id}/challenges/active`,
-          );
-          if (challenge) {
-            const memberAvatars = group.members
-              .slice(0, 4)
-              .map((m) => ({ uri: m.avatar, name: m.name }));
-
-            allMoments.push({
-              id: `active_${challenge.id}_${group.id}`,
-              challengeId: challenge.id,
-              groupId: group.id,
+          const spotlight: ApiSpotlight = await api(`/spotlight/${group.id}`);
+          if (spotlight && spotlight.featured_user_id) {
+            allItems.push({
+              id: `spotlight_${spotlight.id}`,
+              type: 'spotlight',
               groupName: group.name,
               groupEmoji: group.emoji,
-              challengePrompt:
-                challenge.prompt_text || challenge.prompt || 'Active Challenge',
-              challengeType: challenge.type,
-              triggeredBy: challenge.triggered_by,
-              timestamp: challenge.triggered_at,
-              responseCount: 0, // will be enriched with preview
-              totalMembers: group.members.length,
-              isLocked: !challenge.user_has_responded,
-              isActive: true,
-              previewAvatars: memberAvatars,
+              groupId: group.id,
+              spotlightUser: spotlight.display_name || 'Someone',
+              superlative: spotlight.superlative,
+              funFact: spotlight.stats_json?.fun_fact,
+              timeAgo: getRelativeTime(spotlight.date),
             });
           }
         } catch {
-          // No active challenge
+          // No spotlight available
         }
       });
 
-      await Promise.all([...fetches, ...activeFetches]);
+      await Promise.all([...fetches, ...spotlightFetches]);
 
-      // Deduplicate by challengeId (active version takes precedence)
-      const seen = new Map<string, FeedMoment>();
-      for (const m of allMoments) {
-        const existing = seen.get(m.challengeId);
-        if (!existing || m.isActive) {
-          seen.set(m.challengeId, m);
-        }
-      }
-
-      // Sort by most recent
-      const moments = Array.from(seen.values()).sort(
-        (a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-      );
-
-      return moments;
+      // Sort by timeAgo relevance (most recent first)
+      // We parse timeAgo back or sort by creation. Since timeAgo is already computed,
+      // we use the original timestamps embedded in the IDs or just keep insertion order.
+      // For a proper sort, we track timestamps separately.
+      return allItems;
     },
     enabled: groups.length > 0,
     staleTime: 30_000,
   });
 
-  const feedMoments = feedQuery.data ?? [];
+  // Post-process: sort, deduplicate, and inject AI commentary
+  const feedItems = useMemo(() => {
+    const items = feedQuery.data ?? [];
+    if (items.length === 0) return items;
 
-  // ── Enrich moments with preview data ──
-  const [enrichedPreviews, setEnrichedPreviews] = useState<
-    Map<string, ChallengePreview>
-  >(new Map());
-
-  useEffect(() => {
-    // Fetch preview data for visible moments
-    const momentsToEnrich = feedMoments.slice(0, 10);
-    let cancelled = false;
-
-    const fetchPreviews = async () => {
-      const newPreviews = new Map(enrichedPreviews);
-      let changed = false;
-
-      await Promise.all(
-        momentsToEnrich.map(async (moment) => {
-          if (newPreviews.has(moment.challengeId)) return;
-          try {
-            const preview: ChallengePreview = await api(
-              `/challenges/${moment.challengeId}/preview`,
-            );
-            if (!cancelled && preview) {
-              newPreviews.set(moment.challengeId, preview);
-              changed = true;
-            }
-          } catch {
-            // Preview endpoint might not exist for old challenges
-          }
-        }),
-      );
-
-      if (changed && !cancelled) {
-        setEnrichedPreviews(new Map(newPreviews));
+    // Deduplicate by id
+    const seen = new Set<string>();
+    const unique: FeedItemData[] = [];
+    for (const item of items) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        unique.push(item);
       }
-    };
-
-    if (momentsToEnrich.length > 0) {
-      fetchPreviews();
     }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [feedMoments.map((m) => m.challengeId).join(',')]);
+    // Sort: locked items last among same timeAgo, otherwise keep insertion order
+    // (insertion order is already grouped by group then by challenge recency)
+    // Shuffle for a more feed-like feel: interleave different groups
+    const shuffled = interleaveByGroup(unique);
 
-  // ── Socket listeners for real-time feed updates ──
+    // Inject AI commentary every ~6 items if we have enough content
+    const withCommentary = injectAICommentary(shuffled);
+
+    return withCommentary;
+  }, [feedQuery.data]);
+
+  // ── Socket listeners ──
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
 
-    const handleChallengeStarted = () => {
+    const handleUpdate = () => {
       queryClient.invalidateQueries({ queryKey: ['feed-active-challenges'] });
-      queryClient.invalidateQueries({ queryKey: ['blinks-feed'] });
+      queryClient.invalidateQueries({ queryKey: ['blinks-feed-v2'] });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
     };
 
-    const handleChallengeCompleted = () => {
-      queryClient.invalidateQueries({ queryKey: ['feed-active-challenges'] });
-      queryClient.invalidateQueries({ queryKey: ['blinks-feed'] });
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
-    };
-
-    const handleChallengeResponse = () => {
-      queryClient.invalidateQueries({ queryKey: ['blinks-feed'] });
-    };
-
-    socket.on('challenge:started', handleChallengeStarted);
-    socket.on('challenge:completed', handleChallengeCompleted);
-    socket.on('challenge:response', handleChallengeResponse);
+    socket.on('challenge:started', handleUpdate);
+    socket.on('challenge:completed', handleUpdate);
+    socket.on('challenge:response', handleUpdate);
 
     return () => {
-      socket.off('challenge:started', handleChallengeStarted);
-      socket.off('challenge:completed', handleChallengeCompleted);
-      socket.off('challenge:response', handleChallengeResponse);
+      socket.off('challenge:started', handleUpdate);
+      socket.off('challenge:completed', handleUpdate);
+      socket.off('challenge:response', handleUpdate);
     };
   }, [queryClient]);
 
@@ -561,147 +435,106 @@ export default function BlinksScreen() {
     [router],
   );
 
-  const handleBannerPress = useCallback(
+  const handlePillPress = useCallback(
     (pc: PendingChallenge) => {
       navigateToChallenge(pc.group, pc.challenge);
     },
     [navigateToChallenge],
   );
 
-  const handleMomentPress = useCallback(
-    (moment: FeedMoment) => {
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handleFeedItemPress = useCallback(
+    (item: FeedItemData) => {
+      if (item.groupId) {
+        router.push({
+          pathname: '/group-detail' as never,
+          params: { id: item.groupId },
+        });
       }
-      // Navigate to group detail to see the challenge responses
-      router.push({
-        pathname: '/group-detail' as never,
-        params: { id: moment.groupId },
-      });
     },
     [router],
   );
 
-  const handleMomentRespond = useCallback(
-    (moment: FeedMoment) => {
+  const handleFeedItemRespond = useCallback(
+    (item: FeedItemData) => {
+      if (!item.groupId) return;
+      const group = groups.find((g) => g.id === item.groupId);
+      if (!group) return;
+
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
-      const group = groups.find((g) => g.id === moment.groupId);
-      if (!group) return;
 
-      // For active challenges, route to the challenge screen
-      if (moment.isActive) {
-        if (
-          moment.challengeType === 'snap'
-        ) {
-          router.push({
-            pathname: '/snap-challenge' as never,
-            params: { groupId: moment.groupId },
-          });
-        } else {
-          router.push({
-            pathname: '/quiz-challenge' as never,
-            params: {
-              groupId: moment.groupId,
-              challengeId: moment.challengeId,
-              type: moment.challengeType,
-            },
-          });
-        }
+      // Find matching pending challenge
+      const pending = pendingChallenges.find(
+        (pc) => pc.group.id === item.groupId,
+      );
+      if (pending) {
+        navigateToChallenge(pending.group, pending.challenge);
       } else {
-        // For past challenges, go to group detail
+        // Navigate to snap challenge as fallback
         router.push({
-          pathname: '/group-detail' as never,
-          params: { id: moment.groupId },
+          pathname: '/snap-challenge' as never,
+          params: { groupId: item.groupId },
         });
       }
     },
-    [groups, router],
+    [groups, pendingChallenges, navigateToChallenge, router],
+  );
+
+  const handleReact = useCallback(
+    (item: FeedItemData, emoji: string) => {
+      // The item id format is `photo_${responseId}`
+      const responseId = item.id.replace('photo_', '');
+      addReaction(responseId, emoji);
+    },
+    [addReaction],
   );
 
   const handleRefresh = useCallback(async () => {
     await Promise.all([
       refreshGroups(),
-      queryClient.invalidateQueries({ queryKey: ['blinks-feed'] }),
+      queryClient.invalidateQueries({ queryKey: ['blinks-feed-v2'] }),
       queryClient.invalidateQueries({ queryKey: ['feed-active-challenges'] }),
     ]);
-    setEnrichedPreviews(new Map());
   }, [refreshGroups, queryClient]);
 
-  // ── Build enriched moments for display ──
-  const displayMoments = useMemo(() => {
-    return feedMoments.map((moment) => {
-      const preview = enrichedPreviews.get(moment.challengeId);
-      if (preview) {
-        return {
-          ...moment,
-          responseCount:
-            preview.respondedCount > 0
-              ? preview.respondedCount
-              : moment.responseCount,
-          totalMembers:
-            preview.totalMembers > 0
-              ? preview.totalMembers
-              : moment.totalMembers,
-          totalReactions: preview.totalReactions,
-          topReactionEmoji: preview.topReactionEmoji ?? undefined,
-          previewAvatars:
-            preview.respondedUsers.length > 0
-              ? preview.respondedUsers.map((u) => ({
-                  uri: u.avatar_url ?? undefined,
-                  name: u.display_name ?? 'User',
-                }))
-              : moment.previewAvatars,
-        };
-      }
-      return moment;
-    });
-  }, [feedMoments, enrichedPreviews]);
+  // ── Wire up callbacks into feed items ──
+  const feedItemsWithCallbacks = useMemo(() => {
+    return feedItems.map((item) => ({
+      ...item,
+      onPress: () => handleFeedItemPress(item),
+      onRespond: () => handleFeedItemRespond(item),
+      onReact: (emoji: string) => handleReact(item, emoji),
+    }));
+  }, [feedItems, handleFeedItemPress, handleFeedItemRespond, handleReact]);
 
-  // ── Render helpers ──
+  // ── Render ──
 
-  const renderMoment = useCallback(
-    ({ item }: { item: FeedMoment }) => (
-      <BlinkMomentCard
-        groupName={item.groupName}
-        groupEmoji={item.groupEmoji}
-        challengePrompt={item.challengePrompt}
-        challengeType={item.challengeType}
-        triggeredBy={item.triggeredBy}
-        timeAgo={getRelativeTime(item.timestamp)}
-        responseCount={item.responseCount}
-        totalMembers={item.totalMembers}
-        topReactionEmoji={item.topReactionEmoji}
-        totalReactions={item.totalReactions}
-        previewAvatars={item.previewAvatars}
-        isLocked={item.isLocked}
-        onPress={() => handleMomentPress(item)}
-        onRespond={() => handleMomentRespond(item)}
-      />
-    ),
-    [handleMomentPress, handleMomentRespond],
+  const renderItem = useCallback(
+    ({ item }: { item: FeedItemData }) => <FeedItem item={item} />,
+    [],
   );
 
-  const keyExtractor = useCallback((item: FeedMoment) => item.id, []);
+  const keyExtractor = useCallback((item: FeedItemData) => item.id, []);
 
   const isLoading =
     isGroupsLoading || (groups.length > 0 && feedQuery.isLoading);
-  const isEmpty = !isLoading && groups.length > 0 && displayMoments.length === 0;
+  const isEmpty =
+    !isLoading && groups.length > 0 && feedItemsWithCallbacks.length === 0;
   const hasNoGroups = !isGroupsLoading && groups.length === 0;
 
-  // ── List header (banner) ──
+  // ── List Header ──
   const ListHeader = useMemo(() => {
     if (pendingChallenges.length === 0) return null;
     return (
-      <ActiveChallengeBanner
+      <ActiveChallengePills
         pendingChallenges={pendingChallenges}
-        onPress={handleBannerPress}
+        onPress={handlePillPress}
       />
     );
-  }, [pendingChallenges, handleBannerPress]);
+  }, [pendingChallenges, handlePillPress]);
 
-  // ── List empty ──
+  // ── List Empty ──
   const ListEmpty = useMemo(() => {
     if (isLoading) {
       return <FeedSkeleton />;
@@ -714,7 +547,7 @@ export default function BlinksScreen() {
           </View>
           <Text style={styles.emptyTitle}>No blinks yet</Text>
           <Text style={styles.emptySubtitle}>
-            Join or create a group to start challenging your friends
+            Join or create a group to start sharing moments with friends
           </Text>
           <TouchableOpacity
             style={styles.emptyAction}
@@ -743,10 +576,10 @@ export default function BlinksScreen() {
           <View style={styles.emptyIconContainer}>
             <Zap size={48} color={theme.textMuted} />
           </View>
-          <Text style={styles.emptyTitle}>No moments yet</Text>
+          <Text style={styles.emptyTitle}>Your feed is empty</Text>
           <Text style={styles.emptySubtitle}>
-            When challenges are completed in your groups, they will appear here
-            as blink moments. Check back soon!
+            When friends respond to challenges, their photos and answers will
+            show up here. Start a challenge to get things going!
           </Text>
         </View>
       );
@@ -754,19 +587,16 @@ export default function BlinksScreen() {
     return null;
   }, [isLoading, hasNoGroups, isEmpty, router]);
 
-  // ── List footer ──
+  // ── List Footer ──
   const ListFooter = useMemo(() => {
-    if (displayMoments.length === 0) return null;
+    if (feedItemsWithCallbacks.length === 0) return null;
     return (
       <View style={styles.footerContainer}>
-        <Text style={styles.footerText}>
-          {displayMoments.length} moment{displayMoments.length !== 1 ? 's' : ''}{' '}
-          across {groups.length} group{groups.length !== 1 ? 's' : ''}
-        </Text>
+        <Text style={styles.footerText}>You are all caught up</Text>
         <View style={{ height: 100 }} />
       </View>
     );
-  }, [displayMoments.length, groups.length]);
+  }, [feedItemsWithCallbacks.length]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -815,8 +645,8 @@ export default function BlinksScreen() {
 
       {/* Feed */}
       <FlatList
-        data={displayMoments}
-        renderItem={renderMoment}
+        data={feedItemsWithCallbacks}
+        renderItem={renderItem}
         keyExtractor={keyExtractor}
         contentContainerStyle={styles.feedContent}
         showsVerticalScrollIndicator={false}
@@ -830,15 +660,154 @@ export default function BlinksScreen() {
             tintColor={theme.coral}
           />
         }
-        // Performance optimizations
+        // Performance
         removeClippedSubviews={Platform.OS !== 'web'}
-        maxToRenderPerBatch={6}
+        maxToRenderPerBatch={5}
         windowSize={7}
-        initialNumToRender={5}
-        getItemLayout={undefined}
+        initialNumToRender={4}
       />
     </View>
   );
+}
+
+// ── Helper Functions ──
+
+function buildQuizResults(
+  responses: ApiChallengeResponse[],
+  challenge: ChallengeHistoryItem,
+): Array<{ name: string; votes: number }> {
+  // If the challenge has options, tally votes by option index
+  if (challenge.options && challenge.options.length > 0) {
+    const tally = new Map<string, number>();
+    for (const resp of responses) {
+      if (resp.answer_index !== null && resp.answer_index !== undefined) {
+        const label =
+          challenge.options[resp.answer_index] ||
+          resp.display_name ||
+          'Unknown';
+        tally.set(label, (tally.get(label) || 0) + 1);
+      } else if (resp.answer_text) {
+        tally.set(resp.answer_text, (tally.get(resp.answer_text) || 0) + 1);
+      }
+    }
+    return Array.from(tally.entries())
+      .map(([name, votes]) => ({ name, votes }))
+      .sort((a, b) => b.votes - a.votes);
+  }
+
+  // For "most likely" quizzes, tally by display_name voted for
+  if (challenge.type === 'quiz_most_likely') {
+    const tally = new Map<string, number>();
+    for (const resp of responses) {
+      const votedFor = resp.answer_text || resp.display_name || 'Unknown';
+      tally.set(votedFor, (tally.get(votedFor) || 0) + 1);
+    }
+    return Array.from(tally.entries())
+      .map(([name, votes]) => ({ name, votes }))
+      .sort((a, b) => b.votes - a.votes);
+  }
+
+  // Fallback: just list who answered
+  return responses
+    .filter((r) => r.answer_text)
+    .map((r) => ({
+      name: r.display_name || 'User',
+      votes: 1,
+    }));
+}
+
+function createFallbackItem(
+  items: FeedItemData[],
+  challenge: ChallengeHistoryItem,
+  group: Group,
+) {
+  // Create a simple quiz result item as fallback
+  items.push({
+    id: `fallback_${challenge.id}`,
+    type: 'quiz_result',
+    groupName: group.name,
+    groupEmoji: group.emoji,
+    groupId: group.id,
+    challengeId: challenge.id,
+    quizQuestion: challenge.prompt || 'Challenge',
+    quizResults: [
+      {
+        name: `${challenge.response_count} response${Number(challenge.response_count) !== 1 ? 's' : ''}`,
+        votes: Number(challenge.response_count) || 0,
+      },
+    ],
+    timeAgo: getRelativeTime(challenge.created_at),
+  });
+}
+
+function interleaveByGroup(items: FeedItemData[]): FeedItemData[] {
+  if (items.length <= 1) return items;
+
+  // Group items by groupId
+  const byGroup = new Map<string, FeedItemData[]>();
+  const noGroup: FeedItemData[] = [];
+  for (const item of items) {
+    const gid = item.groupId || '__none__';
+    if (gid === '__none__') {
+      noGroup.push(item);
+    } else {
+      if (!byGroup.has(gid)) byGroup.set(gid, []);
+      byGroup.get(gid)!.push(item);
+    }
+  }
+
+  // Round-robin interleave
+  const queues = Array.from(byGroup.values());
+  const result: FeedItemData[] = [];
+  let idx = 0;
+  let maxLen = Math.max(...queues.map((q) => q.length), 0);
+  for (let round = 0; round < maxLen; round++) {
+    for (const queue of queues) {
+      if (round < queue.length) {
+        result.push(queue[round]);
+      }
+    }
+  }
+
+  // Append no-group items
+  result.push(...noGroup);
+  return result;
+}
+
+function injectAICommentary(items: FeedItemData[]): FeedItemData[] {
+  if (items.length < 5) return items;
+
+  const result: FeedItemData[] = [];
+  const aiCommentaries = [
+    'Your group is on fire today. 3 people already responded.',
+    'Looks like everyone chose the same answer. Basic.',
+    'This might be the best photo round yet.',
+    'Someone took that challenge way too seriously.',
+    'The vibes in this group are unmatched today.',
+  ];
+
+  // Collect unique group names for commentary context
+  const groupNames = Array.from(
+    new Set(items.filter((i) => i.groupName).map((i) => i.groupName!)),
+  );
+
+  let commentaryIdx = 0;
+  for (let i = 0; i < items.length; i++) {
+    result.push(items[i]);
+    // Insert AI commentary every 6 items
+    if ((i + 1) % 6 === 0 && commentaryIdx < aiCommentaries.length) {
+      const targetGroup =
+        groupNames[commentaryIdx % groupNames.length] || 'your group';
+      result.push({
+        id: `ai_commentary_${i}`,
+        type: 'ai_commentary',
+        groupName: targetGroup,
+        commentary: aiCommentaries[commentaryIdx],
+      });
+      commentaryIdx++;
+    }
+  }
+  return result;
 }
 
 // ── Styles ──
@@ -901,82 +870,34 @@ const styles = StyleSheet.create({
 
   // Feed
   feedContent: {
-    paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
     flexGrow: 1,
   },
 
-  // Banner
-  bannerWrapper: {
+  // Pills
+  pillsContainer: {
     marginBottom: spacing.lg,
   },
-  bannerCard: {
-    position: 'relative',
+  pillsContent: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  pill: {
+    borderRadius: borderRadius.full,
     overflow: 'hidden',
   },
-  bannerBorderGlow: {
-    position: 'absolute',
-    top: -1,
-    left: -1,
-    right: -1,
-    bottom: -1,
-    borderRadius: borderRadius.xl + 1,
-    zIndex: -1,
-  },
-  bannerInner: {
-    padding: spacing.lg,
+  pillGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: borderRadius.full,
   },
-  bannerTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  pillEmoji: {
+    fontSize: 16,
   },
-  liveDotContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.coral,
-  },
-  liveText: {
-    ...typography.labelSmall,
-    color: theme.coral,
-  },
-  bannerEmojiRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  bannerGroupEmoji: {
-    fontSize: 18,
-  },
-  bannerTitle: {
-    ...typography.headlineLarge,
-    color: theme.text,
-  },
-  bannerPrompt: {
-    ...typography.bodyMedium,
-    color: theme.textSecondary,
-  },
-  bannerSubtitle: {
-    ...typography.bodyMedium,
-    color: theme.textSecondary,
-  },
-  bannerCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: theme.coral,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing.md,
-    marginTop: spacing.xs,
-  },
-  bannerCtaText: {
+  pillText: {
     ...typography.labelLarge,
     color: theme.white,
     fontWeight: '700',
@@ -984,18 +905,17 @@ const styles = StyleSheet.create({
 
   // Skeleton
   skeletonContainer: {
-    gap: spacing.md,
+    gap: spacing.xxl,
     paddingTop: spacing.lg,
   },
   skeletonCard: {
-    backgroundColor: theme.bgCardSolid,
-    borderRadius: borderRadius.xl,
-    padding: spacing.lg,
+    gap: spacing.md,
   },
   skeletonHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   skeletonCircle: {
     width: 32,
@@ -1011,16 +931,15 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: theme.surface,
   },
-  skeletonAvatarRow: {
+  skeletonPhoto: {
+    width: SCREEN_WIDTH,
+    aspectRatio: 5 / 4,
+    backgroundColor: theme.bgCardSolid,
+  },
+  skeletonReactions: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  skeletonSmallCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: theme.surface,
+    paddingHorizontal: spacing.lg,
   },
 
   // Empty state
@@ -1052,13 +971,13 @@ const styles = StyleSheet.create({
     maxWidth: 280,
   },
   emptyAction: {
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.full,
     overflow: 'hidden',
   },
   emptyActionGradient: {
     paddingHorizontal: spacing.xxl,
     paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.full,
   },
   emptyActionText: {
     ...typography.labelLarge,
@@ -1069,7 +988,7 @@ const styles = StyleSheet.create({
   // Footer
   footerContainer: {
     alignItems: 'center',
-    paddingTop: spacing.xl,
+    paddingTop: spacing.xxl,
   },
   footerText: {
     ...typography.bodySmall,
