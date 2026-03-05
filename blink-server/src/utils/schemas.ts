@@ -2,9 +2,6 @@ import { z } from 'zod';
 
 // ── Auth schemas ──────────────────────────────────────────────
 
-/**
- * E.164 phone number format: + followed by 1-15 digits
- */
 const phoneNumberSchema = z
   .string()
   .transform((val) => val.startsWith('+') ? val : `+${val}`)
@@ -14,29 +11,12 @@ export const requestOtpSchema = z.object({
   phone_number: phoneNumberSchema,
 });
 
-/**
- * verify-otp accepts two flows:
- *
- * 1. Dev mode  - { phone_number, code: "123456" }
- * 2. Firebase  - { firebaseToken: "<Firebase ID token>" }
- *    phone_number is extracted from the token server-side.
- *
- * Both phone_number and code are optional to support the Firebase flow
- * where neither is sent by the client.
- */
 export const verifyOtpSchema = z.object({
-  phone_number: phoneNumberSchema.optional(),
+  phone_number: phoneNumberSchema,
   code: z
     .string()
-    .regex(/^\d{6}$/, 'OTP code must be exactly 6 digits')
-    .optional(),
-  firebaseToken: z.string().min(1, 'firebaseToken must be a non-empty string').optional(),
-}).refine(
-  (data) => data.firebaseToken || (data.phone_number && data.code),
-  {
-    message: 'Either firebaseToken or both phone_number and code must be provided',
-  }
-);
+    .regex(/^\d{6}$/, 'OTP code must be exactly 6 digits'),
+});
 
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, 'refreshToken is required'),
@@ -98,7 +78,6 @@ export const createChallengeSchema = z.object({
   correct_answer: z.number().int().min(0).optional(),
 }).refine(
   (data) => {
-    // prompt_text is required when type is 'prompt'
     if (data.type === 'prompt' && !data.prompt_text) return false;
     return true;
   },
@@ -123,6 +102,7 @@ export const addReactionSchema = z.object({
 });
 
 // ── Moderation schemas ──────────────────────────────────────
+
 const contentTypeEnum = z.enum(['photo', 'user', 'group', 'challenge_response']);
 const reportReasonEnum = z.enum(['inappropriate', 'spam', 'harassment', 'hate_speech', 'nudity', 'violence', 'other']);
 

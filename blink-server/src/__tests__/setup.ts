@@ -4,7 +4,7 @@
  * Configures the test environment with:
  * - Environment variables for JWT secrets
  * - Database mock (all SQL queries are intercepted)
- * - Firebase mock (disabled for test mode)
+ * - SMS mock (disabled for test mode)
  * - Socket.io mock (emitToGroup is a no-op spy)
  * - Logger suppression (no console noise during tests)
  */
@@ -31,12 +31,10 @@ jest.mock('../config/database', () => {
   };
 });
 
-// ── Mock Firebase (always disabled in tests) ──────────────────────
-jest.mock('../config/firebase', () => ({
-  isFirebaseConfigured: false,
-  verifyFirebaseToken: jest.fn().mockRejectedValue(new Error('Firebase not configured in tests')),
-  __esModule: true,
-  default: null,
+// ── Mock SMS service (disabled in tests) ─────────────────────────
+jest.mock('../config/sms', () => ({
+  isSmsConfigured: false,
+  sendSms: jest.fn().mockResolvedValue(undefined),
 }));
 
 // ── Mock Socket.io ────────────────────────────────────────────────

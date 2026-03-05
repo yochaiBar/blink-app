@@ -7,7 +7,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import * as Sentry from "@sentry/react-native";
 import { AppProvider } from "@/providers/AppProvider";
-import { useAuthStore, initFirebaseAuth } from "@/stores/authStore";
+import { useAuthStore } from "@/stores/authStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { theme } from "@/constants/colors";
 import * as Notifications from "expo-notifications";
@@ -20,28 +20,6 @@ import {
 import { OfflineBanner } from "@/components/ui";
 import * as Linking from "expo-linking";
 import { useSocket } from "@/hooks/useSocket";
-
-// ---------------------------------------------------------------------------
-// Firebase initialisation (dev builds only).
-//
-// In Expo Go the Metro resolver stubs @react-native-firebase/* with an empty
-// module so the import below resolves harmlessly. We then detect whether the
-// real native module is present by checking that the imported object exposes
-// the expected `auth` function. If it does, we hand it to the auth store so
-// Firebase phone auth is used for OTP. Otherwise the store falls back to the
-// server-side dev OTP flow.
-// ---------------------------------------------------------------------------
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const firebaseAuth = require("@react-native-firebase/auth");
-  // The stub returns `{}`, so `firebaseAuth.default` will be undefined.
-  // The real package exports `default` which is the auth() callable.
-  if (typeof firebaseAuth === "function" || typeof firebaseAuth?.default === "function") {
-    initFirebaseAuth(firebaseAuth.default ?? firebaseAuth);
-  }
-} catch {
-  // Firebase native modules unavailable (Expo Go) -- fall back to dev OTP.
-}
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "",

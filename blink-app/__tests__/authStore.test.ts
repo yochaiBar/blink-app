@@ -69,7 +69,7 @@ describe('Initial State', () => {
 // requestOtp
 // ─────────────────────────────────────────────────────────────────
 describe('requestOtp', () => {
-  it('should request OTP via API in dev mode (no Firebase)', async () => {
+  it('should request OTP via server API', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(200, {
       message: 'OTP sent',
       verificationId: 'dev-mode',

@@ -47,8 +47,6 @@ describe('POST /api/auth/request-otp', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('OTP sent');
-    expect(res.body.verificationId).toBe('dev-mode');
-    expect(res.body.dev_hint).toBe('Use 123456');
   });
 
   it('should accept phone number without + prefix and normalize it', async () => {
@@ -173,7 +171,7 @@ describe('POST /api/auth/verify-otp', () => {
     expect(res.status).toBe(401);
   });
 
-  it('should return 400 for missing phone_number and code when no firebaseToken', async () => {
+  it('should return 400 for missing phone_number and code', async () => {
     const res = await request(app)
       .post('/api/auth/verify-otp')
       .send({});

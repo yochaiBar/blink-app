@@ -11,15 +11,6 @@ interface User {
   bio: string | null;
 }
 
-// Firebase auth module — set by initFirebaseAuth() in _layout.tsx
-// when running in a dev build with native modules available.
-let firebaseAuth: any = null;
-let confirmationResult: any = null;
-
-export function initFirebaseAuth(auth: any) {
-  firebaseAuth = auth;
-}
-
 interface AuthState {
   user: User | null;
   isLoading: boolean;
@@ -38,12 +29,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
 
   requestOtp: async (phone: string) => {
-    if (firebaseAuth) {
-      confirmationResult = await firebaseAuth().signInWithPhoneNumber(phone);
-      return;
-    }
-
-    // Dev mode: server stores a predictable OTP (123456)
     await api('/auth/request-otp', {
       method: 'POST',
       body: JSON.stringify({ phone_number: phone }),
@@ -51,29 +36,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   verifyOtp: async (phone: string, code: string) => {
-    let data: any;
-
-    if (confirmationResult) {
-      await confirmationResult.confirm(code);
-      const idToken = await firebaseAuth().currentUser?.getIdToken();
-      if (!idToken) throw new Error('Failed to get Firebase ID token');
-
-      data = await api('/auth/verify-otp', {
-        method: 'POST',
-        body: JSON.stringify({ firebaseToken: idToken }),
-      });
-      confirmationResult = null;
-    } else {
-      data = await api('/auth/verify-otp', {
-        method: 'POST',
-        body: JSON.stringify({ phone_number: phone, code }),
-      });
-    }
+    const data = await api('/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phone, code }),
+    });
 
     await setTokens(data.accessToken, data.refreshToken);
     set({ user: data.user, isAuthenticated: true });
 
-    // Register push token immediately after login (fire-and-forget)
     if (Platform.OS !== 'web') {
       sendPushTokenToServer();
     }
@@ -90,15 +60,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    if (firebaseAuth) {
-      try {
-        await firebaseAuth().signOut();
-      } catch (err: unknown) {
-        if (__DEV__) {
-          console.warn('[AuthStore] Firebase signOut failed:', err instanceof Error ? err.message : err);
-        }
-      }
-    }
     await clearTokens();
     set({ user: null, isAuthenticated: false });
   },

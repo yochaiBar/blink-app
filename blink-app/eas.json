@@ -17,7 +17,6 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EX_FIREBASE": "1",
         "API_URL": "https://blink-api-production.up.railway.app/api"
       },
       "ios": {
@@ -30,7 +29,6 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EX_FIREBASE": "1",
         "API_URL": "https://blink-api-production.up.railway.app/api"
       },
       "ios": {

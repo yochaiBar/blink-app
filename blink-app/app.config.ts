@@ -22,7 +22,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.yochaibar.blinks',
-    googleServicesFile: './GoogleService-Info.plist',
     associatedDomains: ['applinks:blink.app'],
     infoPlist: {
       NSCameraUsageDescription:
@@ -94,7 +93,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     edgeToEdgeEnabled: true,
     package: 'com.yochaibar.blinks',
-    googleServicesFile: './google-services.json',
     intentFilters: [
       {
         action: 'VIEW',
