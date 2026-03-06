@@ -171,6 +171,30 @@ function FeedSkeleton() {
   );
 }
 
+// ── Animated Feed Item Wrapper ──
+
+const AnimatedFeedItem = React.memo(function AnimatedFeedItem({
+  item,
+}: {
+  item: FeedItemData;
+}) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim }}>
+      <FeedItem item={item} />
+    </Animated.View>
+  );
+});
+
 // ── Main Screen ──
 
 export default function BlinksScreen() {
@@ -483,6 +507,9 @@ export default function BlinksScreen() {
 
   const handleReact = useCallback(
     (item: FeedItemData, emoji: string) => {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
       // The item id format is `photo_${responseId}`
       const responseId = item.id.replace('photo_', '');
       addReaction(responseId, emoji);
@@ -511,7 +538,7 @@ export default function BlinksScreen() {
   // ── Render ──
 
   const renderItem = useCallback(
-    ({ item }: { item: FeedItemData }) => <FeedItem item={item} />,
+    ({ item }: { item: FeedItemData }) => <AnimatedFeedItem item={item} />,
     [],
   );
 

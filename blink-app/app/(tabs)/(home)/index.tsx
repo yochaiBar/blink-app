@@ -16,6 +16,39 @@ import { isDemoGroup } from '@/constants/demoData';
 import { getTimeGreeting } from '@/utils/time';
 import { GroupCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
 
+// Animated wrapper for staggered group card entrance
+const AnimatedGroupCard = React.memo(function AnimatedGroupCard({
+  children,
+  index,
+  innerRef,
+}: {
+  children: React.ReactNode;
+  index: number;
+  innerRef?: React.Ref<View>;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(18)).current;
+
+  useEffect(() => {
+    const delay = index * 100;
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]).start();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [index, opacity, translateY]);
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      <View ref={innerRef} collapsable={false}>
+        {children}
+      </View>
+    </Animated.View>
+  );
+});
+
 export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -135,6 +168,17 @@ export default function GroupsScreen() {
     }
     router.push('/create-group' as never);
   }, [completeTour, router]);
+
+  // Haptic feedback on pull-to-refresh completion
+  const wasRefreshing = useRef(false);
+  useEffect(() => {
+    if (wasRefreshing.current && !isRefreshing) {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    }
+    wasRefreshing.current = isRefreshing;
+  }, [isRefreshing]);
 
   const activeGroups = groups.filter(g => g.hasActiveChallenge);
   const otherGroups = groups.filter(g => !g.hasActiveChallenge);
@@ -256,17 +300,17 @@ export default function GroupsScreen() {
                   <View style={styles.liveDot} />
                   <Text style={styles.sectionTitle}>Active Challenges</Text>
                 </View>
-                {remainingActiveGroups.map(group => (
-                  <View
+                {remainingActiveGroups.map((group, index) => (
+                  <AnimatedGroupCard
                     key={group.id}
-                    ref={isDemoGroup(group.id) ? demoCardRef : undefined}
-                    collapsable={false}
+                    index={index}
+                    innerRef={isDemoGroup(group.id) ? demoCardRef : undefined}
                   >
                     <GroupCard
                       group={group}
                       onPress={() => handleGroupPress(group.id)}
                     />
-                  </View>
+                  </AnimatedGroupCard>
                 ))}
               </View>
             )}
@@ -274,17 +318,17 @@ export default function GroupsScreen() {
             {otherGroups.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Your Groups</Text>
-                {otherGroups.map(group => (
-                  <View
+                {otherGroups.map((group, index) => (
+                  <AnimatedGroupCard
                     key={group.id}
-                    ref={isDemoGroup(group.id) ? demoCardRef : undefined}
-                    collapsable={false}
+                    index={remainingActiveGroups.length + index}
+                    innerRef={isDemoGroup(group.id) ? demoCardRef : undefined}
                   >
                     <GroupCard
                       group={group}
                       onPress={() => handleGroupPress(group.id)}
                     />
-                  </View>
+                  </AnimatedGroupCard>
                 ))}
               </View>
             )}

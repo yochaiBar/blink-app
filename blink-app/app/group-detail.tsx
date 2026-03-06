@@ -61,6 +61,60 @@ function getChallengeTypeConfig(type: string): { emoji: string; label: string } 
 }
 
 // ----- Member Ring Row sub-component -----
+// Animated member avatar with spring bounce on tap
+const AnimatedMemberAvatar = React.memo(function AnimatedMemberAvatar({
+  member,
+  hasResponded,
+  hasActiveChallenge,
+  isSelected,
+  onPress,
+}: {
+  member: { id: string; name: string; avatar: string };
+  hasResponded: boolean;
+  hasActiveChallenge: boolean;
+  isSelected: boolean;
+  onPress: () => void;
+}) {
+  const springScale = useRef(new Animated.Value(1)).current;
+
+  const handlePress = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    Animated.sequence([
+      Animated.spring(springScale, { toValue: 0.8, useNativeDriver: true, speed: 50, bounciness: 4 }),
+      Animated.spring(springScale, { toValue: 1, useNativeDriver: true, speed: 12, bounciness: 10 }),
+    ]).start();
+    onPress();
+  }, [onPress, springScale]);
+
+  return (
+    <TouchableOpacity
+      onPress={handlePress}
+      activeOpacity={1}
+      style={s.memberRingItem}
+    >
+      <Animated.View style={{ transform: [{ scale: springScale }] }}>
+        <AvatarRing
+          uri={member.avatar}
+          name={member.name}
+          size={46}
+          hasResponded={hasResponded}
+          showStatus={hasActiveChallenge}
+          isActive={hasActiveChallenge && !hasResponded}
+        />
+      </Animated.View>
+      {isSelected && (
+        <View style={s.memberTooltip}>
+          <Text style={s.memberTooltipText} numberOfLines={1}>
+            {member.name}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+});
+
 function MemberRingRow({
   members,
   respondedUserIds,
@@ -86,28 +140,14 @@ function MemberRingRow({
         {members.map((member) => {
           const hasResponded = respondedUserIds.has(member.id);
           return (
-            <TouchableOpacity
+            <AnimatedMemberAvatar
               key={member.id}
+              member={member}
+              hasResponded={hasResponded}
+              hasActiveChallenge={hasActiveChallenge}
+              isSelected={tooltipName === member.name}
               onPress={() => setTooltipName(tooltipName === member.name ? null : member.name)}
-              activeOpacity={0.7}
-              style={s.memberRingItem}
-            >
-              <AvatarRing
-                uri={member.avatar}
-                name={member.name}
-                size={46}
-                hasResponded={hasResponded}
-                showStatus={hasActiveChallenge}
-                isActive={hasActiveChallenge && !hasResponded}
-              />
-              {tooltipName === member.name && (
-                <View style={s.memberTooltip}>
-                  <Text style={s.memberTooltipText} numberOfLines={1}>
-                    {member.name}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            />
           );
         })}
       </ScrollView>
@@ -236,6 +276,19 @@ export default function GroupDetailScreen() {
     topReactionEmoji?: string;
     respondedUsers: Array<{ displayName: string; avatarUrl?: string }>;
   } | null>(null);
+
+  // Scroll-based parallax for header
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, 80],
+    outputRange: [0, -10],
+    extrapolate: 'clamp',
+  });
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 80],
+    outputRange: [1, 0.85],
+    extrapolate: 'clamp',
+  });
 
   // Pulsing timer animation
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -821,8 +874,8 @@ export default function GroupDetailScreen() {
   // =============================
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
-      {/* ===== 1. SIMPLIFIED HEADER ===== */}
-      <View style={s.header}>
+      {/* ===== 1. SIMPLIFIED HEADER with parallax ===== */}
+      <Animated.View style={[s.header, { transform: [{ translateY: headerTranslateY }], opacity: headerOpacity }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn} testID="back-btn">
           <ArrowLeft size={22} color={theme.text} />
         </TouchableOpacity>
@@ -847,12 +900,17 @@ export default function GroupDetailScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </Animated.View>
 
-      <ScrollView
+      <Animated.ScrollView
         style={s.scrollView}
         contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={!isDemo && groupQuery.isRefetching}
@@ -1136,7 +1194,7 @@ export default function GroupDetailScreen() {
         </View>
 
         <View style={{ height: 100 }} />
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Tour Tooltip: Step 2 -- Challenge bar */}
       <Tooltip

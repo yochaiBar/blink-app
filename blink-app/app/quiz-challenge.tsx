@@ -44,6 +44,7 @@ export default function QuizChallengeScreen() {
     expiresAt: string;
   }>();
   const {
+    groupId,
     challengeId,
     type,
     promptText,
@@ -332,9 +333,18 @@ export default function QuizChallengeScreen() {
       {phase === 'results' && (
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
           <Button
-            title="Done"
-            onPress={() => router.back()}
-            variant="secondary"
+            title="See Responses"
+            onPress={() => {
+              if (challengeId && groupId) {
+                router.replace({
+                  pathname: '/challenge-reveal' as never,
+                  params: { challengeId, groupId },
+                });
+              } else {
+                router.back();
+              }
+            }}
+            variant="primary"
             size="lg"
             fullWidth
           />

@@ -4,13 +4,18 @@ import Constants from 'expo-constants';
 import { registerPushToken } from '@/services/api';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification.request.content.data as Record<string, any> | undefined;
+    // Always show challenge notifications prominently (even when app is in foreground)
+    const isChallenge = data?.type === 'challenge_started' || data?.type === 'challenge' || data?.screen === 'challenge';
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: isChallenge ? true : true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    };
+  },
 });
 
 export async function registerForPushNotifications(): Promise<string | null> {
@@ -107,21 +112,76 @@ export async function sendPushTokenToServer(): Promise<void> {
  * Extracts the notification data payload and returns a route path
  * for expo-router navigation, or null if the payload is unrecognised.
  */
+/**
+ * Quiz challenge types that should route to the quiz screen.
+ */
+const QUIZ_TYPES = new Set(['quiz', 'quiz_food', 'quiz_most_likely', 'quiz_rate_day']);
+
+/**
+ * Extracts the notification data payload and returns a route path
+ * for expo-router navigation, or null if the payload is unrecognised.
+ *
+ * Challenge notifications route directly to the challenge screen (camera or quiz)
+ * instead of the group detail page — this is the "camera-first" flow.
+ */
 export function getNotificationRoute(
   data: Record<string, any> | undefined,
 ): { pathname: string; params?: Record<string, string> } | null {
   if (!data || !data.type) return null;
 
   switch (data.type) {
-    case 'challenge':
-      if (data.groupId) {
+    case 'challenge_started':
+    case 'challenge': {
+      const groupId = data.groupId;
+      const challengeId = data.challengeId;
+      const challengeType = data.challengeType;
+
+      // If we have both groupId and challengeId, route directly to the challenge screen
+      if (groupId && challengeId) {
+        if (challengeType && QUIZ_TYPES.has(challengeType)) {
+          return {
+            pathname: '/quiz-challenge',
+            params: { groupId, challengeId },
+          };
+        }
+        // Default: snap challenge (camera-first)
+        return {
+          pathname: '/snap-challenge',
+          params: { groupId, challengeId },
+        };
+      }
+
+      // Fallback: if we only have groupId, go to group detail
+      if (groupId) {
         return {
           pathname: '/group-detail',
-          params: { id: data.groupId },
+          params: { id: groupId },
         };
       }
       return null;
+    }
 
+    // Also handle the explicit screen routing (data.screen === 'challenge')
+    // This covers cases where the backend sends screen-based routing data
+    default:
+      break;
+  }
+
+  // Handle screen-based routing (alternative payload format)
+  if (data.screen === 'challenge' && data.groupId && data.challengeId) {
+    if (data.challengeType && QUIZ_TYPES.has(data.challengeType)) {
+      return {
+        pathname: '/quiz-challenge',
+        params: { groupId: data.groupId, challengeId: data.challengeId },
+      };
+    }
+    return {
+      pathname: '/snap-challenge',
+      params: { groupId: data.groupId, challengeId: data.challengeId },
+    };
+  }
+
+  switch (data.type) {
     case 'group':
       if (data.groupId) {
         return {

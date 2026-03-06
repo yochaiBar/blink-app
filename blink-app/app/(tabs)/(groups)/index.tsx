@@ -33,11 +33,26 @@ import { isDemoGroup } from '@/constants/demoData';
 const GroupListCard = React.memo(function GroupListCard({
   group,
   onPress,
+  index,
 }: {
   group: Group;
   onPress: () => void;
+  index?: number;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const entranceOpacity = useRef(new Animated.Value(0)).current;
+  const entranceScale = useRef(new Animated.Value(0.95)).current;
+
+  useEffect(() => {
+    const delay = (index ?? 0) * 80;
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(entranceOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
+        Animated.spring(entranceScale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 4 }),
+      ]).start();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [index, entranceOpacity, entranceScale]);
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, {
@@ -72,7 +87,7 @@ const GroupListCard = React.memo(function GroupListCard({
   const displayedMembers = group.members.slice(0, 5);
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <Animated.View style={{ opacity: entranceOpacity, transform: [{ scale: Animated.multiply(scaleAnim, entranceScale) }] }}>
       <TouchableOpacity
         activeOpacity={1}
         onPressIn={handlePressIn}
@@ -261,6 +276,7 @@ export default function GroupsScreen() {
           <GroupListCard
             group={item}
             onPress={() => handleGroupPress(item.id)}
+            index={index}
           />
         </View>
       );

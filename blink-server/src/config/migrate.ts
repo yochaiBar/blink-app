@@ -245,6 +245,9 @@ async function migrate() {
       created_at TIMESTAMP DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_ai_gen_log_group ON ai_generation_log(group_id);
+
+    -- AI commentary cache on challenges
+    ALTER TABLE challenges ADD COLUMN IF NOT EXISTS ai_commentary TEXT;
   `);
 
   logger.info('Migrations complete!');

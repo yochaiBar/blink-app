@@ -1,21 +1,47 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform, Dimensions, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  Platform,
+  Dimensions,
+  Alert,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Check, RotateCcw, SwitchCamera } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
+import { useQuery } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
+import { typography } from '@/constants/typography';
 import { useApp } from '@/providers/AppProvider';
+import { api } from '@/services/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { ApiChallenge } from '@/types/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type ChallengePhase = 'countdown' | 'capture' | 'preview';
 
+interface ProgressData {
+  total_members: number;
+  responded_count: number;
+  respondents: Array<{
+    user_id: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  }>;
+}
+
 export default function SnapChallengeScreen() {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { groupId, challengeId } = useLocalSearchParams<{
+    groupId: string;
+    challengeId?: string;
+  }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { submitSnap, groups } = useApp();
@@ -33,12 +59,46 @@ export default function SnapChallengeScreen() {
   const countdownOpacity = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(1)).current;
   const flashAnim = useRef(new Animated.Value(0)).current;
+  const shutterScale = useRef(new Animated.Value(1)).current;
+  const edgeGlowAnim = useRef(new Animated.Value(0)).current;
+  const urgentPulseAnim = useRef(new Animated.Value(1)).current;
   const captureTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const group = groups.find(g => g.id === groupId);
+  const group = groups.find((g) => g.id === groupId);
   const isWeb = Platform.OS === 'web';
   const hasCamera = permission?.granted && !isWeb;
 
+  // Fetch active challenge details (prompt text, etc.)
+  const challengeQuery = useQuery({
+    queryKey: ['active-challenge', groupId, challengeId],
+    queryFn: async (): Promise<ApiChallenge> => {
+      if (challengeId) {
+        return api(`/challenges/${challengeId}`);
+      }
+      return api(`/challenges/groups/${groupId}/challenges/active`);
+    },
+    enabled: !!groupId,
+    staleTime: 60_000,
+  });
+
+  const challengeData = challengeQuery.data;
+  const promptText =
+    challengeData?.prompt_text ?? challengeData?.prompt ?? null;
+  const resolvedChallengeId = challengeId ?? challengeData?.id;
+
+  // Fetch progress (who has responded)
+  const progressQuery = useQuery({
+    queryKey: ['challenge-progress', resolvedChallengeId],
+    queryFn: async (): Promise<ProgressData> => {
+      return api(`/challenges/${resolvedChallengeId}/progress`);
+    },
+    enabled: !!resolvedChallengeId && phase !== 'preview',
+    refetchInterval: 5000, // Poll every 5s during active challenge
+  });
+
+  const progress = progressQuery.data;
+
+  // ── Camera permission ──
   useEffect(() => {
     if (!permission?.granted && permission?.canAskAgain) {
       Alert.alert(
@@ -47,23 +107,44 @@ export default function SnapChallengeScreen() {
         [
           { text: 'Not Now', style: 'cancel' },
           { text: 'Allow', onPress: () => requestPermission() },
-        ],
+        ]
       );
     }
   }, [permission]);
 
+  // ── Countdown phase ──
   useEffect(() => {
     if (phase === 'countdown' && countdownValue > 0) {
       Animated.sequence([
         Animated.parallel([
-          Animated.timing(countdownScale, { toValue: 1.4, duration: 400, useNativeDriver: true }),
-          Animated.timing(countdownOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+          Animated.timing(countdownScale, {
+            toValue: 1.4,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(countdownOpacity, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
         ]),
         Animated.parallel([
-          Animated.timing(countdownScale, { toValue: 0.6, duration: 0, useNativeDriver: true }),
-          Animated.timing(countdownOpacity, { toValue: 1, duration: 0, useNativeDriver: true }),
+          Animated.timing(countdownScale, {
+            toValue: 0.6,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+          Animated.timing(countdownOpacity, {
+            toValue: 1,
+            duration: 0,
+            useNativeDriver: true,
+          }),
         ]),
-        Animated.timing(countdownScale, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.timing(countdownScale, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
       ]).start();
 
       if (Platform.OS !== 'web') {
@@ -71,7 +152,7 @@ export default function SnapChallengeScreen() {
       }
 
       const timer = setTimeout(() => {
-        setCountdownValue(prev => prev - 1);
+        setCountdownValue((prev) => prev - 1);
       }, 1000);
 
       return () => clearTimeout(timer);
@@ -83,6 +164,7 @@ export default function SnapChallengeScreen() {
     }
   }, [phase, countdownValue, countdownScale, countdownOpacity]);
 
+  // ── Capture phase timer + enhanced haptics ──
   useEffect(() => {
     if (phase === 'capture') {
       Animated.timing(progressAnim, {
@@ -92,12 +174,31 @@ export default function SnapChallengeScreen() {
       }).start();
 
       captureTimerRef.current = setInterval(() => {
-        setCaptureTimer(prev => {
+        setCaptureTimer((prev) => {
           if (prev <= 1) {
-            if (captureTimerRef.current) clearInterval(captureTimerRef.current);
+            if (captureTimerRef.current)
+              clearInterval(captureTimerRef.current);
             handleCapture();
             return 0;
           }
+
+          // Enhanced haptic feedback based on remaining time
+          if (Platform.OS !== 'web') {
+            if (prev <= 4 && prev > 1) {
+              // Last 3 seconds: escalating haptics
+              if (prev === 4) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              } else if (prev === 3) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              } else if (prev === 2) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              }
+            } else if (prev > 4) {
+              // 10-4 seconds: light haptic
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+          }
+
           return prev - 1;
         });
       }, 1000);
@@ -108,12 +209,76 @@ export default function SnapChallengeScreen() {
     }
   }, [phase]);
 
+  // ── Edge glow + pulse for last 3 seconds ──
+  useEffect(() => {
+    if (phase === 'capture' && captureTimer <= 3 && captureTimer > 0) {
+      // Pulsing edge glow
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(edgeGlowAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: false,
+          }),
+          Animated.timing(edgeGlowAnim, {
+            toValue: 0.3,
+            duration: 300,
+            useNativeDriver: false,
+          }),
+        ])
+      ).start();
+
+      // Pulsing timer text
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(urgentPulseAnim, {
+            toValue: 1.3,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(urgentPulseAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      edgeGlowAnim.setValue(0);
+      urgentPulseAnim.setValue(1);
+    }
+  }, [phase, captureTimer]);
+
   const handleCapture = useCallback(async () => {
     if (captureTimerRef.current) clearInterval(captureTimerRef.current);
 
-    Animated.sequence([
-      Animated.timing(flashAnim, { toValue: 1, duration: 80, useNativeDriver: true }),
-      Animated.timing(flashAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    // Shutter animation: quick scale-down + flash + spring back
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(flashAnim, {
+          toValue: 1,
+          duration: 80,
+          useNativeDriver: true,
+        }),
+        Animated.timing(flashAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.sequence([
+        Animated.timing(shutterScale, {
+          toValue: 0.92,
+          duration: 80,
+          useNativeDriver: true,
+        }),
+        Animated.spring(shutterScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          speed: 18,
+          bounciness: 6,
+        }),
+      ]),
     ]).start();
 
     if (Platform.OS !== 'web') {
@@ -132,20 +297,31 @@ export default function SnapChallengeScreen() {
           setCapturedUri(photo.uri);
         }
       } catch {
-        // Camera capture failed — user will see placeholder preview
+        // Camera capture failed -- user will see placeholder preview
       }
     }
 
     setPhase('preview');
-  }, [flashAnim, hasCamera, cameraReady]);
+  }, [flashAnim, shutterScale, hasCamera, cameraReady]);
 
   const handleSubmit = useCallback(async () => {
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     await submitSnap(groupId ?? '', capturedUri ?? undefined);
-    router.back();
-  }, [submitSnap, groupId, router, capturedUri]);
+    // Navigate to challenge reveal instead of going back
+    if (resolvedChallengeId) {
+      router.replace({
+        pathname: '/challenge-reveal' as never,
+        params: {
+          challengeId: resolvedChallengeId,
+          groupId: groupId ?? '',
+        },
+      });
+    } else {
+      router.back();
+    }
+  }, [submitSnap, groupId, router, capturedUri, resolvedChallengeId]);
 
   const handleRetake = useCallback(() => {
     setPhase('countdown');
@@ -156,7 +332,7 @@ export default function SnapChallengeScreen() {
   }, [progressAnim]);
 
   const toggleFacing = useCallback(() => {
-    setFacing(prev => (prev === 'back' ? 'front' : 'back'));
+    setFacing((prev) => (prev === 'back' ? 'front' : 'back'));
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync();
     }
@@ -166,6 +342,13 @@ export default function SnapChallengeScreen() {
     inputRange: [0, 1],
     outputRange: ['0%', '100%'],
   });
+
+  const edgeGlowOpacity = edgeGlowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.6],
+  });
+
+  const isUrgent = phase === 'capture' && captureTimer <= 3;
 
   const renderCameraView = () => {
     if (hasCamera) {
@@ -192,11 +375,59 @@ export default function SnapChallengeScreen() {
         </Text>
         <Text style={styles.cameraSubtext}>Tap the shutter to capture!</Text>
         {!isWeb && !permission?.granted && (
-          <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
+          <TouchableOpacity
+            style={styles.permissionBtn}
+            onPress={requestPermission}
+          >
             <Text style={styles.permissionBtnText}>Grant Permission</Text>
           </TouchableOpacity>
         )}
       </LinearGradient>
+    );
+  };
+
+  // Render the progress indicator (who has responded)
+  const renderProgressIndicator = () => {
+    if (!progress) return null;
+    const { total_members, responded_count, respondents } = progress;
+    return (
+      <View style={styles.progressIndicator}>
+        <View style={styles.progressAvatars}>
+          {respondents.slice(0, 4).map((r, i) => (
+            <Image
+              key={r.user_id}
+              source={{
+                uri:
+                  r.avatar_url ??
+                  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
+              }}
+              style={[
+                styles.progressAvatar,
+                { marginLeft: i > 0 ? -8 : 0, zIndex: 10 - i },
+              ]}
+              contentFit="cover"
+            />
+          ))}
+        </View>
+        <Text style={styles.progressText}>
+          {responded_count}/{total_members} responded
+        </Text>
+      </View>
+    );
+  };
+
+  // Render the prompt overlay on the camera
+  const renderPromptOverlay = () => {
+    if (!promptText) return null;
+    return (
+      <View style={styles.promptOverlay}>
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.7)']}
+          style={styles.promptGradient}
+        >
+          <Text style={styles.promptText}>{promptText}</Text>
+        </LinearGradient>
+      </View>
     );
   };
 
@@ -209,6 +440,12 @@ export default function SnapChallengeScreen() {
 
       {phase === 'countdown' && (
         <View style={[styles.countdownContainer, { paddingTop: insets.top }]}>
+          {/* Camera starts immediately behind the countdown */}
+          <View style={styles.countdownCameraBg}>
+            {renderCameraView()}
+            <View style={styles.countdownCameraOverlay} />
+          </View>
+
           <TouchableOpacity
             style={[styles.closeBtn, { top: insets.top + 10 }]}
             onPress={() => router.back()}
@@ -216,14 +453,32 @@ export default function SnapChallengeScreen() {
             <X size={22} color={theme.text} />
           </TouchableOpacity>
 
-          <Text style={styles.challengeLabel}>📸 SNAP CHALLENGE</Text>
-          <Text style={styles.groupLabel}>{group?.emoji} {group?.name}</Text>
+          <View style={styles.countdownContent}>
+            <Text style={styles.challengeLabel}>SNAP CHALLENGE</Text>
+            <Text style={styles.groupLabel}>
+              {group?.emoji} {group?.name}
+            </Text>
 
-          <Animated.View style={[styles.countdownCircle, { transform: [{ scale: countdownScale }], opacity: countdownOpacity }]}>
-            <Text style={styles.countdownNumber}>{countdownValue}</Text>
-          </Animated.View>
+            {promptText && (
+              <View style={styles.countdownPromptCard}>
+                <Text style={styles.countdownPromptText}>{promptText}</Text>
+              </View>
+            )}
 
-          <Text style={styles.getReady}>Get ready...</Text>
+            <Animated.View
+              style={[
+                styles.countdownCircle,
+                {
+                  transform: [{ scale: countdownScale }],
+                  opacity: countdownOpacity,
+                },
+              ]}
+            >
+              <Text style={styles.countdownNumber}>{countdownValue}</Text>
+            </Animated.View>
+
+            <Text style={styles.getReady}>Get ready...</Text>
+          </View>
         </View>
       )}
 
@@ -236,17 +491,57 @@ export default function SnapChallengeScreen() {
             <X size={22} color={theme.text} />
           </TouchableOpacity>
 
+          {/* Top bar: group name + progress + timer */}
+          <View style={[styles.topBar, { marginTop: insets.top + 50 }]}>
+            <View style={styles.topBarLeft}>
+              <Text style={styles.topBarGroupName}>
+                {group?.emoji} {group?.name}
+              </Text>
+              {renderProgressIndicator()}
+            </View>
+          </View>
+
           <View style={styles.timerBar}>
-            <Animated.View style={[styles.timerProgress, { width: progressWidth }]} />
+            <Animated.View
+              style={[
+                styles.timerProgress,
+                {
+                  width: progressWidth,
+                  backgroundColor: isUrgent ? theme.coral : theme.coral,
+                },
+              ]}
+            />
           </View>
 
-          <Text style={styles.captureTimerText}>{captureTimer}s</Text>
+          <Animated.Text
+            style={[
+              styles.captureTimerText,
+              isUrgent && styles.captureTimerUrgent,
+              { transform: [{ scale: urgentPulseAnim }] },
+            ]}
+          >
+            {captureTimer}s
+          </Animated.Text>
 
-          <View style={styles.cameraPlaceholder}>
+          <Animated.View style={[styles.cameraPlaceholder, { transform: [{ scale: shutterScale }] }]}>
             {renderCameraView()}
-          </View>
+            {renderPromptOverlay()}
+          </Animated.View>
 
-          <View style={[styles.captureControls, { paddingBottom: insets.bottom + 20 }]}>
+          {/* Edge glow for last 3 seconds */}
+          {isUrgent && (
+            <Animated.View
+              style={[styles.edgeGlow, { opacity: edgeGlowOpacity }]}
+              pointerEvents="none"
+            />
+          )}
+
+          <View
+            style={[
+              styles.captureControls,
+              { paddingBottom: insets.bottom + 20 },
+            ]}
+          >
             <View style={styles.captureControlsInner}>
               <View style={{ width: 50 }} />
               <TouchableOpacity
@@ -258,7 +553,10 @@ export default function SnapChallengeScreen() {
                 <View style={styles.shutterInner} />
               </TouchableOpacity>
               {hasCamera ? (
-                <TouchableOpacity style={styles.flipBtn} onPress={toggleFacing}>
+                <TouchableOpacity
+                  style={styles.flipBtn}
+                  onPress={toggleFacing}
+                >
                   <SwitchCamera size={22} color={theme.white} />
                 </TouchableOpacity>
               ) : (
@@ -273,7 +571,11 @@ export default function SnapChallengeScreen() {
         <View style={[styles.previewContainer, { paddingTop: insets.top }]}>
           <View style={styles.previewImage}>
             {capturedUri ? (
-              <Image source={{ uri: capturedUri }} style={styles.previewPhoto} contentFit="cover" />
+              <Image
+                source={{ uri: capturedUri }}
+                style={styles.previewPhoto}
+                contentFit="cover"
+              />
             ) : (
               <LinearGradient
                 colors={['#1a1a2e', '#16213e', '#0f3460']}
@@ -285,7 +587,12 @@ export default function SnapChallengeScreen() {
             )}
           </View>
 
-          <View style={[styles.previewControls, { paddingBottom: insets.bottom + 20 }]}>
+          <View
+            style={[
+              styles.previewControls,
+              { paddingBottom: insets.bottom + 20 },
+            ]}
+          >
             <TouchableOpacity style={styles.retakeBtn} onPress={handleRetake}>
               <RotateCcw size={20} color={theme.text} />
               <Text style={styles.retakeBtnText}>Retake</Text>
@@ -327,22 +634,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
+
+  // ── Countdown ──
   countdownContainer: {
+    flex: 1,
+  },
+  countdownCameraBg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  countdownCameraOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10, 10, 15, 0.85)',
+  },
+  countdownContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 20,
+    gap: 16,
+    zIndex: 2,
   },
   challengeLabel: {
-    fontSize: 14,
-    fontWeight: '800' as const,
+    ...typography.labelSmall,
     color: theme.coral,
-    letterSpacing: 2,
+    letterSpacing: 3,
   },
   groupLabel: {
-    fontSize: 18,
-    fontWeight: '600' as const,
+    ...typography.headlineMedium,
     color: theme.textSecondary,
+  },
+  countdownPromptCard: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    marginHorizontal: 32,
+    marginTop: 4,
+  },
+  countdownPromptText: {
+    ...typography.headlineLarge,
+    color: theme.text,
+    textAlign: 'center',
   },
   countdownCircle: {
     width: 140,
@@ -353,27 +684,42 @@ const styles = StyleSheet.create({
     borderColor: theme.coral,
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 16,
   },
   countdownNumber: {
     fontSize: 64,
-    fontWeight: '900' as const,
+    fontWeight: '900',
     color: theme.coral,
     fontVariant: ['tabular-nums'],
   },
   getReady: {
-    fontSize: 16,
+    ...typography.bodyLarge,
     color: theme.textMuted,
-    fontWeight: '500' as const,
+    fontWeight: '500',
   },
+
+  // ── Capture ──
   captureContainer: {
     flex: 1,
+  },
+  topBar: {
+    paddingHorizontal: 20,
+    marginBottom: 4,
+  },
+  topBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  topBarGroupName: {
+    ...typography.bodyBold,
+    color: theme.text,
   },
   timerBar: {
     height: 4,
     backgroundColor: theme.surface,
     marginHorizontal: 20,
-    marginTop: 60,
+    marginTop: 8,
     borderRadius: 2,
     overflow: 'hidden',
   },
@@ -384,16 +730,22 @@ const styles = StyleSheet.create({
   },
   captureTimerText: {
     fontSize: 48,
-    fontWeight: '900' as const,
+    fontWeight: '900',
     color: theme.coral,
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 12,
     fontVariant: ['tabular-nums'],
+  },
+  captureTimerUrgent: {
+    color: theme.coral,
+    textShadowColor: theme.coral,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
   },
   cameraPlaceholder: {
     flex: 1,
     marginHorizontal: 20,
-    marginVertical: 20,
+    marginVertical: 12,
     borderRadius: 20,
     overflow: 'hidden',
   },
@@ -410,12 +762,11 @@ const styles = StyleSheet.create({
     fontSize: 48,
   },
   cameraText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+    ...typography.bodyBold,
     color: theme.textMuted,
   },
   cameraSubtext: {
-    fontSize: 13,
+    ...typography.caption,
     color: theme.textMuted,
     opacity: 0.7,
   },
@@ -427,10 +778,72 @@ const styles = StyleSheet.create({
     backgroundColor: theme.coral,
   },
   permissionBtnText: {
-    fontSize: 14,
-    fontWeight: '700' as const,
+    ...typography.bodyBold,
     color: theme.white,
   },
+
+  // ── Prompt overlay on camera ──
+  promptOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  promptGradient: {
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    paddingBottom: 20,
+  },
+  promptText: {
+    ...typography.headlineLarge,
+    color: theme.white,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+
+  // ── Progress indicator ──
+  progressIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressAvatars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  progressAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: theme.bg,
+  },
+  progressText: {
+    ...typography.caption,
+    color: theme.textSecondary,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // ── Edge glow (urgent) ──
+  edgeGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 3,
+    borderColor: theme.coral,
+    borderRadius: 0,
+    shadowColor: theme.coral,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+
+  // ── Capture controls ──
   captureControls: {
     paddingHorizontal: 20,
   },
@@ -463,6 +876,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // ── Preview ──
   previewContainer: {
     flex: 1,
   },
@@ -487,8 +902,7 @@ const styles = StyleSheet.create({
     fontSize: 64,
   },
   previewText: {
-    fontSize: 22,
-    fontWeight: '800' as const,
+    ...typography.h2,
     color: theme.text,
   },
   previewControls: {
@@ -507,8 +921,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.bgCard,
   },
   retakeBtnText: {
-    fontSize: 16,
-    fontWeight: '700' as const,
+    ...typography.bodyBold,
     color: theme.text,
   },
   submitBtn: {
@@ -523,9 +936,11 @@ const styles = StyleSheet.create({
   },
   submitBtnText: {
     fontSize: 16,
-    fontWeight: '800' as const,
+    fontWeight: '800',
     color: theme.white,
   },
+
+  // ── Flash ──
   flash: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: theme.white,

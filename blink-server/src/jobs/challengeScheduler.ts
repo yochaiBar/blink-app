@@ -143,7 +143,7 @@ async function createAutoChallenge(group: any): Promise<void> {
     group.id,
     `${group.name}`,
     aiChallenge.prompt || 'New challenge! Respond before time runs out!',
-    { type: 'challenge_started', challengeId: challenge.id, groupId: group.id }
+    { type: 'challenge_started', challengeId: challenge.id, groupId: group.id, challengeType: aiChallenge.type, screen: 'challenge' }
   ).catch(() => {});
 
   // Create notifications for all members

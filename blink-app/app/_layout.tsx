@@ -20,6 +20,7 @@ import {
 import { OfflineBanner } from "@/components/ui";
 import * as Linking from "expo-linking";
 import { useSocket } from "@/hooks/useSocket";
+import { api as apiCall } from "@/services/api";
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "",
@@ -63,6 +64,17 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (isAuthenticated && Platform.OS !== "web") {
       // Register push token with the backend (fire-and-forget)
       sendPushTokenToServer();
+    }
+
+    // After auth is confirmed, check for pending challenges.
+    // The Blinks feed pills show these, but we also store state for potential auto-routing.
+    if (isAuthenticated) {
+      apiCall("/challenges/pending").then(() => {
+        // Pending challenges are handled by the feed UI pills.
+        // Auto-routing to a single pending challenge can be added here in the future.
+      }).catch(() => {
+        // Silently ignore — this is a nice-to-have check
+      });
     }
   }, [isAuthenticated, isLoading, segments]);
 
@@ -182,6 +194,13 @@ function RootLayoutNav() {
         />
         <Stack.Screen
           name="quiz-challenge"
+          options={{
+            presentation: "fullScreenModal",
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="challenge-reveal"
           options={{
             presentation: "fullScreenModal",
             headerShown: false,

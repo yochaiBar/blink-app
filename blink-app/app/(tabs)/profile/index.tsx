@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, Animated, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -15,12 +15,48 @@ import {
   LogOut,
   Trash2,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
 import { Skeleton, GlassCard } from '@/components/ui';
 import StreakCalendar from '@/components/StreakCalendar';
+
+// Animated stat card with staggered slide-up entrance
+const AnimatedStatCard = React.memo(function AnimatedStatCard({
+  children,
+  index,
+  style,
+  padding,
+}: {
+  children: React.ReactNode;
+  index: number;
+  style?: object;
+  padding?: number;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    const delay = 200 + index * 100;
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]).start();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [index, opacity, translateY]);
+
+  return (
+    <Animated.View style={[{ opacity, transform: [{ translateY }] }, style]}>
+      <GlassCard style={styles.statCard} padding={padding}>
+        {children}
+      </GlassCard>
+    </Animated.View>
+  );
+});
 
 const APP_VERSION = '1.0.0';
 
@@ -148,25 +184,25 @@ export default function ProfileScreen() {
           </View>
         ) : (
           <View style={styles.statsRow}>
-            <GlassCard style={styles.statCard} padding={spacing.md}>
+            <AnimatedStatCard index={0} style={{ flex: 1 }} padding={spacing.md}>
               <Camera size={20} color={theme.coral} />
               <Text style={[typography.statLarge, { color: theme.text }]}>{user.totalSnaps}</Text>
               <Text style={[typography.labelSmall, { color: theme.textMuted }]}>Blinks</Text>
-            </GlassCard>
+            </AnimatedStatCard>
 
-            <GlassCard style={styles.statCard} padding={spacing.md}>
+            <AnimatedStatCard index={1} style={{ flex: 1 }} padding={spacing.md}>
               <View style={styles.streakIconRow}>
                 <Flame size={20} color={theme.yellow} />
               </View>
               <Text style={[typography.statLarge, { color: theme.text }]}>{user.longestStreak}</Text>
               <Text style={[typography.labelSmall, { color: theme.textMuted }]}>Best Streak</Text>
-            </GlassCard>
+            </AnimatedStatCard>
 
-            <GlassCard style={styles.statCard} padding={spacing.md}>
+            <AnimatedStatCard index={2} style={{ flex: 1 }} padding={spacing.md}>
               <Users size={20} color={theme.blue} />
               <Text style={[typography.statLarge, { color: theme.text }]}>{user.groupCount}</Text>
               <Text style={[typography.labelSmall, { color: theme.textMuted }]}>Groups</Text>
-            </GlassCard>
+            </AnimatedStatCard>
           </View>
         )}
 
@@ -189,6 +225,9 @@ export default function ProfileScreen() {
                 style={[styles.menuItem, i < menuItems.length - 1 && styles.menuItemBorder]}
                 activeOpacity={0.6}
                 onPress={() => {
+                  if (Platform.OS !== 'web') {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
                   if (item.route) {
                     router.push(item.route as never);
                   }
@@ -214,7 +253,12 @@ export default function ProfileScreen() {
                 key={i}
                 style={[styles.menuItem, !isLast && styles.menuItemBorder]}
                 activeOpacity={0.6}
-                onPress={item.onPress}
+                onPress={() => {
+                  if (Platform.OS !== 'web') {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
+                  item.onPress();
+                }}
               >
                 <IconComponent size={18} color={item.color} />
                 <Text
