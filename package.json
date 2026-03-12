@@ -1,0 +1,13 @@
+{
+  "name": "blink-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Blink social photo-sharing app monorepo",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.3"
+  }
+}

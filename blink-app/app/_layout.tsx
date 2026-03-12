@@ -18,6 +18,7 @@ import {
   setBadgeCount,
 } from "@/utils/notifications";
 import { OfflineBanner } from "@/components/ui";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import * as Linking from "expo-linking";
 import { useSocket } from "@/hooks/useSocket";
 import { api as apiCall } from "@/services/api";
@@ -281,7 +282,9 @@ function RootLayout() {
         <AppProvider>
           <StatusBar style="light" />
           <OfflineBanner visible={false} />
-          <RootLayoutNav />
+          <ErrorBoundary>
+            <RootLayoutNav />
+          </ErrorBoundary>
         </AppProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>

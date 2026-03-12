@@ -1,0 +1,5 @@
+{
+  "blink-server/src/**/*.ts": ["eslint --fix"],
+  "blink-app/**/*.{ts,tsx}": ["eslint --fix"],
+  "*.{ts,tsx,js,json,md}": ["prettier --write"]
+}
