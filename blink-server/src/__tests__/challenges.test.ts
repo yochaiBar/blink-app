@@ -186,7 +186,7 @@ describe('POST /api/challenges/:id/respond', () => {
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ photo_url: 'https://example.com/photo.jpg', response_time_ms: 3500 });
+      .send({ photo_url: 'https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg', response_time_ms: 3500 });
 
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();
@@ -213,7 +213,7 @@ describe('POST /api/challenges/:id/respond', () => {
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ photo_url: 'https://example.com/photo.jpg' });
+      .send({ photo_url: 'https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg' });
 
     expect(res.status).toBe(201);
     expect(mockEmit).toHaveBeenCalledWith(
@@ -275,7 +275,7 @@ describe('POST /api/challenges/:id/respond', () => {
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ photo_url: 'https://example.com/photo.jpg' });
+      .send({ photo_url: 'https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg' });
 
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Challenge not found');
@@ -289,7 +289,7 @@ describe('POST /api/challenges/:id/respond', () => {
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ photo_url: 'https://example.com/photo.jpg' });
+      .send({ photo_url: 'https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg' });
 
     expect(res.status).toBe(403);
   });
@@ -303,7 +303,7 @@ describe('POST /api/challenges/:id/respond', () => {
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ photo_url: 'https://example.com/photo.jpg' });
+      .send({ photo_url: 'https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg' });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Already responded');

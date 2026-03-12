@@ -11,7 +11,9 @@
     "run:android": "expo run:android",
     "test": "jest --forceExit",
     "test:coverage": "jest --coverage --forceExit",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "lint": "eslint app/ components/ services/ stores/ hooks/ utils/ --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

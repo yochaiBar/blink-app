@@ -16,6 +16,11 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   let timestampFilter = '';
 
   if (before) {
+    const parsed = Date.parse(before);
+    if (isNaN(parsed)) {
+      res.status(400).json({ error: 'Invalid "before" parameter: must be a valid date string' });
+      return;
+    }
     params.push(before);
     timestampFilter = `AND sub.timestamp < $2`;
   }

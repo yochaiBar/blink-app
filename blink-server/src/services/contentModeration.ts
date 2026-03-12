@@ -95,14 +95,14 @@ export async function moderateImage(s3Key: string): Promise<ModerationResult> {
 
   const client = getRekognitionClient();
   if (!client) {
-    logger.warn('Content moderation enabled but AWS credentials are missing; skipping check');
-    return { safe: true, labels: [], confidence: 0 };
+    logger.warn('Content moderation enabled but AWS credentials are missing; failing closed');
+    return { safe: false, labels: ['moderation_unavailable'], confidence: 0 };
   }
 
   const bucket = process.env.AWS_S3_BUCKET;
   if (!bucket) {
-    logger.warn('Content moderation enabled but AWS_S3_BUCKET is not set; skipping check');
-    return { safe: true, labels: [], confidence: 0 };
+    logger.warn('Content moderation enabled but AWS_S3_BUCKET is not set; failing closed');
+    return { safe: false, labels: ['moderation_unavailable'], confidence: 0 };
   }
 
   const threshold = getThreshold();
@@ -155,13 +155,13 @@ export async function moderateImage(s3Key: string): Promise<ModerationResult> {
       confidence: highestConfidence,
     };
   } catch (err: any) {
-    // Fail open: if Rekognition is unavailable, let the image through
-    // but log the error so operators are aware.
-    logger.error('Content moderation check failed; allowing image through', {
+    // Fail closed: if Rekognition is unavailable, reject the image
+    // and log the error so operators are aware.
+    logger.error('Content moderation check failed; rejecting image (fail closed)', {
       s3Key,
       error: err.message,
     });
-    return { safe: true, labels: [], confidence: 0 };
+    return { safe: false, labels: ['moderation_error'], confidence: 0 };
   }
 }
 

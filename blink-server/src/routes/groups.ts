@@ -9,12 +9,13 @@ import crypto from 'crypto';
 import { createNotification } from '../utils/notifications';
 import { emitToGroup } from '../socket';
 import { sendPushToUser } from '../services/pushNotifications';
+import { validateUuidParams } from '../middleware/validateParams';
 
 const router = Router();
 const MAX_FREE_GROUPS = 3;
 
 function generateInviteCode(): string {
-  return crypto.randomBytes(4).toString('hex').toUpperCase();
+  return crypto.randomBytes(6).toString('hex').toUpperCase();
 }
 
 router.use(authenticate);
@@ -84,7 +85,7 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
 }));
 
 // GET /api/groups/:id - Get group details + members + stats
-router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
   const membership = await query(
@@ -160,7 +161,7 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
     [g.id]
   );
   if (parseInt(count.rows[0].count) >= g.max_members) {
-    res.status(400).json({ error: 'Group is full' });
+    res.status(404).json({ error: 'Invalid invite code' });
     return;
   }
 
@@ -212,7 +213,7 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
 }));
 
 // POST /api/groups/:id/leave - Leave a group
-router.post('/:id/leave', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/:id/leave', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
   const membership = await query(
@@ -269,7 +270,7 @@ router.post('/:id/leave', asyncHandler(async (req: AuthRequest, res: Response) =
 }));
 
 // DELETE /api/groups/:id - Delete a group (admin only)
-router.delete('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
   const membership = await query(
@@ -297,7 +298,7 @@ router.delete('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
 }));
 
 // ── GET /api/groups/:id/streaks — Group streak + member streaks + shields ──
-router.get('/:id/streaks', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/:id/streaks', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
   // Verify membership

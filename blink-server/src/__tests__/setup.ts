@@ -31,6 +31,29 @@ jest.mock('../config/database', () => {
   };
 });
 
+// ── Mock auth middleware to skip DB revocation check in tests ────
+jest.mock('../middleware/auth', () => {
+  const jwt = require('jsonwebtoken');
+  return {
+    authenticate: (req: any, res: any, next: any) => {
+      const header = req.headers.authorization;
+      if (!header?.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No token provided' });
+        return;
+      }
+      try {
+        const token = header.split(' ')[1];
+        const payload = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+        req.userId = payload.userId;
+        next();
+      } catch {
+        res.status(401).json({ error: 'Invalid token' });
+      }
+    },
+    __esModule: true,
+  };
+});
+
 // ── Mock SMS service (disabled in tests) ─────────────────────────
 jest.mock('../config/sms', () => ({
   isSmsConfigured: false,

@@ -399,13 +399,14 @@ describe('PATCH /api/auth/profile', () => {
   });
 
   it('should update avatar_url successfully', async () => {
-    const updatedUser = makeUser({ avatar_url: 'https://new.example.com/avatar.jpg' });
+    const s3Url = 'https://blinks3upload.s3.us-east-1.amazonaws.com/avatars/new-avatar.jpg';
+    const updatedUser = makeUser({ avatar_url: s3Url });
     mockQuery.mockResolvedValueOnce(queryResult([updatedUser]));
 
     const res = await request(app)
       .patch('/api/auth/profile')
       .set('Authorization', `Bearer ${token}`)
-      .send({ avatar_url: 'https://new.example.com/avatar.jpg' });
+      .send({ avatar_url: s3Url });
 
     expect(res.status).toBe(200);
   });
@@ -520,9 +521,11 @@ describe('DELETE /api/auth/delete-account', () => {
   const token = generateAccessToken(TEST_USER_ID);
 
   it('should delete account successfully', async () => {
-    // First query: DELETE FROM group_members
+    // First query: INSERT INTO revoked_tokens (token revocation)
     mockQuery.mockResolvedValueOnce(queryResult([]));
-    // Second query: DELETE FROM users RETURNING id
+    // Second query: DELETE FROM group_members
+    mockQuery.mockResolvedValueOnce(queryResult([]));
+    // Third query: DELETE FROM users RETURNING id
     mockQuery.mockResolvedValueOnce(queryResult([{ id: TEST_USER_ID }]));
 
     const res = await request(app)
@@ -531,7 +534,7 @@ describe('DELETE /api/auth/delete-account', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('Account deleted successfully');
-    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery).toHaveBeenCalledTimes(3);
   });
 
   it('should return 401 without authentication', async () => {
@@ -542,6 +545,7 @@ describe('DELETE /api/auth/delete-account', () => {
   });
 
   it('should return 404 when user does not exist', async () => {
+    mockQuery.mockResolvedValueOnce(queryResult([])); // revoked_tokens insert
     mockQuery.mockResolvedValueOnce(queryResult([])); // group_members delete
     mockQuery.mockResolvedValueOnce(queryResult([])); // users delete returns nothing
 

@@ -2,6 +2,7 @@ import { Server as HttpServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import logger from '../utils/logger';
+import { query } from '../config/database';
 
 let io: SocketServer | null = null;
 
@@ -31,10 +32,22 @@ export function initSocket(httpServer: HttpServer) {
   io.on('connection', (socket) => {
     logger.debug('Socket connected', { userId: socket.data.userId, socketId: socket.id });
 
-    // Auto-join user's group rooms
-    socket.on('join-groups', (groupIds: string[]) => {
-      groupIds.forEach((id) => socket.join(`group:${id}`));
-      logger.debug('User joined group rooms', { userId: socket.data.userId, groupIds });
+    // Auto-join user's group rooms (verified against DB membership)
+    socket.on('join-groups', async (groupIds: string[]) => {
+      if (!Array.isArray(groupIds) || groupIds.length === 0) return;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const validIds = groupIds.filter(id => typeof id === 'string' && uuidRegex.test(id));
+      if (validIds.length === 0) return;
+      try {
+        const result = await query(
+          'SELECT group_id FROM group_members WHERE user_id = $1 AND group_id = ANY($2::uuid[])',
+          [socket.data.userId, validIds]
+        );
+        const verifiedIds = result.rows.map((r: any) => r.group_id);
+        verifiedIds.forEach((id: string) => socket.join(`group:${id}`));
+      } catch (err) {
+        console.error('Failed to verify group membership for socket', err);
+      }
     });
 
     socket.on('disconnect', () => {

@@ -33,3 +33,5 @@ TEST_STRATEGY.md
 blink-app/GoogleService-Info.plist
 PRODUCTION_ROADMAP.md
 blink-server/.env.production.example
+SECURITY_FIX_PLAN.md
+.gitignore

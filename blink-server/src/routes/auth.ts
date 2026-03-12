@@ -13,10 +13,15 @@ import { isSmsConfigured, sendSms } from '../config/sms';
 const router = Router();
 
 const DEV_OTP = '123456';
-const ALLOW_DEV_OTP_FALLBACK = process.env.ALLOW_DEV_OTP_FALLBACK !== 'false'; // default: true, set to 'false' in production
+const ALLOW_DEV_OTP_FALLBACK = process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_OTP_FALLBACK === 'true';
 
-// In-memory OTP store (phone -> { code, expiresAt })
-const pendingOtps = new Map<string, { code: string; expiresAt: number }>();
+function maskPhone(phone: string): string {
+  if (phone.length <= 4) return '****';
+  return phone.slice(0, -4).replace(/\d/g, '*') + phone.slice(-4);
+}
+
+// In-memory OTP store (phone -> { code, expiresAt, attempts })
+const pendingOtps = new Map<string, { code: string; expiresAt: number; attempts: number }>();
 
 function generateOtp(): string {
   return crypto.randomInt(100000, 999999).toString();
@@ -34,8 +39,9 @@ router.post(
       pendingOtps.set(phone_number, {
         code: DEV_OTP,
         expiresAt: Date.now() + 5 * 60 * 1000,
+        attempts: 0,
       });
-      logger.info('OTP requested (dev mode)', { phone_number });
+      logger.info('OTP requested (dev mode)', { phone: maskPhone(phone_number) });
       res.json({
         message: 'OTP sent',
         ...(process.env.NODE_ENV !== 'production' && { dev_hint: 'Use 123456' }),
@@ -48,17 +54,19 @@ router.post(
     pendingOtps.set(phone_number, {
       code,
       expiresAt: Date.now() + 5 * 60 * 1000,
+      attempts: 0,
     });
 
     try {
       await sendSms(phone_number, `Your Blinks verification code is: ${code}`);
-      logger.info('OTP sent via Twilio', { phone_number });
+      logger.info('OTP sent via Twilio', { phone: maskPhone(phone_number) });
     } catch (err) {
       if (ALLOW_DEV_OTP_FALLBACK) {
-        logger.warn('Twilio SMS failed, falling back to dev OTP', { phone_number, error: (err as Error).message });
+        logger.warn('Twilio SMS failed, falling back to dev OTP', { phone: maskPhone(phone_number), error: (err as Error).message });
         pendingOtps.set(phone_number, {
           code: DEV_OTP,
           expiresAt: Date.now() + 5 * 60 * 1000,
+          attempts: 0,
         });
       } else {
         throw err;
@@ -77,12 +85,31 @@ router.post(
     const { phone_number, code } = req.body;
 
     const pending = pendingOtps.get(phone_number);
-    if (!pending || pending.code !== code || Date.now() > pending.expiresAt) {
+    if (!pending || Date.now() > pending.expiresAt) {
       res.status(401).json({ error: 'Invalid or expired OTP' });
       return;
     }
+
+    // Per-phone attempt lockout
+    if (pending.attempts >= 5) {
+      pendingOtps.delete(phone_number);
+      res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
+      return;
+    }
+
+    // Timing-safe comparison to prevent timing attacks
+    const codeBuffer = Buffer.from(code.padEnd(6), 'utf8');
+    const pendingBuffer = Buffer.from(pending.code.padEnd(6), 'utf8');
+    const codesMatch = crypto.timingSafeEqual(codeBuffer, pendingBuffer);
+
+    if (!codesMatch) {
+      pending.attempts++;
+      res.status(401).json({ error: 'Invalid or expired OTP' });
+      return;
+    }
+
     pendingOtps.delete(phone_number);
-    logger.info('OTP verified', { phone_number });
+    logger.info('OTP verified', { phone: maskPhone(phone_number) });
 
     // ── Upsert user ──────────────────────────────────────────────
     const result = await query(
@@ -243,6 +270,9 @@ router.delete(
   '/delete-account',
   authenticate,
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    // Revoke all tokens for this user before deletion
+    await query('INSERT INTO revoked_tokens (user_id) VALUES ($1)', [req.userId]);
+
     await query(`DELETE FROM group_members WHERE user_id = $1`, [req.userId]);
 
     const result = await query(

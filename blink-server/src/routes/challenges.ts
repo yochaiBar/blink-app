@@ -11,6 +11,7 @@ import { emitToGroup } from '../socket';
 import { sendPushToGroup, sendPushToUser } from '../services/pushNotifications';
 import { moderateImage, deleteS3Object, extractS3Key, logModerationResult } from '../services/contentModeration';
 import { generateSkipPenalty, commentOnResponses, AiPersonality } from '../services/aiService';
+import { validateUuidParams } from '../middleware/validateParams';
 
 const router = Router();
 
@@ -262,7 +263,7 @@ router.get('/pending', asyncHandler(async (req: AuthRequest, res: Response) => {
 }));
 
 // ── POST /api/groups/:groupId/challenges — Trigger a challenge ──
-router.post('/groups/:groupId/challenges', validateBody(createChallengeSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/groups/:groupId/challenges', validateUuidParams('groupId'), validateBody(createChallengeSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const groupId = req.params.groupId as string;
   const { type } = req.body; // 'snap', 'quiz_food', 'quiz_most_likely', 'quiz_rate_day'
 
@@ -373,7 +374,7 @@ router.post('/groups/:groupId/challenges', validateBody(createChallengeSchema), 
 }));
 
 // ── GET active challenge ──
-router.get('/groups/:groupId/challenges/active', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/groups/:groupId/challenges/active', validateUuidParams('groupId'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const groupId = req.params.groupId as string;
 
   const membership = await query(
@@ -432,7 +433,7 @@ router.get('/groups/:groupId/challenges/active', asyncHandler(async (req: AuthRe
 }));
 
 // ── POST respond to challenge ──
-router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChallengeSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
   const { photo_url, photo_base64, response_time_ms, answer_index, answer_text } = req.body;
   // Accept either photo_url or photo_base64 (data URI from camera)
@@ -445,6 +446,11 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
   }
 
   const c = challenge.rows[0];
+
+  if (c.status !== 'active' || new Date(c.expires_at) < new Date()) {
+    res.status(400).json({ error: 'This challenge has expired or is no longer active' });
+    return;
+  }
 
   const membership = await query(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
@@ -701,7 +707,7 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
 }));
 
 // ── GET responses (can't peek until you play) ──
-router.get('/:id/responses', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/:id/responses', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
 
   const userResponse = await query(
@@ -759,7 +765,7 @@ router.get('/:id/responses', asyncHandler(async (req: AuthRequest, res: Response
 }));
 
 // ── GET /api/challenges/:id/reveal — Full reveal data for completed challenge ──
-router.get('/:id/reveal', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
 
   // Verify challenge exists
@@ -900,7 +906,7 @@ router.get('/:id/reveal', asyncHandler(async (req: AuthRequest, res: Response) =
 }));
 
 // ── GET challenge history ──
-router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/groups/:groupId/challenges/history', validateUuidParams('groupId'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const groupId = req.params.groupId as string;
 
   const membership = await query(
@@ -912,7 +918,7 @@ router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthR
     return;
   }
 
-  const limit = parseInt(req.query.limit as string) || 20;
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
   const result = await query(
     `SELECT c.id, c.group_id, c.type,
        c.prompt_text as prompt,
@@ -942,9 +948,9 @@ router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthR
 }));
 
 // ── GET group photo timeline ──
-router.get('/groups/:groupId/photos', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/groups/:groupId/photos', validateUuidParams('groupId'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const groupId = req.params.groupId as string;
-  const limit = parseInt(req.query.limit as string) || 30;
+  const limit = Math.min(parseInt(req.query.limit as string) || 30, 100);
 
   const membership = await query(
     `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
@@ -972,7 +978,7 @@ router.get('/groups/:groupId/photos', asyncHandler(async (req: AuthRequest, res:
 }));
 
 // ── POST /api/challenges/responses/:responseId/reactions — Add reaction ──
-router.post('/responses/:responseId/reactions', validateBody(addReactionSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/responses/:responseId/reactions', validateUuidParams('responseId'), validateBody(addReactionSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { responseId } = req.params;
   const { emoji } = req.body;
 
@@ -1049,7 +1055,7 @@ router.delete('/responses/:responseId/reactions/:emoji', asyncHandler(async (req
 }));
 
 // ── GET /api/challenges/:id/progress — Who responded (no can't-peek gate) ──
-router.get('/:id/progress', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/:id/progress', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
 
   // Verify challenge exists
@@ -1107,7 +1113,7 @@ router.get('/:id/progress', asyncHandler(async (req: AuthRequest, res: Response)
 }));
 
 // ── GET /api/challenges/:id/preview — Tease data without content ──
-router.get('/:id/preview', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/:id/preview', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
 
   // Verify challenge exists

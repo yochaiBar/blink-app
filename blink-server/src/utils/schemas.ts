@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+const S3_BUCKET = process.env.AWS_S3_BUCKET || 'blinks3upload';
+const isS3Url = (url: string) =>
+  url.startsWith(`https://${S3_BUCKET}.s3.`) ||
+  url.startsWith(`https://s3.amazonaws.com/${S3_BUCKET}/`) ||
+  url.startsWith(`https://${S3_BUCKET}.s3.amazonaws.com/`);
+
 // ── Auth schemas ──────────────────────────────────────────────
 
 const phoneNumberSchema = z
@@ -25,16 +31,8 @@ export const refreshTokenSchema = z.object({
 // ── Profile schemas ───────────────────────────────────────────
 
 export const updateProfileSchema = z.object({
-  display_name: z
-    .string()
-    .min(1, 'Display name must be at least 1 character')
-    .max(50, 'Display name must be at most 50 characters')
-    .optional(),
-  avatar_url: z
-    .string()
-    .url('Must be a valid URL')
-    .or(z.literal(''))
-    .optional(),
+  display_name: z.string().trim().min(1, 'Display name is required').max(50, 'Display name too long').optional(),
+  avatar_url: z.string().url().refine(isS3Url, { message: 'avatar_url must be from the allowed S3 bucket' }).or(z.literal('')).optional(),
   bio: z
     .string()
     .max(200, 'Bio must be at most 200 characters')
@@ -85,8 +83,11 @@ export const createChallengeSchema = z.object({
 );
 
 export const respondChallengeSchema = z.object({
-  photo_url: z.string().optional(),
-  photo_base64: z.string().optional(),
+  photo_url: z.string().url().refine(
+    (url) => isS3Url(url) || url.startsWith('data:image/'),
+    { message: 'photo_url must be from the allowed S3 bucket or a data URI' }
+  ).optional(),
+  photo_base64: z.string().max(5_000_000, 'Image data too large (max ~3.75MB)').optional(),
   response_time_ms: z.number().int().positive().optional(),
   answer_index: z.number().int().min(0).optional(),
   answer_text: z.string().max(500).optional(),

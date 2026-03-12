@@ -12,7 +12,9 @@
     "migrate:prod": "node dist/config/migrate.js",
     "test": "jest --forceExit --detectOpenHandles",
     "test:coverage": "jest --coverage --forceExit --detectOpenHandles",
-    "test:watch": "jest --watch --forceExit"
+    "test:watch": "jest --watch --forceExit",
+    "lint": "eslint src/ --ext .ts",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",

@@ -14,7 +14,10 @@ const pool = new Pool({
   // Railway and most cloud Postgres providers require SSL
   ...(isProduction && {
     ssl: {
-      rejectUnauthorized: false,
+      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+      ...(process.env.DB_SSL_CERT && {
+        ca: process.env.DB_SSL_CERT,
+      }),
     },
   }),
 });

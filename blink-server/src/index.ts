@@ -43,8 +43,13 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 app.use(helmet());
+const corsOrigins = process.env.CORS_ORIGINS?.split(',');
+if (process.env.NODE_ENV === 'production' && !corsOrigins) {
+  logger.error('CORS_ORIGINS is required in production. Refusing to start.');
+  process.exit(1);
+}
 app.use(cors({
-  origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:8081', 'http://localhost:19006'],
+  origin: corsOrigins || ['http://localhost:8081', 'http://localhost:19006'],
   credentials: true,
 }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
@@ -84,8 +89,26 @@ const groupCreationLimiter = rateLimit({
   message: { error: 'Too many groups created, please try again later' },
 });
 
+const verifyOtpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many verification attempts, please try again later' },
+});
+
+const joinGroupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many join attempts, please try again later' },
+});
+
 // Apply per-route rate limits
 app.use('/api/auth/request-otp', otpLimiter);
+app.use('/api/auth/verify-otp', verifyOtpLimiter);
+app.use('/api/groups/join', joinGroupLimiter);
 app.use('/api/upload', uploadLimiter);
 app.post('/api/groups', groupCreationLimiter);
 
@@ -152,10 +175,12 @@ if (process.env.SENTRY_DSN) {
 
 // Error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const statusCode = err.status || 500;
   logger.error('Unhandled error', { error: err.message, stack: err.stack });
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-  });
+  const message = statusCode >= 500 && process.env.NODE_ENV === 'production'
+    ? 'Internal server error'
+    : (err.message || 'Internal server error');
+  res.status(statusCode).json({ error: message });
 });
 
 const PORT = process.env.PORT || 3000;
