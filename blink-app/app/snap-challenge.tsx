@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, ErrorInfo } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Platform,
   Dimensions,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,7 +38,7 @@ interface ProgressData {
   }>;
 }
 
-export default function SnapChallengeScreen() {
+function SnapChallengeScreen() {
   const { groupId, challengeId } = useLocalSearchParams<{
     groupId: string;
     challengeId?: string;
@@ -308,18 +309,22 @@ export default function SnapChallengeScreen() {
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-    await submitSnap(groupId ?? '', capturedUri ?? undefined);
-    // Navigate to challenge reveal instead of going back
-    if (resolvedChallengeId) {
-      router.replace({
-        pathname: '/challenge-reveal' as never,
-        params: {
-          challengeId: resolvedChallengeId,
-          groupId: groupId ?? '',
-        },
-      });
-    } else {
-      router.back();
+    try {
+      await submitSnap(groupId ?? '', capturedUri ?? undefined);
+      // Navigate to challenge reveal instead of going back
+      if (resolvedChallengeId) {
+        router.replace({
+          pathname: '/challenge-reveal' as never,
+          params: {
+            challengeId: resolvedChallengeId,
+            groupId: groupId ?? '',
+          },
+        });
+      } else {
+        router.back();
+      }
+    } catch (err) {
+      Alert.alert('Upload Failed', 'Could not submit your snap. Please try again.');
     }
   }, [submitSnap, groupId, router, capturedUri, resolvedChallengeId]);
 
@@ -615,6 +620,45 @@ export default function SnapChallengeScreen() {
         pointerEvents="none"
       />
     </View>
+  );
+}
+
+// Error boundary to catch crashes and show error instead of crashing
+class SnapErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('SnapChallenge crash:', error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0A0A0F', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ color: '#FF6B4A', fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>Something went wrong</Text>
+          <ScrollView style={{ maxHeight: 200 }}>
+            <Text style={{ color: '#fff', fontSize: 12 }}>{this.state.error.message}</Text>
+            <Text style={{ color: '#888', fontSize: 10, marginTop: 5 }}>{this.state.error.stack?.slice(0, 500)}</Text>
+          </ScrollView>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function SnapChallengeWithBoundary() {
+  return (
+    <SnapErrorBoundary>
+      <SnapChallengeScreen />
+    </SnapErrorBoundary>
   );
 }
 

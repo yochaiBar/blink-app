@@ -168,62 +168,83 @@ interface PastChallenge {
   prompt?: string | null;
 }
 
-function PastChallengeGrid({
-  challenges,
+interface GroupPhoto {
+  id: string;
+  challenge_id: string;
+  photo_url: string;
+  responded_at: string;
+  prompt: string | null;
+  challenge_type: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+function getRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
+function PhotoTimeline({
+  photos,
   groupId,
   onSeeAll,
 }: {
-  challenges: PastChallenge[];
+  photos: GroupPhoto[];
   groupId: string;
   onSeeAll: () => void;
 }) {
   const router = useRouter();
-  if (challenges.length === 0) return null;
-
-  const visible = challenges.slice(0, 9);
+  if (photos.length === 0) return null;
 
   return (
     <View style={s.pastSection}>
       <View style={s.pastHeader}>
-        <Text style={[typography.headlineMedium, { color: theme.text }]}>Past Challenges</Text>
-        <TouchableOpacity onPress={onSeeAll} style={s.seeAllBtn}>
-          <Text style={s.seeAllText}>See all</Text>
-          <ChevronRight size={14} color={theme.textMuted} />
-        </TouchableOpacity>
+        <Text style={[typography.headlineMedium, { color: theme.text }]}>Moments</Text>
+        {photos.length > 9 && (
+          <TouchableOpacity onPress={onSeeAll} style={s.seeAllBtn}>
+            <Text style={s.seeAllText}>See all</Text>
+            <ChevronRight size={14} color={theme.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
       <View style={s.thumbGrid}>
-        {visible.map((ch) => {
-          const config = getChallengeTypeConfig(ch.type);
-          return (
-            <TouchableOpacity
-              key={ch.id}
-              style={s.thumbItem}
-              activeOpacity={0.8}
-              onPress={() =>
-                router.push({
-                  pathname: '/challenge-history' as never,
-                  params: { groupId },
-                })
-              }
-            >
-              {ch.photo_url ? (
-                <Image
-                  source={{ uri: ch.photo_url }}
-                  style={s.thumbImage}
-                  contentFit="cover"
-                  transition={200}
-                />
-              ) : (
-                <View style={[s.thumbImage, s.thumbPlaceholder]}>
-                  <Text style={s.thumbPlaceholderEmoji}>{config.emoji}</Text>
-                </View>
-              )}
-              <View style={s.thumbOverlay}>
-                <Text style={s.thumbEmojiOverlay}>{config.emoji}</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+        {photos.slice(0, 9).map((photo) => (
+          <TouchableOpacity
+            key={photo.id}
+            style={s.thumbItem}
+            activeOpacity={0.8}
+            onPress={() =>
+              router.push({
+                pathname: '/challenge-reveal' as never,
+                params: { challengeId: photo.challenge_id, groupId },
+              })
+            }
+          >
+            <Image
+              source={{ uri: photo.photo_url }}
+              style={s.thumbImage}
+              contentFit="cover"
+              transition={200}
+            />
+            <View style={s.thumbOverlayBottom}>
+              <Image
+                source={{ uri: photo.avatar_url ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop' }}
+                style={s.thumbAvatar}
+                contentFit="cover"
+              />
+              <Text style={s.thumbTime} numberOfLines={1}>{getRelativeTime(photo.responded_at)}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
       </View>
     </View>
   );
@@ -343,6 +364,20 @@ export default function GroupDetailScreen() {
     enabled: isDemo ? !!id : !!activeChallenge?.id,
     staleTime: isDemo ? Infinity : undefined,
   });
+
+  // Fetch group photo timeline
+  const photosQuery = useQuery({
+    queryKey: ['group-photos', id],
+    queryFn: async () => {
+      const data = await api(`/challenges/groups/${id}/photos?limit=30`);
+      return (data ?? []) as GroupPhoto[];
+    },
+    enabled: !!id && !isDemo,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const groupPhotos: GroupPhoto[] = photosQuery.data ?? [];
 
   // Fetch daily spotlight for this group
   const spotlightQuery = useQuery({
@@ -1132,7 +1167,7 @@ export default function GroupDetailScreen() {
               onBlock={handleBlockUser}
             />
           ))
-        ) : snaps.length === 0 && !activeChallenge ? (
+        ) : snaps.length === 0 && !activeChallenge && groupPhotos.length === 0 ? (
           <EmptyState
             emoji="\u{1F4F8}"
             title="No snaps yet"
@@ -1148,10 +1183,10 @@ export default function GroupDetailScreen() {
           <AiCommentaryCard commentary={aiCommentary.commentary} />
         )}
 
-        {/* ===== 5. PAST CHALLENGES THUMBNAIL GRID ===== */}
+        {/* ===== 5. PHOTO TIMELINE ===== */}
         {!isDemo && (
-          <PastChallengeGrid
-            challenges={pastChallenges}
+          <PhotoTimeline
+            photos={groupPhotos}
             groupId={id ?? ''}
             onSeeAll={() => router.push({ pathname: '/challenge-history' as never, params: { groupId: id } })}
           />
@@ -1647,6 +1682,31 @@ const s = StyleSheet.create({
   },
   thumbEmojiOverlay: {
     fontSize: 12,
+  },
+  thumbOverlayBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 4,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderBottomLeftRadius: borderRadius.md,
+    borderBottomRightRadius: borderRadius.md,
+  },
+  thumbAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    marginRight: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  thumbTime: {
+    color: '#fff',
+    fontSize: 10,
+    flex: 1,
   },
 
   // ---- Bottom Actions ----

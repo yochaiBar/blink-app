@@ -121,28 +121,37 @@ export async function api(path: string, options: RequestInit = {}): Promise<any>
 }
 
 // ── Upload ──
-export async function uploadPhoto(base64DataUri: string, groupId: string, challengeId: string): Promise<string> {
+export async function uploadPhoto(imageUri: string, groupId: string, challengeId: string): Promise<string> {
   const presign = await api('/upload/presign', {
     method: 'POST',
     body: JSON.stringify({ groupId, challengeId }),
   });
 
-  // Dev mode (no S3) — return base64 as-is
-  if (!presign.uploadUrl) return base64DataUri;
+  // Dev mode (no S3) — return as-is
+  if (!presign.uploadUrl) return imageUri;
 
-  // Convert base64 data URI to binary blob
-  const base64Data = base64DataUri.replace(/^data:image\/\w+;base64,/, '');
-  const binaryString = atob(base64Data);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  let blob: Blob;
+
+  if (imageUri.startsWith('data:')) {
+    // Base64 data URI — decode to blob
+    const base64Data = imageUri.replace(/^data:image\/\w+;base64,/, '');
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    blob = new Blob([bytes], { type: 'image/jpeg' });
+  } else {
+    // File URI (file://) — fetch as blob (works in React Native)
+    const fileRes = await fetch(imageUri);
+    blob = await fileRes.blob();
   }
 
   // Upload directly to S3 via presigned PUT URL
   const uploadRes = await fetch(presign.uploadUrl, {
     method: 'PUT',
     headers: { 'Content-Type': 'image/jpeg' },
-    body: bytes,
+    body: blob,
   });
 
   if (!uploadRes.ok) {

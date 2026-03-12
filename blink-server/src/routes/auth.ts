@@ -13,6 +13,7 @@ import { isSmsConfigured, sendSms } from '../config/sms';
 const router = Router();
 
 const DEV_OTP = '123456';
+const ALLOW_DEV_OTP_FALLBACK = process.env.ALLOW_DEV_OTP_FALLBACK !== 'false'; // default: true, set to 'false' in production
 
 // In-memory OTP store (phone -> { code, expiresAt })
 const pendingOtps = new Map<string, { code: string; expiresAt: number }>();
@@ -49,9 +50,21 @@ router.post(
       expiresAt: Date.now() + 5 * 60 * 1000,
     });
 
-    await sendSms(phone_number, `Your Blinks verification code is: ${code}`);
+    try {
+      await sendSms(phone_number, `Your Blinks verification code is: ${code}`);
+      logger.info('OTP sent via Twilio', { phone_number });
+    } catch (err) {
+      if (ALLOW_DEV_OTP_FALLBACK) {
+        logger.warn('Twilio SMS failed, falling back to dev OTP', { phone_number, error: (err as Error).message });
+        pendingOtps.set(phone_number, {
+          code: DEV_OTP,
+          expiresAt: Date.now() + 5 * 60 * 1000,
+        });
+      } else {
+        throw err;
+      }
+    }
 
-    logger.info('OTP sent via Twilio', { phone_number });
     res.json({ message: 'OTP sent' });
   })
 );

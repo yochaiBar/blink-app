@@ -16,7 +16,6 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.yochaibar.blinks",
-      "googleServicesFile": "./GoogleService-Info.plist",
       "associatedDomains": [
         "applinks:blink.app"
       ],
@@ -96,7 +95,6 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.yochaibar.blinks",
-      "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -154,7 +152,7 @@
       [
         "@sentry/react-native/expo",
         {
-          "organization": "REPLACE_WITH_SENTRY_ORG",
+          "organization": "blink",
           "project": "blink-app"
         }
       ]

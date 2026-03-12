@@ -103,7 +103,7 @@ router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   }
 
   const members = await query(
-    `SELECT u.id as user_id, u.display_name, u.avatar_url, gm.role, gm.joined_at,
+    `SELECT u.id as user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url, gm.role, gm.joined_at,
             gm.current_streak as streak, gm.total_responses, gm.total_challenges,
             CASE WHEN gm.total_challenges > 0
               THEN ROUND(gm.total_responses::numeric / gm.total_challenges * 100)::int
@@ -320,7 +320,7 @@ router.get('/:id/streaks', asyncHandler(async (req: AuthRequest, res: Response) 
 
   // Get all members with streaks
   const members = await query(
-    `SELECT gm.user_id, u.display_name, u.avatar_url, gm.current_streak as streak
+    `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url, gm.current_streak as streak
      FROM group_members gm
      JOIN users u ON u.id = gm.user_id
      WHERE gm.group_id = $1

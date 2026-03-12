@@ -161,7 +161,7 @@ async function processSkipsForChallenge(challengeId: string, groupId: string) {
           try {
             const groupPersonalityResult = await query(`SELECT ai_personality FROM groups WHERE id = $1`, [groupId]);
             const personality: AiPersonality = groupPersonalityResult.rows[0]?.ai_personality || 'funny';
-            const userNameResult = await query(`SELECT display_name FROM users WHERE id = $1`, [member.user_id]);
+            const userNameResult = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [member.user_id]);
             const userName = userNameResult.rows[0]?.display_name || 'Someone';
             const validPenaltyType = penaltyType as 'wanted_poster' | 'avatar_change' | 'servant';
             const aiPenalty = await generateSkipPenalty(userName, validPenaltyType, personality);
@@ -202,7 +202,7 @@ async function processSkipsForChallenge(challengeId: string, groupId: string) {
     emitToGroup(groupId, 'group:streak_update', { groupId, groupStreak: 0, brokenBy: firstSkipperId });
 
     if (brokenStreak > 0 && firstSkipperId) {
-      const skipperName = await query(`SELECT display_name FROM users WHERE id = $1`, [firstSkipperId]);
+      const skipperName = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [firstSkipperId]);
       const name = skipperName.rows[0]?.display_name || 'Someone';
       sendPushToGroup(
         groupId,
@@ -309,7 +309,7 @@ router.post('/groups/:groupId/challenges', validateBody(createChallengeSchema), 
     if (quizType === 'most_likely') {
       // Options are group member names
       const membersList = await query(
-        `SELECT u.id, u.display_name FROM group_members gm
+        `SELECT u.id, COALESCE(u.display_name, u.phone_number) AS display_name FROM group_members gm
          JOIN users u ON u.id = gm.user_id WHERE gm.group_id = $1`,
         [groupId]
       );
@@ -335,12 +335,12 @@ router.post('/groups/:groupId/challenges', validateBody(createChallengeSchema), 
 
   // Notify all group members except trigger-er
   const groupMembers = await query(
-    `SELECT gm.user_id, u.display_name FROM group_members gm
+    `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name FROM group_members gm
      JOIN users u ON u.id = gm.user_id
      WHERE gm.group_id = $1 AND gm.user_id != $2`,
     [groupId, req.userId]
   );
-  const triggerUser = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+  const triggerUser = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
   const triggerName = triggerUser.rows[0]?.display_name || 'Someone';
   const groupInfo = await query(`SELECT name FROM groups WHERE id = $1`, [groupId]);
   const groupName = groupInfo.rows[0]?.name || 'your group';
@@ -503,7 +503,7 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
 
   // Notify the challenge trigger-er that someone responded
   if (c.triggered_by && c.triggered_by !== req.userId) {
-    const responderUser = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+    const responderUser = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
     const responderName = responderUser.rows[0]?.display_name || 'Someone';
     await createNotification(
       c.triggered_by,
@@ -533,7 +533,7 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
   try {
     // Get all group members with names
     const allMembers = await query(
-      `SELECT gm.user_id, u.display_name, u.avatar_url
+      `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
        FROM group_members gm
        JOIN users u ON u.id = gm.user_id
        WHERE gm.group_id = $1`,
@@ -542,7 +542,7 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
 
     // Get who has responded so far (non-skip)
     const allResponded = await query(
-      `SELECT cr.user_id, u.display_name, u.avatar_url
+      `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
        FROM challenge_responses cr
        JOIN users u ON u.id = cr.user_id
        WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
@@ -623,7 +623,7 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
         [req.userId, c.group_id, upcomingStreak]
       );
 
-      const userName = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+      const userName = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
       const displayName = userName.rows[0]?.display_name || 'Someone';
 
       sendPushToUser(
@@ -674,7 +674,7 @@ router.post('/:id/respond', validateBody(respondChallengeSchema), asyncHandler(a
       const groupPersonalityResult = await query(`SELECT ai_personality FROM groups WHERE id = $1`, [c.group_id]);
       const personality: AiPersonality = groupPersonalityResult.rows[0]?.ai_personality || 'funny';
       const allResponsesForCommentary = await query(
-        `SELECT cr.answer_text, cr.response_time_ms, u.display_name
+        `SELECT cr.answer_text, cr.response_time_ms, COALESCE(u.display_name, u.phone_number) AS display_name
          FROM challenge_responses cr
          JOIN users u ON u.id = cr.user_id
          WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
@@ -714,7 +714,7 @@ router.get('/:id/responses', asyncHandler(async (req: AuthRequest, res: Response
   }
 
   const responses = await query(
-    `SELECT cr.*, u.display_name, u.avatar_url
+    `SELECT cr.*, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
      WHERE cr.challenge_id = $1
@@ -729,7 +729,7 @@ router.get('/:id/responses', asyncHandler(async (req: AuthRequest, res: Response
   if (responseIds.length > 0) {
     const reactions = await query(
       `SELECT r.response_id, r.emoji, COUNT(*) as count,
-              ARRAY_AGG(u.display_name) as user_names
+              ARRAY_AGG(COALESCE(u.display_name, u.phone_number)) as user_names
        FROM reactions r
        JOIN users u ON u.id = r.user_id
        WHERE r.response_id = ANY($1)
@@ -798,7 +798,7 @@ router.get('/:id/reveal', asyncHandler(async (req: AuthRequest, res: Response) =
 
   // Fetch all non-skip responses with user info
   const responses = await query(
-    `SELECT cr.*, u.display_name, u.avatar_url
+    `SELECT cr.*, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
      WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'
@@ -912,6 +912,7 @@ router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthR
     return;
   }
 
+  const limit = parseInt(req.query.limit as string) || 20;
   const result = await query(
     `SELECT c.id, c.group_id, c.type,
        c.prompt_text as prompt,
@@ -921,12 +922,13 @@ router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthR
        c.expires_at, c.status, c.countdown_seconds,
        (SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = c.id AND response_type != 'skip') as response_count,
        (SELECT COUNT(*)::int FROM group_members WHERE group_id = c.group_id) as member_count,
-       EXISTS(SELECT 1 FROM challenge_responses WHERE challenge_id = c.id AND user_id = $2 AND response_type != 'skip') as user_responded
+       EXISTS(SELECT 1 FROM challenge_responses WHERE challenge_id = c.id AND user_id = $2 AND response_type != 'skip') as user_responded,
+       (SELECT cr.photo_url FROM challenge_responses cr WHERE cr.challenge_id = c.id AND cr.photo_url IS NOT NULL LIMIT 1) as photo_url
      FROM challenges c
      WHERE c.group_id = $1 AND c.status IN ('completed', 'expired')
      ORDER BY c.triggered_at DESC
-     LIMIT 20`,
-    [groupId, req.userId]
+     LIMIT $3`,
+    [groupId, req.userId, limit]
   );
 
   // Parse options strings into arrays
@@ -935,6 +937,36 @@ router.get('/groups/:groupId/challenges/history', asyncHandler(async (req: AuthR
       try { row.options = JSON.parse(row.options); } catch { /* keep as-is */ }
     }
   }
+
+  res.json(result.rows);
+}));
+
+// ── GET group photo timeline ──
+router.get('/groups/:groupId/photos', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const groupId = req.params.groupId as string;
+  const limit = parseInt(req.query.limit as string) || 30;
+
+  const membership = await query(
+    `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    [groupId, req.userId]
+  );
+  if (membership.rows.length === 0) {
+    res.status(403).json({ error: 'Not a member of this group' });
+    return;
+  }
+
+  const result = await query(
+    `SELECT cr.id, cr.challenge_id, cr.photo_url, cr.responded_at,
+       c.prompt_text as prompt, c.type as challenge_type,
+       COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
+     FROM challenge_responses cr
+     JOIN challenges c ON c.id = cr.challenge_id
+     JOIN users u ON u.id = cr.user_id
+     WHERE c.group_id = $1 AND cr.photo_url IS NOT NULL
+     ORDER BY cr.responded_at DESC
+     LIMIT $2`,
+    [groupId, limit]
+  );
 
   res.json(result.rows);
 }));
@@ -982,7 +1014,7 @@ router.post('/responses/:responseId/reactions', validateBody(addReactionSchema),
   // Fire-and-forget push notification to the response owner
   const responseOwner = response.rows[0].user_id;
   if (responseOwner && responseOwner !== req.userId) {
-    const reactorUser = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+    const reactorUser = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
     const reactorName = reactorUser.rows[0]?.display_name || 'Someone';
     sendPushToUser(
       responseOwner,
@@ -1040,7 +1072,7 @@ router.get('/:id/progress', asyncHandler(async (req: AuthRequest, res: Response)
 
   // Get all group members
   const allMembers = await query(
-    `SELECT gm.user_id, u.display_name, u.avatar_url
+    `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM group_members gm
      JOIN users u ON u.id = gm.user_id
      WHERE gm.group_id = $1`,
@@ -1049,7 +1081,7 @@ router.get('/:id/progress', asyncHandler(async (req: AuthRequest, res: Response)
 
   // Get who responded (non-skip)
   const responded = await query(
-    `SELECT cr.user_id, u.display_name, u.avatar_url
+    `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
      WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
@@ -1105,7 +1137,7 @@ router.get('/:id/preview', asyncHandler(async (req: AuthRequest, res: Response) 
 
   // Who responded (non-skip)
   const responded = await query(
-    `SELECT cr.user_id, u.display_name, u.avatar_url
+    `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
      WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
