@@ -36,7 +36,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   verifyOtp: async (phone: string, code: string) => {
-    const data = await api('/auth/verify-otp', {
+    const data = await api<{ accessToken: string; refreshToken: string; user: User }>('/auth/verify-otp', {
       method: 'POST',
       body: JSON.stringify({ phone_number: phone, code }),
     });
@@ -52,7 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   restoreSession: async () => {
     try {
       await loadToken();
-      const user = await api('/auth/me');
+      const user = await api<User>('/auth/me');
       set({ user, isAuthenticated: true, isLoading: false });
     } catch {
       set({ isAuthenticated: false, isLoading: false });

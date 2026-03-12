@@ -10,6 +10,7 @@ import { createNotification } from '../utils/notifications';
 import { emitToGroup } from '../socket';
 import { sendPushToUser } from '../services/pushNotifications';
 import { validateUuidParams } from '../middleware/validateParams';
+import { GroupRow, GroupMemberRow, CountRow, UserDisplayNameRow } from '../types/db';
 
 const router = Router();
 const MAX_FREE_GROUPS = 3;
@@ -25,7 +26,7 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
   const { name, icon, category, quiet_hours_start, quiet_hours_end, skip_penalty_type, ai_personality } = req.body;
 
   // 3-group free tier limit
-  const userGroups = await query(
+  const userGroups = await query<CountRow>(
     `SELECT COUNT(*) FROM group_members WHERE user_id = $1`,
     [req.userId]
   );
@@ -35,7 +36,7 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
   }
 
   const inviteCode = generateInviteCode();
-  const group = await query(
+  const group = await query<GroupRow>(
     `INSERT INTO groups (name, icon, category, created_by, invite_code, quiet_hours_start, quiet_hours_end, skip_penalty_type, ai_personality)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
@@ -88,7 +89,7 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
 router.get('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [id, req.userId]
   );
@@ -97,7 +98,7 @@ router.get('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthReques
     return;
   }
 
-  const group = await query(`SELECT * FROM groups WHERE id = $1`, [id]);
+  const group = await query<GroupRow>(`SELECT * FROM groups WHERE id = $1`, [id]);
   if (group.rows.length === 0) {
     res.status(404).json({ error: 'Group not found' });
     return;
@@ -136,7 +137,7 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
   const { invite_code } = req.body;
 
   // 3-group free tier limit
-  const userGroups = await query(
+  const userGroups = await query<CountRow>(
     `SELECT COUNT(*) FROM group_members WHERE user_id = $1`,
     [req.userId]
   );
@@ -145,7 +146,7 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
     return;
   }
 
-  const group = await query(
+  const group = await query<GroupRow>(
     `SELECT * FROM groups WHERE invite_code = $1`,
     [invite_code.toUpperCase()]
   );
@@ -156,7 +157,7 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
 
   const g = group.rows[0];
 
-  const count = await query(
+  const count = await query<CountRow>(
     `SELECT COUNT(*) FROM group_members WHERE group_id = $1`,
     [g.id]
   );
@@ -173,7 +174,7 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
   );
 
   // Notify existing group members
-  const joinerUser = await query(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
+  const joinerUser = await query<UserDisplayNameRow>(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
   const joinerName = joinerUser.rows[0]?.display_name || 'Someone';
 
   const existingMembers = await query(
@@ -216,7 +217,7 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
 router.post('/:id/leave', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [id, req.userId]
   );
@@ -229,7 +230,7 @@ router.post('/:id/leave', validateUuidParams('id'), asyncHandler(async (req: Aut
 
   if (isAdmin) {
     // Check if there are other members
-    const otherMembers = await query(
+    const otherMembers = await query<Pick<GroupMemberRow, 'user_id' | 'role'>>(
       `SELECT user_id, role FROM group_members WHERE group_id = $1 AND user_id != $2`,
       [id, req.userId]
     );
@@ -243,7 +244,7 @@ router.post('/:id/leave', validateUuidParams('id'), asyncHandler(async (req: Aut
     }
 
     // Check if there are other admins
-    const otherAdmins = otherMembers.rows.filter((m: any) => m.role === 'admin');
+    const otherAdmins = otherMembers.rows.filter((m) => m.role === 'admin');
     if (otherAdmins.length === 0) {
       // Transfer admin to the longest-standing member
       const nextAdmin = await query(
@@ -273,7 +274,7 @@ router.post('/:id/leave', validateUuidParams('id'), asyncHandler(async (req: Aut
 router.delete('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [id, req.userId]
   );
@@ -302,7 +303,7 @@ router.get('/:id/streaks', validateUuidParams('id'), asyncHandler(async (req: Au
   const { id } = req.params;
 
   // Verify membership
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [id, req.userId]
   );
@@ -312,7 +313,7 @@ router.get('/:id/streaks', validateUuidParams('id'), asyncHandler(async (req: Au
   }
 
   // Get group streak info
-  const groupResult = await query(
+  const groupResult = await query<Pick<GroupRow, 'group_streak' | 'longest_group_streak'>>(
     `SELECT group_streak, longest_group_streak FROM groups WHERE id = $1`,
     [id]
   );

@@ -20,7 +20,7 @@ export default function SettingsScreen() {
   const [quietHoursEnabled, setQuietHoursEnabled] = useState<boolean>(false);
   const [privacyMode, setPrivacyMode] = useState<'everyone' | 'friends' | 'groups_only'>('everyone');
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
-  const [blockedUsers, setBlockedUsers] = useState<Array<{ blocked_id: string; display_name: string; avatar_url: string | null }>>([]);
+  const [blockedUsers, setBlockedUsers] = useState<Array<{ blocked_id: string; display_name: string | null; avatar_url: string | null }>>([]);
 
   useEffect(() => {
     getBlockedUsers()

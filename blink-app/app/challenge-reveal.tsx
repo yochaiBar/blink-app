@@ -136,7 +136,12 @@ export default function ChallengeRevealScreen() {
     queryFn: async (): Promise<RevealData> => {
       // Try reveal endpoint first
       try {
-        const res = await api(`/challenges/${challengeId}/reveal`);
+        const res = await api<{
+          responses?: ApiChallengeResponse[];
+          aiCommentary?: string | null;
+          ai_commentary?: string | null;
+          challenge?: ApiChallenge | null;
+        }>(`/challenges/${challengeId}/reveal`);
         return {
           responses: res.responses ?? [],
           aiCommentary: res.aiCommentary ?? res.ai_commentary ?? null,

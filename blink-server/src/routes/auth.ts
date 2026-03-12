@@ -9,6 +9,7 @@ import { validateBody } from '../middleware/validate';
 import { requestOtpSchema, verifyOtpSchema, refreshTokenSchema, updateProfileSchema, pushTokenSchema } from '../utils/schemas';
 import logger from '../utils/logger';
 import { isSmsConfigured, sendSms } from '../config/sms';
+import { UserRow, CountRow } from '../types/db';
 
 const router = Router();
 
@@ -112,7 +113,7 @@ router.post(
     logger.info('OTP verified', { phone: maskPhone(phone_number) });
 
     // ── Upsert user ──────────────────────────────────────────────
-    const result = await query(
+    const result = await query<Pick<UserRow, 'id' | 'phone_number' | 'display_name' | 'avatar_url' | 'bio'>>(
       `INSERT INTO users (phone_number) VALUES ($1)
        ON CONFLICT (phone_number) DO UPDATE SET last_active_at = NOW()
        RETURNING id, phone_number, display_name, avatar_url, bio`,
@@ -150,14 +151,19 @@ router.post(
         process.env.JWT_REFRESH_SECRET!
       ) as { userId: string };
 
-      const accessToken = jwt.sign(
+      const newAccessToken = jwt.sign(
         { userId: payload.userId },
         process.env.JWT_SECRET!,
         { expiresIn: JWT_ACCESS_EXPIRY }
       );
+      const newRefreshToken = jwt.sign(
+        { userId: payload.userId },
+        process.env.JWT_REFRESH_SECRET!,
+        { expiresIn: JWT_REFRESH_EXPIRY }
+      );
 
       logger.info('Token refreshed', { userId: payload.userId });
-      res.json({ accessToken });
+      res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
     } catch {
       res.status(401).json({ error: 'Invalid refresh token' });
     }
@@ -169,7 +175,7 @@ router.get(
   '/me',
   authenticate,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const result = await query(
+    const result = await query<UserRow>(
       `SELECT id, phone_number, display_name, avatar_url, bio, created_at, last_active_at
        FROM users WHERE id = $1`,
       [req.userId]
@@ -212,7 +218,7 @@ router.patch(
     const { display_name, avatar_url, bio } = req.body;
 
     const setClauses: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
     let paramIndex = 1;
 
     if (display_name !== undefined) {
@@ -230,7 +236,7 @@ router.patch(
 
     values.push(req.userId);
 
-    const result = await query(
+    const result = await query<UserRow>(
       `UPDATE users SET ${setClauses.join(', ')}
        WHERE id = $${paramIndex}
        RETURNING id, phone_number, display_name, avatar_url, bio, created_at, last_active_at`,

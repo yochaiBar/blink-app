@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, QueryResult } from 'pg';
 import dotenv from 'dotenv';
 import logger from '../utils/logger';
 
@@ -27,6 +27,10 @@ pool.on('error', (err) => {
   process.exit(-1);
 });
 
-export const query = (text: string, params?: any[]) => pool.query(text, params);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const query = <T extends Record<string, any> = Record<string, any>>(
+  text: string,
+  params?: unknown[]
+): Promise<QueryResult<T>> => pool.query<T>(text, params);
 
 export default pool;

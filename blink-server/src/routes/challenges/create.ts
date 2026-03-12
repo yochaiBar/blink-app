@@ -11,6 +11,7 @@ import { emitToGroup } from '../../socket';
 import { sendPushToGroup } from '../../services/pushNotifications';
 import { validateUuidParams } from '../../middleware/validateParams';
 import { CHALLENGE_SELECT, getRandomQuiz, processSkipsForChallenge } from './shared';
+import { GroupMemberRow, ChallengeRow, UserDisplayNameRow } from '../../types/db';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.post('/groups/:groupId/challenges', validateUuidParams('groupId'), valida
   const groupId = req.params.groupId as string;
   const { type } = req.body; // 'snap', 'quiz_food', 'quiz_most_likely', 'quiz_rate_day'
 
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [groupId, req.userId]
   );
@@ -29,7 +30,7 @@ router.post('/groups/:groupId/challenges', validateUuidParams('groupId'), valida
   }
 
   // Expire any active challenge and process skips
-  const activeChallenges = await query(
+  const activeChallenges = await query<Pick<ChallengeRow, 'id'>>(
     `SELECT id FROM challenges WHERE group_id = $1 AND status = 'active'`,
     [groupId]
   );
@@ -93,9 +94,9 @@ router.post('/groups/:groupId/challenges', validateUuidParams('groupId'), valida
      WHERE gm.group_id = $1 AND gm.user_id != $2`,
     [groupId, req.userId]
   );
-  const triggerUser = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
+  const triggerUser = await query<UserDisplayNameRow>(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
   const triggerName = triggerUser.rows[0]?.display_name || 'Someone';
-  const groupInfo = await query(`SELECT name FROM groups WHERE id = $1`, [groupId]);
+  const groupInfo = await query<Pick<import('../../types/db').GroupRow, 'name'>>(`SELECT name FROM groups WHERE id = $1`, [groupId]);
   const groupName = groupInfo.rows[0]?.name || 'your group';
 
   for (const member of groupMembers.rows) {

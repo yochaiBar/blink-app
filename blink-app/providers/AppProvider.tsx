@@ -223,7 +223,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   // ── Join group ──
   const joinGroup = useCallback(async (code: string): Promise<{ success: boolean; groupId?: string; groupName?: string; message: string }> => {
     try {
-      const result = await api('/groups/join', {
+      const result = await api<{ id: string; name: string }>('/groups/join', {
         method: 'POST',
         body: JSON.stringify({ invite_code: code }),
       });

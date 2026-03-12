@@ -3,6 +3,7 @@ import logger from '../../utils/logger';
 import { emitToGroup } from '../../socket';
 import { sendPushToGroup, sendPushToUser } from '../../services/pushNotifications';
 import { generateSkipPenalty, AiPersonality } from '../../services/aiService';
+import { GroupMemberRow, ChallengeResponseRow, GroupRow, CountRow, UserDisplayNameRow, StreakShieldRow } from '../../types/db';
 
 // Column aliases to map DB schema names to client-expected field names.
 // The DB uses triggered_by/triggered_at/prompt_text/options_json,
@@ -44,20 +45,20 @@ export function getRandomQuiz(type: 'food' | 'most_likely' | 'rate_day') {
 // ── Helper: process skip penalties when challenge expires ───────
 export async function processSkipsForChallenge(challengeId: string, groupId: string) {
   // Get all group members
-  const members = await query(
+  const members = await query<Pick<GroupMemberRow, 'user_id'>>(
     `SELECT user_id FROM group_members WHERE group_id = $1`,
     [groupId]
   );
 
   // Get who responded (non-skip)
-  const responded = await query(
+  const responded = await query<Pick<ChallengeResponseRow, 'user_id'>>(
     `SELECT user_id FROM challenge_responses WHERE challenge_id = $1 AND response_type != 'skip'`,
     [challengeId]
   );
-  const respondedIds = new Set(responded.rows.map((r: any) => r.user_id));
+  const respondedIds = new Set(responded.rows.map((r) => r.user_id));
 
   // Get group penalty type
-  const group = await query(`SELECT skip_penalty_type FROM groups WHERE id = $1`, [groupId]);
+  const group = await query<Pick<GroupRow, 'skip_penalty_type'>>(`SELECT skip_penalty_type FROM groups WHERE id = $1`, [groupId]);
   const penaltyType = group.rows[0]?.skip_penalty_type || 'wanted_poster';
 
   // Increment total_challenges for all members
@@ -92,13 +93,13 @@ export async function processSkipsForChallenge(challengeId: string, groupId: str
       );
 
       // ── Streak Shield: check before resetting streak ──
-      const currentStreakResult = await query(
+      const currentStreakResult = await query<Pick<GroupMemberRow, 'current_streak'>>(
         `SELECT current_streak FROM group_members WHERE group_id = $1 AND user_id = $2`,
         [groupId, member.user_id]
       );
       const currentStreak = currentStreakResult.rows[0]?.current_streak || 0;
 
-      const shield = await query(
+      const shield = await query<Pick<StreakShieldRow, 'id'>>(
         `SELECT id FROM streak_shields WHERE user_id = $1 AND group_id = $2 AND used_at IS NULL ORDER BY earned_at LIMIT 1`,
         [member.user_id, groupId]
       );
@@ -111,7 +112,7 @@ export async function processSkipsForChallenge(challengeId: string, groupId: str
         );
 
         // Count remaining shields
-        const remainingShields = await query(
+        const remainingShields = await query<CountRow>(
           `SELECT COUNT(*) FROM streak_shields WHERE user_id = $1 AND group_id = $2 AND used_at IS NULL`,
           [member.user_id, groupId]
         );
@@ -146,9 +147,9 @@ export async function processSkipsForChallenge(challengeId: string, groupId: str
         } else {
           // Use AI to generate penalty text (falls back to hardcoded internally)
           try {
-            const groupPersonalityResult = await query(`SELECT ai_personality FROM groups WHERE id = $1`, [groupId]);
-            const personality: AiPersonality = groupPersonalityResult.rows[0]?.ai_personality || 'funny';
-            const userNameResult = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [member.user_id]);
+            const groupPersonalityResult = await query<Pick<GroupRow, 'ai_personality'>>(`SELECT ai_personality FROM groups WHERE id = $1`, [groupId]);
+            const personality: AiPersonality = groupPersonalityResult.rows[0]?.ai_personality as AiPersonality || 'funny';
+            const userNameResult = await query<UserDisplayNameRow>(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [member.user_id]);
             const userName = userNameResult.rows[0]?.display_name || 'Someone';
             const validPenaltyType = penaltyType as 'wanted_poster' | 'avatar_change' | 'servant';
             const aiPenalty = await generateSkipPenalty(userName, validPenaltyType, personality);
@@ -178,18 +179,18 @@ export async function processSkipsForChallenge(challengeId: string, groupId: str
     );
     emitToGroup(groupId, 'group:streak_update', { groupId, groupStreak: null, brokenBy: null });
     // Fetch updated value for socket event
-    const updatedGroup = await query(`SELECT group_streak FROM groups WHERE id = $1`, [groupId]);
+    const updatedGroup = await query<Pick<GroupRow, 'group_streak'>>(`SELECT group_streak FROM groups WHERE id = $1`, [groupId]);
     emitToGroup(groupId, 'group:streak_update', { groupId, groupStreak: updatedGroup.rows[0]?.group_streak || 0, brokenBy: null });
   } else if (anyoneSkipped) {
     // Get current group streak before resetting (for notification)
-    const groupStreakResult = await query(`SELECT group_streak FROM groups WHERE id = $1`, [groupId]);
+    const groupStreakResult = await query<Pick<GroupRow, 'group_streak'>>(`SELECT group_streak FROM groups WHERE id = $1`, [groupId]);
     const brokenStreak = groupStreakResult.rows[0]?.group_streak || 0;
 
     await query(`UPDATE groups SET group_streak = 0 WHERE id = $1`, [groupId]);
     emitToGroup(groupId, 'group:streak_update', { groupId, groupStreak: 0, brokenBy: firstSkipperId });
 
     if (brokenStreak > 0 && firstSkipperId) {
-      const skipperName = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [firstSkipperId]);
+      const skipperName = await query<UserDisplayNameRow>(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [firstSkipperId]);
       const name = skipperName.rows[0]?.display_name || 'Someone';
       sendPushToGroup(
         groupId,

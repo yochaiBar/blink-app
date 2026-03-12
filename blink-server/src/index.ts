@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
 
 dotenv.config();
@@ -133,16 +134,38 @@ const legalCandidates = [
 ];
 const legalDir = legalCandidates.find(d => fs.existsSync(d)) || legalCandidates[0];
 
-// Override helmet CSP for legal pages (they use inline <style> tags)
-const legalCsp = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'";
+// Compute SHA-256 hashes of inline <style> blocks at startup so we can use
+// hash-based CSP instead of 'unsafe-inline' (LOW-5 security fix).
+function extractStyleHash(htmlPath: string): string | null {
+  try {
+    const html = fs.readFileSync(htmlPath, 'utf-8');
+    const match = html.match(/<style>([\s\S]*?)<\/style>/);
+    if (!match) return null;
+    const hash = crypto.createHash('sha256').update(match[1]).digest('base64');
+    return `'sha256-${hash}'`;
+  } catch {
+    return null;
+  }
+}
+
+const privacyStyleHash = extractStyleHash(path.join(legalDir, 'privacy-policy.html'));
+const termsStyleHash = extractStyleHash(path.join(legalDir, 'terms-of-service.html'));
+
+function buildLegalCsp(styleHash: string | null): string {
+  const styleSrc = styleHash ? `style-src ${styleHash}` : "style-src 'unsafe-inline'";
+  return `default-src 'none'; ${styleSrc}; img-src 'self'`;
+}
+
+const privacyCsp = buildLegalCsp(privacyStyleHash);
+const termsCsp = buildLegalCsp(termsStyleHash);
 
 app.get('/privacy', (_req, res) => {
-  res.setHeader('Content-Security-Policy', legalCsp);
+  res.setHeader('Content-Security-Policy', privacyCsp);
   res.sendFile(path.join(legalDir, 'privacy-policy.html'));
 });
 
 app.get('/terms', (_req, res) => {
-  res.setHeader('Content-Security-Policy', legalCsp);
+  res.setHeader('Content-Security-Policy', termsCsp);
   res.sendFile(path.join(legalDir, 'terms-of-service.html'));
 });
 

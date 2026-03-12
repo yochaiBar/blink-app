@@ -7,6 +7,7 @@ import { emitToGroup } from '../../socket';
 import { commentOnResponses, AiPersonality } from '../../services/aiService';
 import { validateUuidParams } from '../../middleware/validateParams';
 import { CHALLENGE_SELECT, processSkipsForChallenge } from './shared';
+import { GroupMemberRow, ChallengeRow, ChallengeResponseRow, CountRow } from '../../types/db';
 
 const router = Router();
 
@@ -61,7 +62,7 @@ router.get('/pending', asyncHandler(async (req: AuthRequest, res: Response) => {
 router.get('/groups/:groupId/challenges/active', validateUuidParams('groupId'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const groupId = req.params.groupId as string;
 
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [groupId, req.userId]
   );
@@ -71,7 +72,7 @@ router.get('/groups/:groupId/challenges/active', validateUuidParams('groupId'), 
   }
 
   // Auto-expire and process skips
-  const expired = await query(
+  const expired = await query<Pick<ChallengeRow, 'id'>>(
     `SELECT id FROM challenges
      WHERE group_id = $1 AND status = 'active' AND expires_at < NOW()`,
     [groupId]
@@ -105,7 +106,7 @@ router.get('/groups/:groupId/challenges/active', validateUuidParams('groupId'), 
     try { challenge.options = JSON.parse(challenge.options); } catch { /* keep as-is */ }
   }
 
-  const userResponse = await query(
+  const userResponse = await query<Pick<ChallengeResponseRow, 'id'>>(
     `SELECT id FROM challenge_responses WHERE challenge_id = $1 AND user_id = $2`,
     [challenge.id, req.userId]
   );
@@ -120,7 +121,7 @@ router.get('/groups/:groupId/challenges/active', validateUuidParams('groupId'), 
 router.get('/:id/responses', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
 
-  const userResponse = await query(
+  const userResponse = await query<Pick<ChallengeResponseRow, 'id'>>(
     `SELECT id FROM challenge_responses WHERE challenge_id = $1 AND user_id = $2`,
     [id, req.userId]
   );
@@ -193,7 +194,7 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
   const c = challengeResult.rows[0];
 
   // Verify user is a group member
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [c.group_id, req.userId]
   );
@@ -203,7 +204,7 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
   }
 
   // Can't peek gate — user must have responded
-  const userResponse = await query(
+  const userResponse = await query<Pick<ChallengeResponseRow, 'id'>>(
     `SELECT id FROM challenge_responses WHERE challenge_id = $1 AND user_id = $2`,
     [id, req.userId]
   );
@@ -248,14 +249,14 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
   }
 
   // Total members in group
-  const totalMembersResult = await query(
+  const totalMembersResult = await query<CountRow>(
     `SELECT COUNT(*)::int as count FROM group_members WHERE group_id = $1`,
     [c.group_id]
   );
   const totalMembers = totalMembersResult.rows[0].count;
 
   // Check if all members have responded
-  const totalResponsesResult = await query(
+  const totalResponsesResult = await query<CountRow>(
     `SELECT COUNT(*)::int as count FROM challenge_responses WHERE challenge_id = $1`,
     [id]
   );
@@ -319,7 +320,7 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
 router.get('/groups/:groupId/challenges/history', validateUuidParams('groupId'), asyncHandler(async (req: AuthRequest, res: Response) => {
   const groupId = req.params.groupId as string;
 
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [groupId, req.userId]
   );
@@ -392,7 +393,7 @@ router.get('/:id/progress', validateUuidParams('id'), asyncHandler(async (req: A
   const id = req.params.id as string;
 
   // Verify challenge exists
-  const challenge = await query(`SELECT group_id FROM challenges WHERE id = $1`, [id]);
+  const challenge = await query<Pick<ChallengeRow, 'group_id'>>(`SELECT group_id FROM challenges WHERE id = $1`, [id]);
   if (challenge.rows.length === 0) {
     res.status(404).json({ error: 'Challenge not found' });
     return;
@@ -400,7 +401,7 @@ router.get('/:id/progress', validateUuidParams('id'), asyncHandler(async (req: A
   const groupId = challenge.rows[0].group_id;
 
   // Verify user is a group member
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [groupId, req.userId]
   );
@@ -450,7 +451,7 @@ router.get('/:id/preview', validateUuidParams('id'), asyncHandler(async (req: Au
   const id = req.params.id as string;
 
   // Verify challenge exists
-  const challenge = await query(`SELECT group_id FROM challenges WHERE id = $1`, [id]);
+  const challenge = await query<Pick<ChallengeRow, 'group_id'>>(`SELECT group_id FROM challenges WHERE id = $1`, [id]);
   if (challenge.rows.length === 0) {
     res.status(404).json({ error: 'Challenge not found' });
     return;
@@ -458,7 +459,7 @@ router.get('/:id/preview', validateUuidParams('id'), asyncHandler(async (req: Au
   const groupId = challenge.rows[0].group_id;
 
   // Verify user is a group member
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [groupId, req.userId]
   );
@@ -468,7 +469,7 @@ router.get('/:id/preview', validateUuidParams('id'), asyncHandler(async (req: Au
   }
 
   // Total members
-  const totalMembersResult = await query(
+  const totalMembersResult = await query<CountRow>(
     `SELECT COUNT(*)::int as count FROM group_members WHERE group_id = $1`,
     [groupId]
   );

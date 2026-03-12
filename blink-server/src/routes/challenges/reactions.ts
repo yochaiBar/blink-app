@@ -7,6 +7,7 @@ import { addReactionSchema } from '../../utils/schemas';
 import logger from '../../utils/logger';
 import { sendPushToUser } from '../../services/pushNotifications';
 import { validateUuidParams } from '../../middleware/validateParams';
+import { GroupMemberRow, ReactionRow, UserDisplayNameRow } from '../../types/db';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.post('/responses/:responseId/reactions', validateUuidParams('responseId')
   }
 
   // Verify user is a member of the group
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [response.rows[0].group_id, req.userId]
   );
@@ -37,7 +38,7 @@ router.post('/responses/:responseId/reactions', validateUuidParams('responseId')
     return;
   }
 
-  const result = await query(
+  const result = await query<ReactionRow>(
     `INSERT INTO reactions (response_id, user_id, emoji)
      VALUES ($1, $2, $3)
      ON CONFLICT (response_id, user_id, emoji) DO NOTHING
@@ -53,7 +54,7 @@ router.post('/responses/:responseId/reactions', validateUuidParams('responseId')
   // Fire-and-forget push notification to the response owner
   const responseOwner = response.rows[0].user_id;
   if (responseOwner && responseOwner !== req.userId) {
-    const reactorUser = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
+    const reactorUser = await query<UserDisplayNameRow>(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
     const reactorName = reactorUser.rows[0]?.display_name || 'Someone';
     sendPushToUser(
       responseOwner,

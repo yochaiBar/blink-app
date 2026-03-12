@@ -12,6 +12,7 @@ import { moderateImage, deleteS3Object, extractS3Key, logModerationResult } from
 import { commentOnResponses, AiPersonality } from '../../services/aiService';
 import { validateUuidParams } from '../../middleware/validateParams';
 import { processSkipsForChallenge } from './shared';
+import { ChallengeRow, GroupMemberRow, ChallengeResponseRow, CountRow, UserDisplayNameRow } from '../../types/db';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChalle
   // Accept either photo_url or photo_base64 (data URI from camera)
   const resolvedPhotoUrl = photo_url || photo_base64 || null;
 
-  const challenge = await query(`SELECT * FROM challenges WHERE id = $1`, [id]);
+  const challenge = await query<ChallengeRow>(`SELECT * FROM challenges WHERE id = $1`, [id]);
   if (challenge.rows.length === 0) {
     res.status(404).json({ error: 'Challenge not found' });
     return;
@@ -35,7 +36,7 @@ router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChalle
     return;
   }
 
-  const membership = await query(
+  const membership = await query<GroupMemberRow>(
     `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
     [c.group_id, req.userId]
   );
@@ -44,7 +45,7 @@ router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChalle
     return;
   }
 
-  const existing = await query(
+  const existing = await query<Pick<ChallengeResponseRow, 'id'>>(
     `SELECT id FROM challenge_responses WHERE challenge_id = $1 AND user_id = $2`,
     [id, req.userId]
   );
@@ -83,7 +84,7 @@ router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChalle
   }
 
   const responseType = (c.type === 'quiz' || c.type === 'prompt') ? 'answer' : 'photo';
-  const result = await query(
+  const result = await query<ChallengeResponseRow>(
     `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, answer_index, answer_text, response_time_ms)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
@@ -92,7 +93,7 @@ router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChalle
 
   // Notify the challenge trigger-er that someone responded
   if (c.triggered_by && c.triggered_by !== req.userId) {
-    const responderUser = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
+    const responderUser = await query<UserDisplayNameRow>(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [req.userId]);
     const responderName = responderUser.rows[0]?.display_name || 'Someone';
     await createNotification(
       c.triggered_by,
@@ -243,11 +244,11 @@ router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChalle
   }
 
   // Check if all responded -> complete
-  const totalMembers = await query(
+  const totalMembers = await query<CountRow>(
     `SELECT COUNT(*) FROM group_members WHERE group_id = $1`,
     [c.group_id]
   );
-  const totalResponses = await query(
+  const totalResponses = await query<CountRow>(
     `SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = $1`,
     [id]
   );
