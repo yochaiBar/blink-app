@@ -3,7 +3,7 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__'],
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
@@ -21,6 +21,7 @@ module.exports = {
         },
       },
     }],
+    '^.+\\.jsx?$': 'babel-jest',
   },
   transformIgnorePatterns: [
     'node_modules/(?!(expo-.*|@expo/.*|react-native|@react-native|zustand)/)',

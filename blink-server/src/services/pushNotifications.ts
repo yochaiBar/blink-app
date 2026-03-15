@@ -8,7 +8,7 @@ interface PushMessage {
   to: string;
   title: string;
   body: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   sound?: 'default' | null;
   channelId?: string;
 }
@@ -45,7 +45,7 @@ export async function sendPushNotification(
   pushToken: string,
   title: string,
   body: string,
-  data?: Record<string, any>
+  data?: Record<string, unknown>
 ): Promise<void> {
   if (!pushToken || !pushToken.startsWith('ExponentPushToken[')) {
     logger.debug('Skipping push: invalid or missing token', { pushToken });
@@ -94,9 +94,9 @@ export async function sendPushNotification(
       // Fire-and-forget receipt check after a delay
       setTimeout(() => checkReceipts([ticket.id!]).catch(() => {}), 15_000);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('Failed to send push notification', {
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
       pushToken,
     });
   }
@@ -150,9 +150,9 @@ async function sendPushBatch(messages: PushMessage[]): Promise<void> {
     if (receiptIds.length > 0) {
       setTimeout(() => checkReceipts(receiptIds).catch(() => {}), 15_000);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('Failed to send push batch', {
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
       count: messages.length,
     });
   }
@@ -166,7 +166,7 @@ export async function sendPushToGroup(
   groupId: string,
   title: string,
   body: string,
-  data?: Record<string, any>,
+  data?: Record<string, unknown>,
   excludeUserId?: string
 ): Promise<void> {
   try {
@@ -176,7 +176,7 @@ export async function sendPushToGroup(
       JOIN users u ON u.id = gm.user_id
       WHERE gm.group_id = $1 AND u.push_token IS NOT NULL
     `;
-    const params: any[] = [groupId];
+    const params: unknown[] = [groupId];
 
     if (excludeUserId) {
       tokenQuery += ` AND gm.user_id != $2`;
@@ -185,8 +185,8 @@ export async function sendPushToGroup(
 
     const result = await query(tokenQuery, params);
     const tokens: string[] = result.rows
-      .map((r: any) => r.push_token)
-      .filter((t: string) => t && t.startsWith('ExponentPushToken['));
+      .map((r) => r.push_token as string)
+      .filter((t) => t && t.startsWith('ExponentPushToken['));
 
     if (tokens.length === 0) {
       logger.debug('No push tokens for group', { groupId });
@@ -213,9 +213,9 @@ export async function sendPushToGroup(
       groupId,
       tokenCount: tokens.length,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('Failed to send push to group', {
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
       groupId,
     });
   }
@@ -229,7 +229,7 @@ export async function sendPushToUser(
   userId: string,
   title: string,
   body: string,
-  data?: Record<string, any>
+  data?: Record<string, unknown>
 ): Promise<void> {
   try {
     const result = await query(
@@ -244,9 +244,9 @@ export async function sendPushToUser(
     }
 
     await sendPushNotification(token, title, body, data);
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('Failed to send push to user', {
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
       userId,
     });
   }
@@ -266,10 +266,15 @@ async function checkReceipts(receiptIds: string[]): Promise<void> {
 
     if (!response.ok) return;
 
-    const result = (await response.json()) as { data: Record<string, any> };
+    interface PushReceipt {
+      status: 'ok' | 'error';
+      message?: string;
+      details?: { error?: string };
+    }
+    const result = (await response.json()) as { data: Record<string, PushReceipt> };
     const receipts = result.data || {};
 
-    for (const [id, receipt] of Object.entries(receipts) as [string, any][]) {
+    for (const [id, receipt] of Object.entries(receipts)) {
       if (receipt.status === 'error') {
         logger.warn('Push receipt error', {
           receiptId: id,
@@ -278,8 +283,8 @@ async function checkReceipts(receiptIds: string[]): Promise<void> {
         });
       }
     }
-  } catch (err: any) {
-    logger.debug('Failed to check push receipts', { error: err.message });
+  } catch (err: unknown) {
+    logger.debug('Failed to check push receipts', { error: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -293,9 +298,9 @@ async function clearInvalidToken(pushToken: string): Promise<void> {
       [pushToken]
     );
     logger.info('Cleared invalid push token', { pushToken });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('Failed to clear invalid push token', {
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
       pushToken,
     });
   }

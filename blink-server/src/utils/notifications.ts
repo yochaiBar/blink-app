@@ -18,7 +18,7 @@ export async function createNotification(
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [userId, type, title, body, groupId || null, fromUserId || null]
     );
-  } catch (err: any) {
-    logger.error('Failed to create notification', { error: err.message, userId, type });
+  } catch (err: unknown) {
+    logger.error('Failed to create notification', { error: err instanceof Error ? err.message : String(err), userId, type });
   }
 }

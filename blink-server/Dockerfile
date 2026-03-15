@@ -13,11 +13,12 @@ RUN addgroup -g 1001 -S appgroup && adduser -S appuser -u 1001 -G appgroup
 COPY blink-server/package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
+COPY blink-server/src/config/migrations ./dist/config/migrations
 COPY legal ./legal
 USER appuser
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
-# Run migrations, then start the server.
-# migrate.js calls process.exit(0) on success, so we chain with &&.
-CMD ["sh", "-c", "node dist/config/migrate.js && node dist/index.js"]
+# Run versioned migrations, then start the server.
+# migrationRunner.js calls process.exit(0) on success when run standalone, so we chain with &&.
+CMD ["sh", "-c", "node dist/config/migrationRunner.js && node dist/index.js"]

@@ -1,8 +1,9 @@
 import logger from '../utils/logger';
+import { env } from './env';
 
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
+const TWILIO_ACCOUNT_SID = env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = env.TWILIO_AUTH_TOKEN;
+const TWILIO_PHONE_NUMBER = env.TWILIO_PHONE_NUMBER;
 
 export const isSmsConfigured =
   !!TWILIO_ACCOUNT_SID && !!TWILIO_AUTH_TOKEN && !!TWILIO_PHONE_NUMBER;

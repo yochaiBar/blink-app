@@ -63,6 +63,7 @@ export default function QuizChallengeScreen() {
     try {
       return JSON.parse(optionsJson ?? '[]');
     } catch {
+      // Malformed JSON from params -- fall back to empty options
       return [];
     }
   }, [optionsJson]);

@@ -36,3 +36,9 @@ blink-server/.env.production.example
 SECURITY_FIX_PLAN.md
 .gitignore
 CLAUDE.MD
+docs/adrs/001-no-firebase.md
+docs/adrs/002-expo-push-notifications.md
+docs/adrs/003-server-side-otp.md
+docs/adrs/004-s3-presigned-uploads.md
+docs/adrs/005-zustand-over-redux.md
+docs/adrs/006-postgresql-otp-storage.md

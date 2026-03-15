@@ -290,15 +290,12 @@ function SnapChallengeScreen() {
       try {
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.8,
-          base64: true,
         });
-        if (photo?.base64) {
-          setCapturedUri(`data:image/jpeg;base64,${photo.base64}`);
-        } else if (photo?.uri) {
+        if (photo?.uri) {
           setCapturedUri(photo.uri);
         }
       } catch {
-        // Camera capture failed -- user will see placeholder preview
+        // Non-critical: camera capture can fail on some devices; user sees placeholder preview
       }
     }
 

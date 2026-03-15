@@ -55,6 +55,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const user = await api<User>('/auth/me');
       set({ user, isAuthenticated: true, isLoading: false });
     } catch {
+      // Session restore failed (expired token, network error) -- treat as logged out
       set({ isAuthenticated: false, isLoading: false });
     }
   },

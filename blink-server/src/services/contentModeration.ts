@@ -154,12 +154,12 @@ export async function moderateImage(s3Key: string): Promise<ModerationResult> {
       labels: labelNames,
       confidence: highestConfidence,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Fail closed: if Rekognition is unavailable, reject the image
     // and log the error so operators are aware.
     logger.error('Content moderation check failed; rejecting image (fail closed)', {
       s3Key,
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
     });
     return { safe: false, labels: ['moderation_error'], confidence: 0 };
   }
@@ -177,10 +177,10 @@ export async function deleteS3Object(s3Key: string): Promise<void> {
       new DeleteObjectCommand({ Bucket: bucket, Key: s3Key })
     );
     logger.info('Deleted flagged S3 object', { s3Key });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('Failed to delete flagged S3 object', {
       s3Key,
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
     });
   }
 }
@@ -245,12 +245,12 @@ export async function logModerationResult(
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [userId, 'image', s3Key, result.safe, JSON.stringify(result.labels), result.confidence]
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Don't let logging failure break the request flow
     logger.error('Failed to log moderation result', {
       userId,
       s3Key,
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
     });
   }
 }

@@ -34,9 +34,9 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
     spotlight: 'spotlight',
   };
 
-  const mapped = result.rows.map((row: any) => ({
+  const mapped = result.rows.map((row) => ({
     ...row,
-    type: typeMap[row.type] || row.type,
+    type: typeMap[row.type as string] || row.type,
   }));
 
   res.json(mapped);

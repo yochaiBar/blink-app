@@ -7,13 +7,15 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { theme } from '@/constants/colors';
-import { useApp } from '@/providers/AppProvider';
+import { useProfile } from '@/hooks/useProfile';
+import { useGroups } from '@/hooks/useGroups';
 import { Button } from '@/components/ui';
 
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, updateProfile } = useApp();
+  const { groups } = useGroups();
+  const { userProfile: user, updateProfile } = useProfile(groups.length);
 
   const [name, setName] = useState<string>(user.name);
   const [username, setUsername] = useState<string>(user.username.replace('@', ''));
@@ -60,7 +62,7 @@ export default function EditProfileScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } catch {
-      // Camera not available
+      // Non-critical: camera may not be available on all devices
     }
   }, []);
 

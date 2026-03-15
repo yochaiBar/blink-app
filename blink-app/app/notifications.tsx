@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Bell, Camera, Heart, MessageCircle, Flame, UserPlus, Star, Mail } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
-import { useApp } from '@/providers/AppProvider';
+import { useNotifications } from '@/hooks/useNotifications';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import { NotificationItem } from '@/types';
 import { getRelativeTime } from '@/utils/time';
@@ -42,7 +42,7 @@ export default function NotificationsScreen() {
     isNotificationsLoading,
     isNotificationsError,
     refetchNotifications,
-  } = useApp();
+  } = useNotifications();
 
   useEffect(() => {
     const timer = setTimeout(() => {

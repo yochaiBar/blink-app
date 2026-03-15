@@ -60,8 +60,7 @@ export default function ShareCardScreen() {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (err) {
-      console.error('Share failed:', err);
+    } catch {
       Alert.alert('Share Failed', 'Could not share the image. Please try again.');
     } finally {
       setIsCapturing(false);
@@ -82,8 +81,7 @@ export default function ShareCardScreen() {
         }
         Alert.alert('Saved', 'Image saved to your camera roll.');
       }
-    } catch (err) {
-      console.error('Save failed:', err);
+    } catch {
       Alert.alert('Save Failed', 'Could not save the image. Please try again.');
     } finally {
       setIsSaving(false);

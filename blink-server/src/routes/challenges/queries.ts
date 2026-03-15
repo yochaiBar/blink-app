@@ -3,11 +3,65 @@ import { query } from '../../config/database';
 import { AuthRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import logger from '../../utils/logger';
-import { emitToGroup } from '../../socket';
 import { commentOnResponses, AiPersonality } from '../../services/aiService';
 import { validateUuidParams } from '../../middleware/validateParams';
 import { CHALLENGE_SELECT, processSkipsForChallenge } from './shared';
 import { GroupMemberRow, ChallengeRow, ChallengeResponseRow, CountRow } from '../../types/db';
+
+/** Pending challenge row from the JOIN query */
+interface PendingChallengeRow {
+  id: string;
+  group_id: string;
+  group_name: string;
+  group_emoji: string;
+  ai_personality: string | null;
+  type: string;
+  prompt: string | null;
+  options: string | null;
+  expires_at: Date;
+  countdown_seconds: number;
+  triggered_by: string | null;
+  is_auto_generated: boolean;
+  total_members: number;
+  responded_count: number;
+}
+
+/** Response row with user info from JOIN */
+interface ResponseWithUserRow {
+  id: string;
+  challenge_id: string;
+  user_id: string;
+  response_type: string;
+  photo_url: string | null;
+  answer_index: number | null;
+  answer_text: string | null;
+  responded_at: Date;
+  response_time_ms: number | null;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+/** Reaction aggregate row */
+interface ReactionAggregateRow {
+  response_id: string;
+  emoji: string;
+  count: string;
+  user_names?: string[];
+}
+
+/** User summary row used in progress/preview */
+interface UserSummaryRow {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+/** Challenge with group info from reveal JOIN */
+interface ChallengeWithGroupRow extends ChallengeRow {
+  group_name: string;
+  group_emoji: string;
+  ai_personality: string | null;
+}
 
 const router = Router();
 
@@ -33,7 +87,7 @@ router.get('/pending', asyncHandler(async (req: AuthRequest, res: Response) => {
   );
 
   // Parse options and format response
-  const challenges = result.rows.map((row: any) => {
+  const challenges = result.rows.map((row) => {
     let options = row.options;
     if (options && typeof options === 'string') {
       try { options = JSON.parse(options); } catch { /* keep as-is */ }
@@ -130,7 +184,7 @@ router.get('/:id/responses', validateUuidParams('id'), asyncHandler(async (req: 
     return;
   }
 
-  const responses = await query(
+  const responses = await query<ResponseWithUserRow>(
     `SELECT cr.*, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
@@ -140,11 +194,11 @@ router.get('/:id/responses', validateUuidParams('id'), asyncHandler(async (req: 
   );
 
   // Fetch reactions for all responses in this challenge
-  const responseIds = responses.rows.map((r: any) => r.id);
+  const responseIds = responses.rows.map((r) => r.id);
   let reactionsMap: Record<string, { emoji: string; count: number; users: string[] }[]> = {};
 
   if (responseIds.length > 0) {
-    const reactions = await query(
+    const reactions = await query<ReactionAggregateRow>(
       `SELECT r.response_id, r.emoji, COUNT(*) as count,
               ARRAY_AGG(COALESCE(u.display_name, u.phone_number)) as user_names
        FROM reactions r
@@ -162,12 +216,12 @@ router.get('/:id/responses', validateUuidParams('id'), asyncHandler(async (req: 
       reactionsMap[row.response_id].push({
         emoji: row.emoji,
         count: parseInt(row.count),
-        users: row.user_names,
+        users: row.user_names || [],
       });
     }
   }
 
-  const responsesWithReactions = responses.rows.map((r: any) => ({
+  const responsesWithReactions = responses.rows.map((r) => ({
     ...r,
     reactions: reactionsMap[r.id] || [],
   }));
@@ -214,7 +268,7 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
   }
 
   // Fetch all non-skip responses with user info
-  const responses = await query(
+  const responses = await query<ResponseWithUserRow>(
     `SELECT cr.*, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
@@ -224,7 +278,7 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
   );
 
   // Fetch reactions for all responses
-  const responseIds = responses.rows.map((r: any) => r.id);
+  const responseIds = responses.rows.map((r) => r.id);
   let reactionsMap: Record<string, { emoji: string; count: number }[]> = {};
 
   if (responseIds.length > 0) {
@@ -267,7 +321,7 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
   if (!aiCommentary && responses.rows.length > 0) {
     try {
       const personality: AiPersonality = c.ai_personality || 'funny';
-      const responsesData = responses.rows.map((r: any) => ({
+      const responsesData = responses.rows.map((r) => ({
         userName: r.display_name || 'Someone',
         answerText: r.answer_text || undefined,
         responseTimeMs: r.response_time_ms || undefined,
@@ -280,13 +334,13 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
         `UPDATE challenges SET ai_commentary = $1 WHERE id = $2`,
         [aiCommentary, id]
       );
-    } catch (err: any) {
-      logger.error('AI commentary generation failed in reveal', { error: err.message, challengeId: id });
+    } catch (err: unknown) {
+      logger.error('AI commentary generation failed in reveal', { error: err instanceof Error ? err.message : String(err), challengeId: id });
     }
   }
 
   // Format response
-  const formattedResponses = responses.rows.map((r: any) => ({
+  const formattedResponses = responses.rows.map((r) => ({
     id: r.id,
     userId: r.user_id,
     displayName: r.display_name,
@@ -411,7 +465,7 @@ router.get('/:id/progress', validateUuidParams('id'), asyncHandler(async (req: A
   }
 
   // Get all group members
-  const allMembers = await query(
+  const allMembers = await query<UserSummaryRow>(
     `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM group_members gm
      JOIN users u ON u.id = gm.user_id
@@ -420,24 +474,24 @@ router.get('/:id/progress', validateUuidParams('id'), asyncHandler(async (req: A
   );
 
   // Get who responded (non-skip)
-  const responded = await query(
+  const responded = await query<UserSummaryRow>(
     `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
      WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
     [id]
   );
-  const respondedIds = new Set(responded.rows.map((r: any) => r.user_id));
+  const respondedIds = new Set(responded.rows.map((r) => r.user_id));
 
   const pendingUsers = allMembers.rows
-    .filter((m: any) => !respondedIds.has(m.user_id))
-    .map((m: any) => ({ userId: m.user_id, displayName: m.display_name, avatarUrl: m.avatar_url }));
+    .filter((m) => !respondedIds.has(m.user_id))
+    .map((m) => ({ userId: m.user_id, displayName: m.display_name, avatarUrl: m.avatar_url }));
 
   res.json({
     challengeId: id,
     respondedCount: responded.rows.length,
     totalMembers: allMembers.rows.length,
-    respondedUsers: responded.rows.map((r: any) => ({
+    respondedUsers: responded.rows.map((r) => ({
       userId: r.user_id,
       displayName: r.display_name,
       avatarUrl: r.avatar_url,
@@ -476,7 +530,7 @@ router.get('/:id/preview', validateUuidParams('id'), asyncHandler(async (req: Au
   const totalMembers = totalMembersResult.rows[0].count;
 
   // Who responded (non-skip)
-  const responded = await query(
+  const responded = await query<UserSummaryRow>(
     `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
@@ -513,7 +567,7 @@ router.get('/:id/preview', validateUuidParams('id'), asyncHandler(async (req: Au
     totalMembers,
     totalReactions,
     topReactionEmoji,
-    respondedUsers: responded.rows.map((r: any) => ({
+    respondedUsers: responded.rows.map((r) => ({
       userId: r.user_id,
       displayName: r.display_name,
       avatarUrl: r.avatar_url,

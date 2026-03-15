@@ -12,7 +12,7 @@ router.use(authenticate);
 router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const before = req.query.before as string | undefined;
 
-  const params: any[] = [req.userId];
+  const params: unknown[] = [req.userId];
   let timestampFilter = '';
 
   if (before) {

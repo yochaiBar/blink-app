@@ -226,7 +226,7 @@ export default function BlinksScreen() {
             results.push({ group, challenge });
           }
         } catch {
-          // Challenge may have expired
+          // Non-critical: challenge may have expired between list fetch and detail fetch
         }
       });
       await Promise.all(fetches);
@@ -331,7 +331,7 @@ export default function BlinksScreen() {
 
           await Promise.all(challengeFetches);
         } catch {
-          // Group might not have history
+          // Non-critical: group may not have challenge history yet
         }
       });
 
@@ -353,7 +353,7 @@ export default function BlinksScreen() {
             });
           }
         } catch {
-          // No spotlight available
+          // Non-critical: spotlight endpoint may not exist or group has no spotlight
         }
       });
 

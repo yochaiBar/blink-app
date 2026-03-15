@@ -50,7 +50,7 @@ export default function InviteMembersScreen() {
         message: `Join ${group?.name ?? 'my group'} on Blink! Use code: ${inviteCode} or tap: ${inviteLink}`,
       });
     } catch {
-      // Share cancelled or failed
+      // Non-critical: user may have cancelled the share sheet
     }
   }, [group, inviteCode, inviteLink]);
 

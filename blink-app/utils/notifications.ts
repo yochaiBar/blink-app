@@ -5,7 +5,7 @@ import { registerPushToken } from '@/services/api';
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
-    const data = notification.request.content.data as Record<string, any> | undefined;
+    const data = notification.request.content.data as Record<string, string | undefined> | undefined;
     // Always show challenge notifications prominently (even when app is in foreground)
     const isChallenge = data?.type === 'challenge_started' || data?.type === 'challenge' || data?.screen === 'challenge';
     return {
@@ -50,8 +50,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     // console.log('[Notifications] Expo push token:', tokenData.data);
     return tokenData.data;
-  } catch (error) {
-    // console.log('[Notifications] Error registering:', error);
+  } catch {
+    // Non-critical: push token registration is best-effort
     return null;
   }
 }
@@ -63,8 +63,8 @@ export async function schedulePushNotification(title: string, body: string, seco
       trigger: Platform.OS === 'web' ? null : { seconds, type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL },
     });
     // console.log('[Notifications] Scheduled:', title);
-  } catch (error) {
-    // console.log('[Notifications] Schedule error:', error);
+  } catch {
+    // Non-critical: scheduling a local notification is best-effort
   }
 }
 
@@ -85,8 +85,8 @@ export async function setBadgeCount(count: number): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
     await Notifications.setBadgeCountAsync(count);
-  } catch (error) {
-    // console.log('[Notifications] Badge error:', error);
+  } catch {
+    // Non-critical: badge count is cosmetic, ignore failure
   }
 }
 
@@ -125,7 +125,7 @@ const QUIZ_TYPES = new Set(['quiz', 'quiz_food', 'quiz_most_likely', 'quiz_rate_
  * instead of the group detail page — this is the "camera-first" flow.
  */
 export function getNotificationRoute(
-  data: Record<string, any> | undefined,
+  data: Record<string, string | undefined> | undefined,
 ): { pathname: string; params?: Record<string, string> } | null {
   if (!data || !data.type) return null;
 

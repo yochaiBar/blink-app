@@ -48,6 +48,28 @@ jest.mock('expo-haptics', () => ({
   },
 }));
 
+// ── Mock expo-notifications ───────────────────────────────────────
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  getPermissionsAsync: jest.fn().mockResolvedValue({ status: 'undetermined' }),
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
+  getExpoPushTokenAsync: jest.fn().mockResolvedValue({ data: 'ExponentPushToken[mock]' }),
+  addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  setNotificationChannelAsync: jest.fn(),
+  AndroidImportance: { MAX: 5 },
+}));
+
+// ── Mock expo-constants ───────────────────────────────────────────
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: {
+    expoConfig: {
+      extra: {},
+    },
+  },
+}));
+
 // ── Mock expo-image ───────────────────────────────────────────────
 jest.mock('expo-image', () => ({
   Image: 'Image',

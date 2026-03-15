@@ -3,13 +3,14 @@ import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import logger from '../utils/logger';
 import { query } from '../config/database';
+import { env } from '../config/env';
 
 let io: SocketServer | null = null;
 
 export function initSocket(httpServer: HttpServer) {
   io = new SocketServer(httpServer, {
     cors: {
-      origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:8081', 'http://localhost:19006'],
+      origin: env.CORS_ORIGINS?.split(',') || ['http://localhost:8081', 'http://localhost:19006'],
       credentials: true,
     },
   });
@@ -21,7 +22,7 @@ export function initSocket(httpServer: HttpServer) {
       return next(new Error('Authentication error: no token'));
     }
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+      const decoded = jwt.verify(token, env.JWT_SECRET) as { userId: string };
       socket.data.userId = decoded.userId;
       next();
     } catch {
@@ -43,7 +44,7 @@ export function initSocket(httpServer: HttpServer) {
           'SELECT group_id FROM group_members WHERE user_id = $1 AND group_id = ANY($2::uuid[])',
           [socket.data.userId, validIds]
         );
-        const verifiedIds = result.rows.map((r: any) => r.group_id);
+        const verifiedIds = result.rows.map((r) => r.group_id as string);
         verifiedIds.forEach((id: string) => socket.join(`group:${id}`));
       } catch (err) {
         console.error('Failed to verify group membership for socket', err);
@@ -62,7 +63,7 @@ export function initSocket(httpServer: HttpServer) {
 /**
  * Emit an event to all connected clients in a group room.
  */
-export function emitToGroup(groupId: string, event: string, data: any) {
+export function emitToGroup(groupId: string, event: string, data: unknown) {
   if (io) {
     io.to(`group:${groupId}`).emit(event, data);
   }

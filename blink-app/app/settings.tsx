@@ -25,7 +25,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     getBlockedUsers()
       .then((data) => { if (Array.isArray(data)) setBlockedUsers(data); })
-      .catch(() => {});
+      .catch(() => {}); // Non-critical: blocked users list is supplementary
   }, []);
 
   const handleUnblock = useCallback((userId: string, name: string) => {
@@ -92,7 +92,7 @@ export default function SettingsScreen() {
         await logout();
         router.replace('/onboarding' as never);
       } catch {
-        // If API fails, still log out locally
+        // Server-side delete failed -- still log out locally to unblock the user
         await logout();
         router.replace('/onboarding' as never);
       }

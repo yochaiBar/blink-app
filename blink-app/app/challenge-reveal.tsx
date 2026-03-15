@@ -148,7 +148,7 @@ export default function ChallengeRevealScreen() {
           challenge: res.challenge ?? null,
         };
       } catch {
-        // Fallback: fetch responses directly
+        // Reveal endpoint may not exist yet -- fall back to responses endpoint
         const responses: ApiChallengeResponse[] = await api(
           `/challenges/${challengeId}/responses`,
         );

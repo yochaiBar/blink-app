@@ -1,10 +1,20 @@
 import cron from 'node-cron';
 import { query } from '../config/database';
-import { generateChallenge, isAiEnabled, AiPersonality } from '../services/aiService';
+import { generateChallenge, AiPersonality } from '../services/aiService';
 import { emitToGroup } from '../socket';
 import { sendPushToGroup } from '../services/pushNotifications';
 import { createNotification } from '../utils/notifications';
 import logger from '../utils/logger';
+
+/** Shape returned by the scheduler's group query */
+interface SchedulerGroupRow {
+  id: string;
+  name: string;
+  ai_personality: string | null;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  member_count: number;
+}
 
 function isEnabled(): boolean {
   return process.env.CHALLENGE_SCHEDULER_ENABLED === 'true';
@@ -65,7 +75,7 @@ function pickChallengeType(recentTypes: string[]): 'snap' | 'quiz' {
 
 async function runSchedulerTick(): Promise<void> {
   // Get all active groups (at least 2 members) that haven't had an auto-challenge today
-  const groupsResult = await query(`
+  const groupsResult = await query<SchedulerGroupRow>(`
     SELECT g.id, g.name, g.ai_personality, g.quiet_hours_start::text, g.quiet_hours_end::text,
            COUNT(gm.id)::int as member_count
     FROM groups g
@@ -85,32 +95,32 @@ async function runSchedulerTick(): Promise<void> {
       if (!shouldFireThisTick(group.quiet_hours_start)) continue;
 
       await createAutoChallenge(group);
-    } catch (err: any) {
-      logger.error('Auto-challenge failed for group', { groupId: group.id, error: err.message });
+    } catch (err: unknown) {
+      logger.error('Auto-challenge failed for group', { groupId: group.id, error: err instanceof Error ? err.message : String(err) });
     }
   }
 }
 
-async function createAutoChallenge(group: any): Promise<void> {
-  const personality: AiPersonality = group.ai_personality || 'funny';
+async function createAutoChallenge(group: SchedulerGroupRow): Promise<void> {
+  const personality: AiPersonality = (group.ai_personality as AiPersonality) || 'funny';
 
   // Fetch member names
   const membersResult = await query(
     `SELECT u.display_name FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = $1`,
     [group.id]
   );
-  const memberNames = membersResult.rows.map((r: any) => r.display_name);
+  const memberNames = membersResult.rows.map((r) => r.display_name as string);
 
   // Fetch recent challenge prompts
   const recentResult = await query(
     `SELECT type, prompt_text FROM challenges WHERE group_id = $1 ORDER BY triggered_at DESC LIMIT 5`,
     [group.id]
   );
-  const recentChallenges = recentResult.rows.map((r: any) => r.prompt_text).filter(Boolean);
-  const recentTypes = recentResult.rows.map((r: any) => r.type);
+  const recentChallenges = recentResult.rows.map((r) => r.prompt_text as string | null).filter(Boolean) as string[];
+  const recentTypes = recentResult.rows.map((r) => r.type as string);
 
   // Generate challenge via AI
-  const _challengeType = pickChallengeType(recentTypes);
+  pickChallengeType(recentTypes);
   const aiChallenge = await generateChallenge(group.id, personality, memberNames, recentChallenges);
 
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
@@ -174,8 +184,8 @@ export function startChallengeScheduler(): void {
   cron.schedule('*/15 * * * *', async () => {
     try {
       await runSchedulerTick();
-    } catch (err: any) {
-      logger.error('Scheduler tick failed', { error: err.message });
+    } catch (err: unknown) {
+      logger.error('Scheduler tick failed', { error: err instanceof Error ? err.message : String(err) });
     }
   });
 

@@ -71,8 +71,8 @@ async function callClaude(systemPrompt: string, userPrompt: string, groupId?: st
     }
 
     return text;
-  } catch (err: any) {
-    logger.error('Claude API call failed', { error: err.message, functionName });
+  } catch (err: unknown) {
+    logger.error('Claude API call failed', { error: err instanceof Error ? err.message : String(err), functionName });
     // Log fallback usage
     if (groupId) {
       query(

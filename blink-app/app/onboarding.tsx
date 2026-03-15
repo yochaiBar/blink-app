@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Animated, Dimensions, Platform, KeyboardAvoidingView, Alert, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Animated, Dimensions, Platform, KeyboardAvoidingView, Alert, TouchableOpacity, Linking, NativeSyntheticEvent, TextInputKeyPressEventData } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, Users, Zap, Sparkles, Phone, Check, Shield, FileText, ChevronRight, ChevronDown } from 'lucide-react-native';
@@ -172,8 +172,8 @@ export default function OnboardingScreen() {
         animateTransition('otp');
         // Focus the first OTP box after transition
         setTimeout(() => otpInputRefs.current[0]?.focus(), 400);
-      } catch (e: any) {
-        Alert.alert('Error', e.message || 'Failed to send verification code');
+      } catch (e: unknown) {
+        Alert.alert('Error', e instanceof Error ? e.message : 'Failed to send verification code');
       } finally {
         setIsSubmitting(false);
       }
@@ -187,8 +187,8 @@ export default function OnboardingScreen() {
         const normalized = countryCode.code + localNumber;
         await verifyOtp(normalized, otp);
         animateTransition('age');
-      } catch (e: any) {
-        Alert.alert('Error', e.message || 'Invalid verification code');
+      } catch (e: unknown) {
+        Alert.alert('Error', e instanceof Error ? e.message : 'Invalid verification code');
       } finally {
         setIsSubmitting(false);
       }
@@ -253,7 +253,7 @@ export default function OnboardingScreen() {
     }
   }, [otpDigits]);
 
-  const handleOtpKeyPress = useCallback((e: any, index: number) => {
+  const handleOtpKeyPress = useCallback((e: NativeSyntheticEvent<TextInputKeyPressEventData>, index: number) => {
     if (e.nativeEvent.key === 'Backspace' && !otpDigits[index] && index > 0) {
       // Move to previous box on backspace when current is empty
       const newDigits = [...otpDigits];
@@ -275,8 +275,8 @@ export default function OnboardingScreen() {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to resend code');
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to resend code');
     }
   }, [resendCountdown, isSubmitting, phone, countryCode, requestOtp]);
 

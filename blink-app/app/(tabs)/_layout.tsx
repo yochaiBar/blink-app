@@ -83,19 +83,6 @@ export default function TabLayout() {
           ),
         }}
       />
-      {/* Hide old tabs from tab bar — keep files for backward compatibility */}
-      <Tabs.Screen
-        name="(home)"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="activity"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }

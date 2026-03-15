@@ -50,6 +50,18 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     useOnboardingStore.getState().hydrate();
   }, []);
 
+  // Register push token once when user authenticates (not on every navigation)
+  const pushTokenRegistered = React.useRef(false);
+  useEffect(() => {
+    if (isAuthenticated && Platform.OS !== "web" && !pushTokenRegistered.current) {
+      pushTokenRegistered.current = true;
+      sendPushTokenToServer();
+    }
+    if (!isAuthenticated) {
+      pushTokenRegistered.current = false;
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
     if (isLoading) return;
     SplashScreen.hideAsync();
@@ -62,19 +74,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       router.replace("/" as never);
     }
 
-    if (isAuthenticated && Platform.OS !== "web") {
-      // Register push token with the backend (fire-and-forget)
-      sendPushTokenToServer();
-    }
-
     // After auth is confirmed, check for pending challenges.
-    // The Blinks feed pills show these, but we also store state for potential auto-routing.
     if (isAuthenticated) {
       apiCall("/challenges/pending").then(() => {
         // Pending challenges are handled by the feed UI pills.
-        // Auto-routing to a single pending challenge can be added here in the future.
       }).catch(() => {
-        // Silently ignore — this is a nice-to-have check
+        // Non-critical: pending challenges check is supplementary; feed handles this
       });
     }
   }, [isAuthenticated, isLoading, segments]);
@@ -90,7 +95,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response) {
         const data = response.notification.request.content.data as
-          | Record<string, any>
+          | Record<string, string | undefined>
           | undefined;
         const route = getNotificationRoute(data);
         if (route) {
@@ -108,7 +113,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       // onResponse: user tapped the notification
       (response) => {
         const data = response.notification.request.content.data as
-          | Record<string, any>
+          | Record<string, string | undefined>
           | undefined;
 
         const route = getNotificationRoute(data);

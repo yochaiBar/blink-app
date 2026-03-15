@@ -171,21 +171,25 @@ export async function uploadPhoto(imageUri: string, groupId: string, challengeId
   // Dev mode (no S3) — return as-is
   if (!presign.uploadUrl) return imageUri;
 
+  // Convert image URI to blob for S3 upload
   let blob: Blob;
-
-  if (imageUri.startsWith('data:')) {
-    // Base64 data URI — decode to blob
-    const base64Data = imageUri.replace(/^data:image\/\w+;base64,/, '');
-    const binaryString = atob(base64Data);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+  try {
+    if (imageUri.startsWith('data:')) {
+      // Base64 data URI — decode to blob
+      const base64Data = imageUri.replace(/^data:image\/\w+;base64,/, '');
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      blob = new Blob([bytes], { type: 'image/jpeg' });
+    } else {
+      // File URI (file://) — fetch as blob (works in React Native)
+      const fileRes = await fetch(imageUri);
+      blob = await fileRes.blob();
     }
-    blob = new Blob([bytes], { type: 'image/jpeg' });
-  } else {
-    // File URI (file://) — fetch as blob (works in React Native)
-    const fileRes = await fetch(imageUri);
-    blob = await fileRes.blob();
+  } catch (err) {
+    throw new Error(`Failed to read photo: ${err instanceof Error ? err.message : 'unknown error'}`);
   }
 
   // Upload directly to S3 via presigned PUT URL

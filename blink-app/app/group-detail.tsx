@@ -160,7 +160,7 @@ export default function GroupDetailScreen() {
   const quizOptions: string[] = React.useMemo(() => {
     if (!isQuizChallenge || !activeChallenge) return [];
     const opts = activeChallenge.options_json ?? activeChallenge.options ?? [];
-    if (typeof opts === 'string') { try { return JSON.parse(opts); } catch { return []; } }
+    if (typeof opts === 'string') { try { return JSON.parse(opts); } catch { return []; /* Malformed JSON */ } }
     return Array.isArray(opts) ? opts : [];
   }, [activeChallenge, isQuizChallenge]);
 
@@ -247,7 +247,7 @@ export default function GroupDetailScreen() {
         responsesQuery.refetch();
         api<{ responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>; totalMembers?: number }>(`/challenges/${activeChallenge.id}/progress`).then((data) => {
           if (data) setProgressData({ responded: data.responded ?? [], totalMembers: data.totalMembers ?? 0 });
-        }).catch(() => {});
+        }).catch(() => {}); // Non-critical: progress refresh is best-effort
       }
     };
     const handleStreak = (data: { userName?: string; streakDays?: number }) => {

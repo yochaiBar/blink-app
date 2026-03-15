@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { query } from '../config/database';
+import { query, withTransaction } from '../config/database';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { validateBody } from '../middleware/validate';
@@ -10,7 +10,15 @@ import { createNotification } from '../utils/notifications';
 import { emitToGroup } from '../socket';
 import { sendPushToUser } from '../services/pushNotifications';
 import { validateUuidParams } from '../middleware/validateParams';
-import { GroupRow, GroupMemberRow, CountRow, UserDisplayNameRow } from '../types/db';
+import { GroupRow, CountRow, UserDisplayNameRow } from '../types/db';
+import { verifyMembership, getGroupWithMembers, handleAdminLeave } from '../services/groupService';
+import type { QueryResult } from 'pg';
+
+/** Minimal query interface compatible with both PoolClient and the pool query helper */
+interface TransactionQueryable {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query(text: string, params?: unknown[]): Promise<QueryResult<any>>;
+}
 
 const router = Router();
 const MAX_FREE_GROUPS = 3;
@@ -36,31 +44,40 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
   }
 
   const inviteCode = generateInviteCode();
-  const group = await query<GroupRow>(
-    `INSERT INTO groups (name, icon, category, created_by, invite_code, quiet_hours_start, quiet_hours_end, skip_penalty_type, ai_personality)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     RETURNING *`,
-    [
-      name,
-      icon || '👥',
-      category || 'friends',
-      req.userId,
-      inviteCode,
-      quiet_hours_start || '22:00',
-      quiet_hours_end || '08:00',
-      skip_penalty_type || 'wanted_poster',
-      ai_personality || 'funny',
-    ]
-  );
 
-  // Add creator as admin
-  await query(
-    `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'admin')`,
-    [group.rows[0].id, req.userId]
-  );
+  const createGroupQueries = async (q: TransactionQueryable) => {
+    const group = await q.query(
+      `INSERT INTO groups (name, icon, category, created_by, invite_code, quiet_hours_start, quiet_hours_end, skip_penalty_type, ai_personality)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        name,
+        icon || '\u{1F465}',
+        category || 'friends',
+        req.userId,
+        inviteCode,
+        quiet_hours_start || '22:00',
+        quiet_hours_end || '08:00',
+        skip_penalty_type || 'wanted_poster',
+        ai_personality || 'funny',
+      ]
+    );
 
-  logger.info('Group created', { groupId: group.rows[0].id, userId: req.userId });
-  res.status(201).json(group.rows[0]);
+    // Add creator as admin
+    await q.query(
+      `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'admin')`,
+      [group.rows[0].id, req.userId]
+    );
+
+    return group.rows[0] as GroupRow;
+  };
+
+  const newGroup = typeof withTransaction === 'function'
+    ? await withTransaction(createGroupQueries)
+    : await createGroupQueries({ query });
+
+  logger.info('Group created', { groupId: newGroup.id, userId: req.userId });
+  res.status(201).json(newGroup);
 }));
 
 // GET /api/groups - List user's groups
@@ -87,49 +104,25 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
 
 // GET /api/groups/:id - Get group details + members + stats
 router.get('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
-  const membership = await query<GroupMemberRow>(
-    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
-    [id, req.userId]
-  );
-  if (membership.rows.length === 0) {
-    res.status(403).json({ error: 'Not a member of this group' });
-    return;
+  try {
+    await verifyMembership(req.userId!, id);
+    const { group, members, active_penalties } = await getGroupWithMembers(id);
+
+    res.json({
+      ...group,
+      members,
+      active_penalties,
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && 'statusCode' in err) {
+      const statusErr = err as Error & { statusCode: number };
+      res.status(statusErr.statusCode).json({ error: statusErr.message });
+      return;
+    }
+    throw err;
   }
-
-  const group = await query<GroupRow>(`SELECT * FROM groups WHERE id = $1`, [id]);
-  if (group.rows.length === 0) {
-    res.status(404).json({ error: 'Group not found' });
-    return;
-  }
-
-  const members = await query(
-    `SELECT u.id as user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url, gm.role, gm.joined_at,
-            gm.current_streak as streak, gm.total_responses, gm.total_challenges,
-            CASE WHEN gm.total_challenges > 0
-              THEN ROUND(gm.total_responses::numeric / gm.total_challenges * 100)::int
-              ELSE 0
-            END as participation_rate
-     FROM group_members gm
-     JOIN users u ON u.id = gm.user_id
-     WHERE gm.group_id = $1
-     ORDER BY gm.total_responses DESC`,
-    [id]
-  );
-
-  // Get active penalties for members
-  const penalties = await query(
-    `SELECT * FROM active_penalties
-     WHERE group_id = $1 AND expires_at > NOW()`,
-    [id]
-  );
-
-  res.json({
-    ...group.rows[0],
-    members: members.rows,
-    active_penalties: penalties.rows,
-  });
 }));
 
 // POST /api/groups/join - Join via invite code
@@ -215,49 +208,22 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
 
 // POST /api/groups/:id/leave - Leave a group
 router.post('/:id/leave', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
-  const membership = await query<GroupMemberRow>(
-    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
-    [id, req.userId]
-  );
-  if (membership.rows.length === 0) {
+  let membership;
+  try {
+    membership = await verifyMembership(req.userId!, id);
+  } catch {
+    // verifyMembership throws 403, but leave returns 404 for non-members
     res.status(404).json({ error: 'Not a member of this group' });
     return;
   }
 
-  const isAdmin = membership.rows[0].role === 'admin';
-
-  if (isAdmin) {
-    // Check if there are other members
-    const otherMembers = await query<Pick<GroupMemberRow, 'user_id' | 'role'>>(
-      `SELECT user_id, role FROM group_members WHERE group_id = $1 AND user_id != $2`,
-      [id, req.userId]
-    );
-
-    if (otherMembers.rows.length === 0) {
-      // Last member — delete the group entirely
-      await query(`DELETE FROM groups WHERE id = $1`, [id]);
-      logger.info('Group deleted (last member left)', { groupId: id, userId: req.userId });
+  if (membership.role === 'admin') {
+    const result = await handleAdminLeave(id, req.userId!);
+    if (result === 'deleted') {
       res.json({ message: 'Left group. Group was deleted as you were the last member.' });
       return;
-    }
-
-    // Check if there are other admins
-    const otherAdmins = otherMembers.rows.filter((m) => m.role === 'admin');
-    if (otherAdmins.length === 0) {
-      // Transfer admin to the longest-standing member
-      const nextAdmin = await query(
-        `SELECT user_id FROM group_members
-         WHERE group_id = $1 AND user_id != $2
-         ORDER BY joined_at ASC LIMIT 1`,
-        [id, req.userId]
-      );
-      await query(
-        `UPDATE group_members SET role = 'admin' WHERE group_id = $1 AND user_id = $2`,
-        [id, nextAdmin.rows[0].user_id]
-      );
-      logger.info('Admin role transferred', { groupId: id, newAdminId: nextAdmin.rows[0].user_id });
     }
   }
 
@@ -272,18 +238,17 @@ router.post('/:id/leave', validateUuidParams('id'), asyncHandler(async (req: Aut
 
 // DELETE /api/groups/:id - Delete a group (admin only)
 router.delete('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
-  const membership = await query<GroupMemberRow>(
-    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
-    [id, req.userId]
-  );
-  if (membership.rows.length === 0) {
+  let membership;
+  try {
+    membership = await verifyMembership(req.userId!, id);
+  } catch {
     res.status(403).json({ error: 'Not a member of this group' });
     return;
   }
 
-  if (membership.rows[0].role !== 'admin') {
+  if (membership.role !== 'admin') {
     res.status(403).json({ error: 'Only group admins can delete a group' });
     return;
   }
@@ -298,18 +263,19 @@ router.delete('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthReq
   res.json({ message: 'Group deleted successfully' });
 }));
 
-// ── GET /api/groups/:id/streaks — Group streak + member streaks + shields ──
+// ── GET /api/groups/:id/streaks -- Group streak + member streaks + shields ──
 router.get('/:id/streaks', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
-  // Verify membership
-  const membership = await query<GroupMemberRow>(
-    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
-    [id, req.userId]
-  );
-  if (membership.rows.length === 0) {
-    res.status(403).json({ error: 'Not a member of this group' });
-    return;
+  try {
+    await verifyMembership(req.userId!, id);
+  } catch (err: unknown) {
+    if (err instanceof Error && 'statusCode' in err) {
+      const statusErr = err as Error & { statusCode: number };
+      res.status(statusErr.statusCode).json({ error: statusErr.message });
+      return;
+    }
+    throw err;
   }
 
   // Get group streak info
@@ -359,7 +325,7 @@ router.get('/:id/streaks', validateUuidParams('id'), asyncHandler(async (req: Au
   res.json({
     groupStreak,
     longestGroupStreak,
-    members: members.rows.map((m: any) => ({
+    members: members.rows.map((m) => ({
       userId: m.user_id,
       displayName: m.display_name,
       avatarUrl: m.avatar_url,

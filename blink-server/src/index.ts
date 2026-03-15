@@ -12,11 +12,13 @@ import * as Sentry from '@sentry/node';
 
 dotenv.config();
 
+import { env } from './config/env';
+
 // Initialize Sentry before anything else
-if (process.env.SENTRY_DSN) {
+if (env.SENTRY_DSN) {
   Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV || 'development',
+    dsn: env.SENTRY_DSN,
+    environment: env.NODE_ENV,
     tracesSampleRate: 0.2,
     sendDefaultPii: false,
   });
@@ -39,13 +41,13 @@ import { startChallengeScheduler } from './jobs/challengeScheduler';
 const app = express();
 
 // Trust proxy (Railway/cloud deployments sit behind a reverse proxy)
-if (process.env.NODE_ENV === 'production') {
+if (env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
 app.use(helmet());
-const corsOrigins = process.env.CORS_ORIGINS?.split(',');
-if (process.env.NODE_ENV === 'production' && !corsOrigins) {
+const corsOrigins = env.CORS_ORIGINS?.split(',');
+if (env.NODE_ENV === 'production' && !corsOrigins) {
   logger.error('CORS_ORIGINS is required in production. Refusing to start.');
   process.exit(1);
 }
@@ -53,7 +55,7 @@ app.use(cors({
   origin: corsOrigins || ['http://localhost:8081', 'http://localhost:19006'],
   credentials: true,
 }));
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 
 // ── Global rate limit ──────────────────────────────────────────
@@ -192,21 +194,21 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // Sentry error handler — must be before our custom error handler
-if (process.env.SENTRY_DSN) {
+if (env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
 }
 
 // Error handler
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const statusCode = err.status || 500;
   logger.error('Unhandled error', { error: err.message, stack: err.stack });
-  const message = statusCode >= 500 && process.env.NODE_ENV === 'production'
+  const message = statusCode >= 500 && env.NODE_ENV === 'production'
     ? 'Internal server error'
     : (err.message || 'Internal server error');
   res.status(statusCode).json({ error: message });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = env.PORT;
 
 // Create HTTP server and initialize Socket.io
 const server = http.createServer(app);
@@ -214,7 +216,7 @@ export const io = initSocket(server);
 
 server.listen(PORT, () => {
   logger.info(`Blink server running on port ${PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`Environment: ${env.NODE_ENV}`);
   logger.info(`OTP rate limit: ${OTP_RATE_LIMIT_PER_HOUR}/hour`);
   if (OTP_RATE_LIMIT_PER_HOUR > 10) {
     logger.warn(`OTP rate limit is set to ${OTP_RATE_LIMIT_PER_HOUR}/hour. This is above the recommended production value of 3. Ensure OTP_RATE_LIMIT_PER_HOUR is not set in production.`);
@@ -243,8 +245,8 @@ function gracefulShutdown(signal: string) {
       const pool = (await import('./config/database')).default;
       await pool.end();
       logger.info('Database pool closed');
-    } catch (err: any) {
-      logger.error('Error closing database pool', { error: err.message });
+    } catch (err: unknown) {
+      logger.error('Error closing database pool', { error: err instanceof Error ? err.message : String(err) });
     }
 
     logger.info('Graceful shutdown complete');
