@@ -80,18 +80,27 @@ export default function ChallengeHistoryScreen() {
       // Navigate to group detail to see snap responses
       router.push({ pathname: '/group-detail' as never, params: { id: item.group_id } });
     } else {
-      // Navigate to quiz-challenge in results mode
-      router.push({
-        pathname: '/quiz-challenge' as never,
-        params: {
-          groupId: item.group_id,
-          challengeId: item.id,
-          type: item.type,
-          promptText: item.prompt ?? '',
-          optionsJson: JSON.stringify(item.options ?? []),
-          expiresAt: item.expires_at,
-        },
-      });
+      const isExpired = new Date(item.expires_at).getTime() < Date.now();
+      if (isExpired || item.user_responded) {
+        // Expired or already responded -- show reveal screen instead of answering mode
+        router.push({
+          pathname: '/challenge-reveal' as never,
+          params: { challengeId: item.id, groupId: item.group_id },
+        });
+      } else {
+        // Active challenge -- navigate to quiz answering mode
+        router.push({
+          pathname: '/quiz-challenge' as never,
+          params: {
+            groupId: item.group_id,
+            challengeId: item.id,
+            type: item.type,
+            promptText: item.prompt ?? '',
+            optionsJson: JSON.stringify(item.options ?? []),
+            expiresAt: item.expires_at,
+          },
+        });
+      }
     }
   }, [router]);
 

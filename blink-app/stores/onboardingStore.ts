@@ -6,9 +6,13 @@ type TourStep = 'home' | 'group_detail' | 'fab' | null;
 interface OnboardingState {
   tourComplete: boolean;
   tourStep: TourStep;
+  demoChallengeCompleted: boolean;
+  demoPhotoUri: string | null;
   startTour: () => void;
   advanceTour: (step: TourStep) => void;
   completeTour: () => void;
+  setDemoPhotoUri: (uri: string) => void;
+  completeDemoChallenge: () => void;
   hydrate: () => Promise<void>;
 }
 
@@ -20,6 +24,7 @@ export const tourMessages: Record<Exclude<TourStep, null>, string> = {
 };
 
 const STORAGE_KEY = 'onboarding_tour_complete';
+const DEMO_CHALLENGE_KEY = 'onboarding_demo_challenge_complete';
 
 const storage = {
   async get(key: string): Promise<string | null> {
@@ -42,6 +47,8 @@ const storage = {
 export const useOnboardingStore = create<OnboardingState>((set) => ({
   tourComplete: false,
   tourStep: null,
+  demoChallengeCompleted: false,
+  demoPhotoUri: null,
 
   startTour: () => {
     set({ tourStep: 'home' });
@@ -56,10 +63,30 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
     storage.set(STORAGE_KEY, 'true');
   },
 
+  setDemoPhotoUri: (uri: string) => {
+    set({ demoPhotoUri: uri });
+  },
+
+  completeDemoChallenge: () => {
+    set({ demoChallengeCompleted: true });
+    storage.set(DEMO_CHALLENGE_KEY, 'true');
+  },
+
   hydrate: async () => {
-    const value = await storage.get(STORAGE_KEY);
-    if (value === 'true') {
-      set({ tourComplete: true, tourStep: null });
+    const [tourValue, demoValue] = await Promise.all([
+      storage.get(STORAGE_KEY),
+      storage.get(DEMO_CHALLENGE_KEY),
+    ]);
+    const updates: Partial<OnboardingState> = {};
+    if (tourValue === 'true') {
+      updates.tourComplete = true;
+      updates.tourStep = null;
+    }
+    if (demoValue === 'true') {
+      updates.demoChallengeCompleted = true;
+    }
+    if (Object.keys(updates).length > 0) {
+      set(updates as OnboardingState);
     }
   },
 }));

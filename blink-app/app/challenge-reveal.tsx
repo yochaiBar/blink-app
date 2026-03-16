@@ -27,6 +27,9 @@ import AvatarRing from '@/components/ui/AvatarRing';
 import GlassCard from '@/components/ui/GlassCard';
 import AiCommentaryCard from '@/components/AiCommentaryCard';
 import { ApiChallengeResponse, ApiChallenge, ApiGroupDetail } from '@/types/api';
+import { isDemoGroup, DEMO_RESPONSES, DEMO_GROUP_DETAIL, DEMO_CHALLENGE } from '@/constants/demoData';
+import { useOnboardingStore } from '@/stores/onboardingStore';
+import { Users, UserPlus } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PHOTO_ASPECT = 4 / 5;
@@ -92,7 +95,8 @@ interface RevealData {
 
 // ─── Main Screen ─────────────────────────────────────────────────────
 export default function ChallengeRevealScreen() {
-  const { challengeId, groupId } = useLocalSearchParams<{ challengeId: string; groupId: string }>();
+  const { challengeId, groupId, isDemo } = useLocalSearchParams<{ challengeId: string; groupId: string; isDemo?: string }>();
+  const isDemoMode = isDemo === '1';
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -103,6 +107,7 @@ export default function ChallengeRevealScreen() {
   const [revealedCount, setRevealedCount] = useState(0);
   const [autoRevealing, setAutoRevealing] = useState(true);
   const [hasScrolledManually, setHasScrolledManually] = useState(false);
+  const [youreInTimerDone, setYoureInTimerDone] = useState(false);
 
   // Animations — Phase 1
   const checkScale = useRef(new Animated.Value(0)).current;
@@ -130,10 +135,34 @@ export default function ChallengeRevealScreen() {
   // ScrollView ref
   const scrollRef = useRef<ScrollView>(null);
 
+  // Track when the screen was mounted to stop refetching after 10s
+  const mountedAt = useRef(Date.now()).current;
+
   // ── Data Fetching ────────────────────────────────────────────────
   const { data: revealData, isLoading } = useQuery<RevealData>({
-    queryKey: ['challenge-reveal', challengeId],
+    queryKey: ['challenge-reveal', challengeId, isDemoMode ? 'demo' : 'real'],
     queryFn: async (): Promise<RevealData> => {
+      if (isDemoMode) {
+        const demoPhotoUri = useOnboardingStore.getState().demoPhotoUri;
+        const userResponse: ApiChallengeResponse = {
+          id: 'demo_response_user',
+          challenge_id: 'demo_challenge_1',
+          user_id: user.id,
+          display_name: user.name ?? 'You',
+          avatar_url: user.avatar ?? null,
+          photo_url: demoPhotoUri,
+          answer_index: null,
+          response_time_ms: 3200,
+          responded_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        };
+        return {
+          responses: [userResponse, ...DEMO_RESPONSES],
+          aiCommentary: 'Welcome to Blink! This is what it looks like when your friends respond to challenges. Pretty cool, right?',
+          challenge: DEMO_CHALLENGE,
+        };
+      }
+
       // Try reveal endpoint first
       try {
         const res = await api<{
@@ -157,11 +186,23 @@ export default function ChallengeRevealScreen() {
     },
     enabled: !!challengeId,
     staleTime: 60_000,
+    // Refetch every 3s for the first 10s to pick up photos still uploading to S3
+    refetchInterval: isDemoMode ? false : (query) => {
+      const elapsed = Date.now() - mountedAt;
+      if (elapsed > 10_000) return false;
+      // Keep refetching if any response is missing a photo_url
+      const responses = query.state.data?.responses ?? [];
+      const hasMissingPhoto = responses.some((r: ApiChallengeResponse) => !r.photo_url);
+      return hasMissingPhoto ? 3000 : false;
+    },
   });
 
   const { data: groupData } = useQuery<ApiGroupDetail>({
     queryKey: ['group-detail-reveal', groupId],
-    queryFn: () => api(`/groups/${groupId}`),
+    queryFn: () => {
+      if (isDemoMode) return DEMO_GROUP_DETAIL;
+      return api(`/groups/${groupId}`);
+    },
     enabled: !!groupId,
     staleTime: 60_000,
   });
@@ -235,13 +276,20 @@ export default function ChallengeRevealScreen() {
       }
     }, 400);
 
-    // Auto-transition to Phase 2
+    // Mark timer as done after 2s (transition handled by separate effect)
     const timeout = setTimeout(() => {
-      setPhase('reveal');
+      setYoureInTimerDone(true);
     }, 2000);
 
     return () => clearTimeout(timeout);
   }, [phase]);
+
+  // ── Transition from youreIn to reveal when timer + data are ready ──
+  useEffect(() => {
+    if (youreInTimerDone && phase === 'youreIn' && revealData && !isLoading) {
+      setPhase('reveal');
+    }
+  }, [youreInTimerDone, phase, revealData, isLoading]);
 
   // ── Phase 2: Sequential card reveal ─────────────────────────────
   useEffect(() => {
@@ -289,7 +337,8 @@ export default function ChallengeRevealScreen() {
   // Tap to skip wait
   const handleTapToAdvance = useCallback(() => {
     if (phase === 'youreIn') {
-      setPhase('reveal');
+      // Mark timer as done; the transition effect will handle phase change when data is ready
+      setYoureInTimerDone(true);
       return;
     }
     if (phase !== 'reveal') return;
@@ -307,13 +356,18 @@ export default function ChallengeRevealScreen() {
       Animated.timing(summarySlide, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start();
 
+    if (isDemoMode) {
+      useOnboardingStore.getState().completeDemoChallenge();
+      useOnboardingStore.getState().completeTour();
+    }
+
     if (isLastResponder) {
       bigConfetti.fire();
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       }
     }
-  }, [phase, isLastResponder]);
+  }, [phase, isLastResponder, isDemoMode]);
 
   // ── Scroll handler ──────────────────────────────────────────────
   const handleScroll = useCallback(() => {
@@ -337,14 +391,20 @@ export default function ChallengeRevealScreen() {
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
+      if (isDemoMode) return;
       await addReaction(responseId, emoji);
       queryClient.invalidateQueries({ queryKey: ['challenge-reveal', challengeId] });
     },
-    [addReaction, challengeId, queryClient],
+    [addReaction, challengeId, queryClient, isDemoMode],
   );
 
   // ── Navigation ──────────────────────────────────────────────────
   const handleShare = useCallback(() => {
+    if (isDemoMode) {
+      Alert.alert('Coming Soon', 'Share will be available with your real groups!');
+      return;
+    }
+
     // Find the user's own response to share
     const ownResponse = sortedResponses.find((r) => r.user_id === user.id);
     const responseToShare = ownResponse ?? sortedResponses[0];
@@ -371,7 +431,7 @@ export default function ChallengeRevealScreen() {
         ...(responseTimeSec != null ? { responseTimeSec } : {}),
       },
     });
-  }, [sortedResponses, user.id, challengePrompt, groupData, router]);
+  }, [sortedResponses, user.id, challengePrompt, groupData, router, isDemoMode]);
 
   const handleBackToFeed = useCallback(() => {
     router.dismiss();
@@ -424,13 +484,14 @@ export default function ChallengeRevealScreen() {
         ]}
       >
         <View style={styles.photoContainer}>
-          {/* Photo */}
+          {/* Photo -- render for any non-empty photo_url including file:// and data: URIs */}
           {response.photo_url ? (
             <Image
               source={{ uri: response.photo_url }}
               style={styles.photo}
               contentFit="cover"
               transition={300}
+              cachePolicy="none"
             />
           ) : (
             <View style={styles.photoPlaceholder}>
@@ -657,6 +718,10 @@ export default function ChallengeRevealScreen() {
             Tap to see what your friends posted
           </Animated.Text>
 
+          {youreInTimerDone && isLoading && (
+            <Text style={styles.youreInLoading}>Loading...</Text>
+          )}
+
           {/* Confetti particles */}
           {smallConfetti.particles.map((p) => (
             <Animated.View
@@ -720,7 +785,17 @@ export default function ChallengeRevealScreen() {
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={handleScroll}
       >
-        <TouchableOpacity activeOpacity={1} onPress={handleTapToAdvance}>
+        <View>
+          {/* Tap-to-advance overlay: only active during reveal phase while cards remain */}
+          {phase === 'reveal' && revealedCount < totalResponses && (
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={handleTapToAdvance}
+              style={StyleSheet.absoluteFill}
+              // Render above cards so it captures taps to advance
+              // Once all cards are revealed this overlay is removed, exposing reaction buttons
+            />
+          )}
           {/* Response cards */}
           {sortedResponses.map((response, index) => renderCard(response, index))}
 
@@ -730,7 +805,7 @@ export default function ChallengeRevealScreen() {
               <Text style={styles.loadingText}>Loading responses...</Text>
             </View>
           )}
-        </TouchableOpacity>
+        </View>
 
         {/* Phase 3: Summary */}
         {phase === 'summary' && (
@@ -783,24 +858,45 @@ export default function ChallengeRevealScreen() {
             )}
 
             {/* Action buttons */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={styles.shareBtn}
-                onPress={handleShare}
-                activeOpacity={0.85}
-              >
-                <Share2 size={18} color={theme.white} />
-                <Text style={styles.shareBtnText}>Share This Blink</Text>
-              </TouchableOpacity>
+            {isDemoMode ? (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={styles.shareBtn}
+                  onPress={() => router.replace('/create-group' as never)}
+                  activeOpacity={0.85}
+                >
+                  <Users size={18} color={theme.white} />
+                  <Text style={styles.shareBtnText}>Create your first group</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.feedBtn}
-                onPress={handleBackToFeed}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.feedBtnText}>Back to Feed</Text>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={styles.feedBtn}
+                  onPress={() => router.replace('/join-group' as never)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.feedBtnText}>Join a group</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={styles.shareBtn}
+                  onPress={handleShare}
+                  activeOpacity={0.85}
+                >
+                  <Share2 size={18} color={theme.white} />
+                  <Text style={styles.shareBtnText}>Share This Blink</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.feedBtn}
+                  onPress={handleBackToFeed}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.feedBtnText}>Back to Feed</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Big confetti for last responder */}
             {bigConfetti.particles.map((p) => (
@@ -868,6 +964,12 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
     textAlign: 'center',
     marginTop: spacing.xs,
+  },
+  youreInLoading: {
+    ...typography.caption,
+    color: theme.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
   },
   confettiParticle: {
     position: 'absolute',

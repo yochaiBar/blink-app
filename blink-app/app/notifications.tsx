@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useEffect, useCallback, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Bell, Camera, Heart, MessageCircle, Flame, UserPlus, Star, Mail } from 'lucide-react-native';
@@ -43,6 +43,17 @@ export default function NotificationsScreen() {
     isNotificationsError,
     refetchNotifications,
   } = useNotifications();
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetchNotifications();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetchNotifications]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -135,6 +146,13 @@ export default function NotificationsScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.coral}
+            />
+          }
           ListEmptyComponent={
             <EmptyState
               emoji="🔔"

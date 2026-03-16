@@ -25,7 +25,8 @@ export type FeedItemType =
   | 'locked_photo'
   | 'quiz_result'
   | 'ai_commentary'
-  | 'spotlight';
+  | 'spotlight'
+  | 'active_challenge';
 
 export interface FeedItemData {
   id: string;
@@ -50,6 +51,13 @@ export interface FeedItemData {
   spotlightUser?: string;
   superlative?: string;
   funFact?: string;
+  // Active challenge (blurred preview)
+  blurredPhotoUrl?: string;
+  responseCount?: number;
+  memberCount?: number;
+  challengeType?: string;
+  // Sortable timestamp (ISO string)
+  timestamp?: string;
   // Callbacks passed through
   onPress?: () => void;
   onRespond?: () => void;
@@ -444,6 +452,137 @@ function SpotlightFeedItem({ item }: { item: FeedItemData }) {
   );
 }
 
+// ── Active Challenge Feed Item (blurred preview) ──
+
+function ActiveChallengeFeedItem({ item }: { item: FeedItemData }) {
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnim]);
+
+  const overlayOpacity = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.7, 0.85],
+  });
+
+  const handleRespond = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    item.onRespond?.();
+  }, [item.onRespond]);
+
+  const hasPhoto = !!item.blurredPhotoUrl;
+  const respondedText =
+    item.responseCount && item.memberCount
+      ? `${item.responseCount}/${item.memberCount} responded`
+      : item.responseCount
+        ? `${item.responseCount} responded`
+        : '';
+
+  return (
+    <TouchableOpacity activeOpacity={0.9} onPress={handleRespond}>
+      <View style={styles.photoItem}>
+        {/* Header row */}
+        <View style={styles.headerRow}>
+          <View style={styles.activeChallengeIconCircle}>
+            <Text style={styles.quizIconEmoji}>{item.groupEmoji || '\u26A1'}</Text>
+          </View>
+          <View style={styles.headerText}>
+            <View style={styles.headerNameRow}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {item.groupName}
+              </Text>
+              <Text style={styles.dot}>{'\u00B7'}</Text>
+              <Text style={styles.activeChallengeLabel}>Active now</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Blurred photo or gradient placeholder */}
+        <View style={styles.activeChallengeContainer}>
+          {hasPhoto ? (
+            <Image
+              source={{ uri: item.blurredPhotoUrl }}
+              style={styles.photo}
+              contentFit="cover"
+              blurRadius={20}
+              transition={200}
+              recyclingKey={`blur_${item.id}`}
+            />
+          ) : (
+            <LinearGradient
+              colors={[theme.bgElevated, theme.surface, theme.bgElevated]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
+
+          {/* Dark overlay */}
+          <Animated.View
+            style={[
+              styles.activeChallengeOverlay,
+              { opacity: overlayOpacity },
+            ]}
+          />
+
+          {/* Center content */}
+          <View style={styles.activeChallengeCenter}>
+            <View style={styles.lockIconCircle}>
+              <Lock size={28} color={theme.white} />
+            </View>
+
+            {item.challengePrompt ? (
+              <Text style={styles.activeChallengePrompt} numberOfLines={2}>
+                {item.challengePrompt}
+              </Text>
+            ) : null}
+
+            <Text style={styles.activeChallengeRevealText}>
+              Respond to reveal
+            </Text>
+
+            {respondedText ? (
+              <Text style={styles.activeChallengeCount}>{respondedText}</Text>
+            ) : null}
+
+            <View style={styles.respondPill}>
+              <LinearGradient
+                colors={[theme.coral, theme.coralDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.respondPillGradient}
+              >
+                <Zap size={16} color={theme.white} fill={theme.white} />
+                <Text style={styles.respondPillText}>
+                  {item.challengeType === 'snap' ? 'Take a photo' : 'Respond now'}
+                </Text>
+              </LinearGradient>
+            </View>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 // ── Main FeedItem Component ──
 
 function FeedItemComponent({ item }: { item: FeedItemData }) {
@@ -458,6 +597,8 @@ function FeedItemComponent({ item }: { item: FeedItemData }) {
       return <AICommentaryFeedItem item={item} />;
     case 'spotlight':
       return <SpotlightFeedItem item={item} />;
+    case 'active_challenge':
+      return <ActiveChallengeFeedItem item={item} />;
     default:
       return null;
   }
@@ -744,5 +885,57 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: theme.textMuted,
     marginTop: spacing.xs,
+  },
+
+  // ── Active Challenge Item ──
+  activeChallengeIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.coralMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activeChallengeLabel: {
+    ...typography.bodySmall,
+    color: theme.coral,
+    fontWeight: '600',
+  },
+  activeChallengeContainer: {
+    width: SCREEN_WIDTH,
+    aspectRatio: 5 / 4,
+    alignSelf: 'center',
+    overflow: 'hidden',
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.bgElevated,
+  },
+  activeChallengeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(12, 11, 16, 0.6)',
+  },
+  activeChallengeCenter: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    zIndex: 1,
+    paddingHorizontal: spacing.xl,
+  },
+  activeChallengePrompt: {
+    ...typography.headlineMedium,
+    color: theme.text,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  activeChallengeRevealText: {
+    ...typography.bodyLarge,
+    color: theme.textSecondary,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  activeChallengeCount: {
+    ...typography.bodySmall,
+    color: theme.textMuted,
+    textAlign: 'center',
   },
 });

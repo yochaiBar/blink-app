@@ -28,6 +28,8 @@ import { Group } from '@/types';
 import { ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
 import AvatarRing from '@/components/ui/AvatarRing';
 import FeedItem, { FeedItemData } from '@/components/FeedItem';
+import DemoChallengeAlert from '@/components/DemoChallengeAlert';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 
 // ── Types ──
 
@@ -49,6 +51,7 @@ interface ChallengeHistoryItem {
 interface PendingChallenge {
   group: Group;
   challenge: ApiChallenge;
+  responses?: ApiChallengeResponse[];
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -204,6 +207,7 @@ export default function BlinksScreen() {
   const {
     groups,
     user,
+    shouldShowDemoGroup,
     unreadNotificationCount,
     refreshGroups,
     isRefreshing,
@@ -211,9 +215,13 @@ export default function BlinksScreen() {
     addReaction,
   } = useApp();
 
+  const demoChallengeCompleted = useOnboardingStore((s) => s.demoChallengeCompleted);
+  const [demoDismissed, setDemoDismissed] = useState(false);
+  const showDemoAlert = shouldShowDemoGroup && !demoChallengeCompleted && !demoDismissed;
+
   // ── Fetch active challenges across all groups ──
   const activeChallengesQuery = useQuery({
-    queryKey: ['feed-active-challenges', groups.map((g) => g.id).join(',')],
+    queryKey: ['feed-active-challenges', [...groups.map((g) => g.id)].sort().join(',')],
     queryFn: async (): Promise<PendingChallenge[]> => {
       const results: PendingChallenge[] = [];
       const groupsWithChallenge = groups.filter((g) => g.hasActiveChallenge);
@@ -222,8 +230,16 @@ export default function BlinksScreen() {
           const challenge: ApiChallenge = await api(
             `/challenges/groups/${group.id}/challenges/active`,
           );
-          if (challenge && !challenge.user_has_responded) {
-            results.push({ group, challenge });
+          if (challenge && !challenge.user_has_responded && challenge.expires_at && new Date(challenge.expires_at).getTime() > Date.now()) {
+            // Only show active challenges that haven't expired yet
+            let responses: ApiChallengeResponse[] = [];
+            try {
+              responses = await api(`/challenges/${challenge.id}/responses`);
+              if (!Array.isArray(responses)) responses = [];
+            } catch {
+              // Non-critical: responses may not be available yet
+            }
+            results.push({ group, challenge, responses });
           }
         } catch {
           // Non-critical: challenge may have expired between list fetch and detail fetch
@@ -234,13 +250,15 @@ export default function BlinksScreen() {
     },
     enabled: groups.length > 0,
     staleTime: 15_000,
+    // Refetch every 30s so expired challenges vanish automatically
+    refetchInterval: 30_000,
   });
 
   const pendingChallenges = activeChallengesQuery.data ?? [];
 
   // ── Build the feed from challenge history + individual responses ──
   const feedQuery = useQuery({
-    queryKey: ['blinks-feed-v2', groups.map((g) => g.id).join(',')],
+    queryKey: ['blinks-feed-v2', [...groups.map((g) => g.id)].sort().join(',')],
     queryFn: async (): Promise<FeedItemData[]> => {
       if (groups.length === 0) return [];
 
@@ -279,6 +297,7 @@ export default function BlinksScreen() {
                         photoUrl: resp.photo_url,
                         challengePrompt: challenge.prompt || undefined,
                         timeAgo: getRelativeTime(resp.responded_at || resp.created_at),
+                        timestamp: resp.responded_at || resp.created_at,
                         reactions: [], // Will be enriched separately if needed
                       });
                     } else if (
@@ -304,6 +323,7 @@ export default function BlinksScreen() {
                         quizQuestion: challenge.prompt || 'Quiz',
                         quizResults,
                         timeAgo: getRelativeTime(challenge.created_at),
+                        timestamp: challenge.created_at,
                       });
                     }
                   }
@@ -313,19 +333,8 @@ export default function BlinksScreen() {
                 createFallbackItem(allItems, challenge, group);
               }
             } else {
-              // User has NOT responded -- locked item
-              allItems.push({
-                id: `locked_${challenge.id}`,
-                type: 'locked_photo',
-                userName: `${challenge.response_count} friend${Number(challenge.response_count) !== 1 ? 's' : ''}`,
-                userAvatar: undefined,
-                groupName: group.name,
-                groupEmoji: group.emoji,
-                groupId: group.id,
-                challengeId: challenge.id,
-                challengePrompt: challenge.prompt || undefined,
-                timeAgo: getRelativeTime(challenge.created_at),
-              });
+              // User has NOT responded -- skip from main feed
+              // Unresponded challenges only show in the group mini-feed
             }
           });
 
@@ -350,6 +359,7 @@ export default function BlinksScreen() {
               superlative: spotlight.superlative,
               funFact: spotlight.stats_json?.fun_fact,
               timeAgo: getRelativeTime(spotlight.date),
+              timestamp: spotlight.date,
             });
           }
         } catch {
@@ -369,10 +379,34 @@ export default function BlinksScreen() {
     staleTime: 30_000,
   });
 
+  // Build active challenge feed cards from pending challenges
+  const activeChallengeCards = useMemo((): FeedItemData[] => {
+    return pendingChallenges.map((pc) => {
+      // Find the first response with a photo for blurred preview
+      const firstPhotoResponse = pc.responses?.find((r) => r.photo_url);
+      const responseCount = pc.responses?.length ?? 0;
+      const memberCount = pc.group.memberCount ?? pc.group.members?.length ?? 0;
+
+      return {
+        id: `active_${pc.challenge.id}`,
+        type: 'active_challenge' as const,
+        groupName: pc.group.name,
+        groupEmoji: pc.group.emoji,
+        groupId: pc.group.id,
+        challengeId: pc.challenge.id,
+        challengePrompt: pc.challenge.prompt_text || pc.challenge.prompt || undefined,
+        challengeType: pc.challenge.type,
+        blurredPhotoUrl: firstPhotoResponse?.photo_url || undefined,
+        responseCount,
+        memberCount,
+        timestamp: pc.challenge.triggered_at || new Date().toISOString(),
+      };
+    });
+  }, [pendingChallenges]);
+
   // Post-process: sort, deduplicate, and inject AI commentary
   const feedItems = useMemo(() => {
     const items = feedQuery.data ?? [];
-    if (items.length === 0) return items;
 
     // Deduplicate by id
     const seen = new Set<string>();
@@ -384,16 +418,23 @@ export default function BlinksScreen() {
       }
     }
 
-    // Sort: locked items last among same timeAgo, otherwise keep insertion order
-    // (insertion order is already grouped by group then by challenge recency)
-    // Shuffle for a more feed-like feel: interleave different groups
-    const shuffled = interleaveByGroup(unique);
+    // Sort all items by timestamp descending (newest first)
+    unique.sort((a, b) => {
+      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return tb - ta; // newest first
+    });
 
     // Inject AI commentary every ~6 items if we have enough content
-    const withCommentary = injectAICommentary(shuffled);
+    const withCommentary = injectAICommentary(unique);
+
+    // Prepend active challenge cards at the top of the feed
+    if (activeChallengeCards.length > 0) {
+      return [...activeChallengeCards, ...withCommentary];
+    }
 
     return withCommentary;
-  }, [feedQuery.data]);
+  }, [feedQuery.data, activeChallengeCards]);
 
   // ── Socket listeners ──
   useEffect(() => {
@@ -608,6 +649,24 @@ export default function BlinksScreen() {
             When friends respond to challenges, their photos and answers will
             show up here. Start a challenge to get things going!
           </Text>
+          <TouchableOpacity
+            style={styles.emptyAction}
+            onPress={() => {
+              if (Platform.OS !== 'web') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/(tabs)/(groups)' as never);
+            }}
+          >
+            <LinearGradient
+              colors={[theme.coral, theme.coralDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.emptyActionGradient}
+            >
+              <Text style={styles.emptyActionText}>Go to Groups</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -627,6 +686,12 @@ export default function BlinksScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Demo challenge alert overlay */}
+      <DemoChallengeAlert
+        visible={showDemoAlert}
+        onDismiss={() => setDemoDismissed(true)}
+      />
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -764,6 +829,7 @@ function createFallbackItem(
       },
     ],
     timeAgo: getRelativeTime(challenge.created_at),
+    timestamp: challenge.created_at,
   });
 }
 

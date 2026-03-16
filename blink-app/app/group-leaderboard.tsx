@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Trophy, Flame } from 'lucide-react-native';
@@ -195,6 +195,13 @@ export default function GroupLeaderboardScreen() {
             keyExtractor={(item) => item.userId}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={detailQuery.isRefetching}
+                onRefresh={() => detailQuery.refetch()}
+                tintColor={theme.coral}
+              />
+            }
           />
         </>
       ) : (
@@ -204,6 +211,13 @@ export default function GroupLeaderboardScreen() {
           keyExtractor={(item) => item.userId}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={detailQuery.isRefetching}
+              onRefresh={() => detailQuery.refetch()}
+              tintColor={theme.coral}
+            />
+          }
         />
       )}
     </View>

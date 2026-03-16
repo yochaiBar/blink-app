@@ -23,6 +23,7 @@ export function apiGroupListToGroup(item: ApiGroupListItem): Group {
     category: (cat as Group['category']) || 'custom',
     emoji: item.icon || '🔥',
     members: [],
+    memberCount: item.member_count ?? 0,
     lastActive: item.challenge_expires_at ?? new Date().toISOString(),
     hasActiveChallenge: hasActive,
     challengeEndTime: hasActive ? endTime : undefined,

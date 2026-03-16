@@ -10,7 +10,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Check, RotateCcw, SwitchCamera } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -23,6 +23,8 @@ import { api } from '@/services/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { ApiChallenge } from '@/types/api';
+import { isDemoGroup, DEMO_CHALLENGE, DEMO_RESPONSES } from '@/constants/demoData';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -69,10 +71,13 @@ function SnapChallengeScreen() {
   const isWeb = Platform.OS === 'web';
   const hasCamera = permission?.granted && !isWeb;
 
+  const isDemo = isDemoGroup(groupId);
+
   // Fetch active challenge details (prompt text, etc.)
   const challengeQuery = useQuery({
     queryKey: ['active-challenge', groupId, challengeId],
     queryFn: async (): Promise<ApiChallenge> => {
+      if (isDemo) return DEMO_CHALLENGE;
       if (challengeId) {
         return api(`/challenges/${challengeId}`);
       }
@@ -91,10 +96,21 @@ function SnapChallengeScreen() {
   const progressQuery = useQuery({
     queryKey: ['challenge-progress', resolvedChallengeId],
     queryFn: async (): Promise<ProgressData> => {
+      if (isDemo) {
+        return {
+          total_members: 6,
+          responded_count: DEMO_RESPONSES.length,
+          respondents: DEMO_RESPONSES.map((r) => ({
+            user_id: r.user_id,
+            display_name: r.display_name,
+            avatar_url: r.avatar_url,
+          })),
+        };
+      }
       return api(`/challenges/${resolvedChallengeId}/progress`);
     },
     enabled: !!resolvedChallengeId && phase !== 'preview',
-    refetchInterval: 5000, // Poll every 5s during active challenge
+    refetchInterval: isDemo ? false : 5000,
   });
 
   const progress = progressQuery.data;
@@ -306,6 +322,22 @@ function SnapChallengeScreen() {
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
+
+    if (isDemo) {
+      if (capturedUri) {
+        useOnboardingStore.getState().setDemoPhotoUri(capturedUri);
+      }
+      router.replace({
+        pathname: '/challenge-reveal' as never,
+        params: {
+          challengeId: 'demo_challenge_1',
+          groupId: 'demo_welcome_crew',
+          isDemo: '1',
+        },
+      });
+      return;
+    }
+
     try {
       await submitSnap(groupId ?? '', capturedUri ?? undefined);
       // Navigate to challenge reveal instead of going back
@@ -323,7 +355,7 @@ function SnapChallengeScreen() {
     } catch (err) {
       Alert.alert('Upload Failed', 'Could not submit your snap. Please try again.');
     }
-  }, [submitSnap, groupId, router, capturedUri, resolvedChallengeId]);
+  }, [submitSnap, groupId, router, capturedUri, resolvedChallengeId, isDemo]);
 
   const handleRetake = useCallback(() => {
     setPhase('countdown');
@@ -391,7 +423,7 @@ function SnapChallengeScreen() {
   // Render the progress indicator (who has responded)
   const renderProgressIndicator = () => {
     if (!progress) return null;
-    const { total_members, responded_count, respondents } = progress;
+    const { total_members, responded_count, respondents = [] } = progress;
     return (
       <View style={styles.progressIndicator}>
         <View style={styles.progressAvatars}>
@@ -486,6 +518,21 @@ function SnapChallengeScreen() {
 
       {phase === 'capture' && (
         <View style={[styles.captureContainer, { paddingTop: insets.top }]}>
+          {/* Full-screen camera background */}
+          <Animated.View style={[styles.captureCameraBg, { transform: [{ scale: shutterScale }] }]}>
+            {renderCameraView()}
+            {renderPromptOverlay()}
+          </Animated.View>
+
+          {/* Edge glow for last 3 seconds */}
+          {isUrgent && (
+            <Animated.View
+              style={[styles.edgeGlow, { opacity: edgeGlowOpacity }]}
+              pointerEvents="none"
+            />
+          )}
+
+          {/* Overlay UI on top of camera */}
           <TouchableOpacity
             style={[styles.closeBtn, { top: insets.top + 10 }]}
             onPress={() => router.back()}
@@ -525,18 +572,7 @@ function SnapChallengeScreen() {
             {captureTimer}s
           </Animated.Text>
 
-          <Animated.View style={[styles.cameraPlaceholder, { transform: [{ scale: shutterScale }] }]}>
-            {renderCameraView()}
-            {renderPromptOverlay()}
-          </Animated.View>
-
-          {/* Edge glow for last 3 seconds */}
-          {isUrgent && (
-            <Animated.View
-              style={[styles.edgeGlow, { opacity: edgeGlowOpacity }]}
-              pointerEvents="none"
-            />
-          )}
+          <View style={{ flex: 1 }} />
 
           <View
             style={[
@@ -571,7 +607,8 @@ function SnapChallengeScreen() {
 
       {phase === 'preview' && (
         <View style={[styles.previewContainer, { paddingTop: insets.top }]}>
-          <View style={styles.previewImage}>
+          {/* Full-screen preview background */}
+          <View style={styles.previewImageFullscreen}>
             {capturedUri ? (
               <Image
                 source={{ uri: capturedUri }}
@@ -589,6 +626,8 @@ function SnapChallengeScreen() {
             )}
           </View>
 
+          {/* Controls overlaid at the bottom */}
+          <View style={{ flex: 1 }} />
           <View
             style={[
               styles.previewControls,
@@ -644,6 +683,12 @@ class SnapErrorBoundary extends React.Component<
             <Text style={{ color: '#fff', fontSize: 12 }}>{this.state.error.message}</Text>
             <Text style={{ color: '#888', fontSize: 10, marginTop: 5 }}>{this.state.error.stack?.slice(0, 500)}</Text>
           </ScrollView>
+          <TouchableOpacity
+            style={{ marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: '#FF6B4A' }}
+            onPress={() => router.back()}
+          >
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', textAlign: 'center' }}>Go Back</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -782,6 +827,10 @@ const styles = StyleSheet.create({
     textShadowColor: theme.coral,
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 12,
+  },
+  captureCameraBg: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
   },
   cameraPlaceholder: {
     flex: 1,
@@ -922,6 +971,10 @@ const styles = StyleSheet.create({
   previewContainer: {
     flex: 1,
   },
+  previewImageFullscreen: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
   previewImage: {
     flex: 1,
     marginHorizontal: 20,
@@ -931,10 +984,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   previewPhoto: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
   previewGradient: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,

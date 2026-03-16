@@ -58,6 +58,7 @@ export default function QuizChallengeScreen() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [phase, setPhase] = useState<Phase>('answering');
   const [countdown, setCountdown] = useState<string>('');
+  const isExpired = countdown === 'Expired';
 
   const options: string[] = useMemo(() => {
     try {
@@ -119,21 +120,21 @@ export default function QuizChallengeScreen() {
   });
 
   const handleSelect = useCallback((index: number) => {
-    if (phase !== 'answering') return;
+    if (phase !== 'answering' || isExpired) return;
     setSelectedIndex(index);
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync();
     }
-  }, [phase]);
+  }, [phase, isExpired]);
 
   const handleSubmit = useCallback(() => {
-    if (selectedIndex === null) return;
+    if (selectedIndex === null || isExpired) return;
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }
     setPhase('submitting');
     submitMutation.mutate(selectedIndex);
-  }, [selectedIndex, submitMutation]);
+  }, [selectedIndex, isExpired, submitMutation]);
 
   // Compute results distribution
   const resultDistribution = useMemo(() => {
@@ -197,9 +198,26 @@ export default function QuizChallengeScreen() {
           <Text style={styles.questionText}>{promptText}</Text>
         </View>
 
+        {/* Empty options error state */}
+        {options.length === 0 && (phase === 'answering' || phase === 'submitting') && (
+          <View style={styles.emptyOptionsContainer}>
+            <Text style={styles.emptyOptionsText}>This challenge has no options available</Text>
+            <TouchableOpacity style={styles.goBackBtn} onPress={() => router.back()}>
+              <Text style={styles.goBackBtnText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Expired banner */}
+        {isExpired && phase === 'answering' && (
+          <View style={styles.expiredBanner}>
+            <Text style={styles.expiredBannerText}>This challenge has ended</Text>
+          </View>
+        )}
+
         {/* Answering & Submitting Phase */}
-        {(phase === 'answering' || phase === 'submitting') && (
-          <View style={styles.optionsList}>
+        {(phase === 'answering' || phase === 'submitting') && options.length > 0 && (
+          <View style={[styles.optionsList, isExpired && { opacity: 0.5 }]}>
             {options.map((option, i) => {
               const isSelected = selectedIndex === i;
               return (
@@ -211,7 +229,7 @@ export default function QuizChallengeScreen() {
                   ]}
                   onPress={() => handleSelect(i)}
                   activeOpacity={0.8}
-                  disabled={phase === 'submitting'}
+                  disabled={phase === 'submitting' || isExpired}
                 >
                   <View style={[styles.optionIndex, isSelected && styles.optionIndexSelected]}>
                     {isSelected ? (
@@ -305,7 +323,7 @@ export default function QuizChallengeScreen() {
       </ScrollView>
 
       {/* Bottom action bar */}
-      {phase === 'answering' && (
+      {phase === 'answering' && !isExpired && options.length > 0 && (
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
           <Button
             title="Submit"
@@ -314,6 +332,18 @@ export default function QuizChallengeScreen() {
             size="lg"
             fullWidth
             disabled={selectedIndex === null}
+          />
+        </View>
+      )}
+
+      {phase === 'answering' && isExpired && (
+        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+          <Button
+            title="Go Back"
+            onPress={() => router.back()}
+            variant="primary"
+            size="lg"
+            fullWidth
           />
         </View>
       )}
@@ -547,6 +577,39 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: theme.textMuted,
     marginLeft: 6,
+  },
+  // Empty options
+  emptyOptionsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 16,
+  },
+  emptyOptionsText: {
+    ...typography.body,
+    color: theme.textSecondary,
+    textAlign: 'center',
+  },
+  goBackBtn: {
+    backgroundColor: theme.coral,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  goBackBtnText: {
+    ...typography.bodyBold,
+    color: theme.white,
+  },
+  // Expired banner
+  expiredBanner: {
+    backgroundColor: theme.coralMuted,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  expiredBannerText: {
+    ...typography.bodyBold,
+    color: theme.coral,
   },
   // Bottom bar
   bottomBar: {

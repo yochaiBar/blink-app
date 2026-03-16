@@ -30,6 +30,7 @@ import {
   GroupSettingsModal,
   ChallengeResponsesList,
   BottomActions,
+  GroupMiniFeed,
 } from '@/components/group-detail';
 import type { ChallengeType, ProgressData, GroupPhoto } from '@/components/group-detail';
 
@@ -485,7 +486,7 @@ export default function GroupDetailScreen() {
         refreshControl={<RefreshControl refreshing={!isDemo && groupQuery.isRefetching} onRefresh={onRefresh} tintColor={theme.coral} />}
       >
         <MemberAvatarRow
-          members={group.members.map((m) => ({ id: m.id, name: m.name, avatar: m.avatar }))}
+          members={(groupQuery.data?.members ?? []).map((m) => ({ id: m.user_id, name: m.display_name ?? 'User', avatar: m.avatar_url ?? '' }))}
           respondedUserIds={respondedUserIds}
           hasActiveChallenge={group.hasActiveChallenge}
         />
@@ -522,7 +523,7 @@ export default function GroupDetailScreen() {
           currentUserId={user.id}
           snaps={snaps}
           groupPhotosCount={groupPhotos.length}
-          groupMemberCount={group.members.length}
+          groupMemberCount={groupQuery.data?.members?.length ?? group.memberCount ?? group.members.length}
           spotlight={spotlight}
           previewData={previewData}
           progressData={progressData}
@@ -534,10 +535,10 @@ export default function GroupDetailScreen() {
         />
 
         {!isDemo && (
-          <PhotoTimeline
-            photos={groupPhotos}
+          <GroupMiniFeed
             groupId={id ?? ''}
-            onSeeAll={() => router.push({ pathname: '/challenge-history' as never, params: { groupId: id } })}
+            groupName={group.name}
+            groupEmoji={group.emoji}
           />
         )}
 

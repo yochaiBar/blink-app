@@ -36,7 +36,9 @@ export default function EditProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         setAvatar(result.assets[0].uri);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
       }
     } catch {
       Alert.alert('Error', 'Could not open photo library');
@@ -59,7 +61,9 @@ export default function EditProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         setAvatar(result.assets[0].uri);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
       }
     } catch {
       // Non-critical: camera may not be available on all devices
@@ -91,7 +95,9 @@ export default function EditProfileScreen() {
 
     setIsSaving(true);
     try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
 
       await updateProfile({
         name: name.trim(),

@@ -119,8 +119,8 @@ const GroupListCard = React.memo(function GroupListCard({
 
                 <View style={styles.groupMetaRow}>
                   <Text style={styles.groupMeta}>
-                    {group.members.length} member
-                    {group.members.length !== 1 ? 's' : ''}
+                    {group.memberCount ?? group.members.length} member
+                    {(group.memberCount ?? group.members.length) !== 1 ? 's' : ''}
                   </Text>
 
                   {topStreak > 0 && (
@@ -161,10 +161,10 @@ const GroupListCard = React.memo(function GroupListCard({
                   />
                 </View>
               ))}
-              {group.members.length > 5 && (
+              {(group.memberCount ?? group.members.length) > 5 && (
                 <View style={styles.moreMembers}>
                   <Text style={styles.moreMembersText}>
-                    +{group.members.length - 5}
+                    +{(group.memberCount ?? group.members.length) - 5}
                   </Text>
                 </View>
               )}

@@ -67,7 +67,7 @@ export default React.memo(function GroupCard({ group, onPress }: GroupCardProps)
   }, [onPress]);
 
   const displayedMembers = group.members.slice(0, 4);
-  const extraCount = group.members.length - 4;
+  const extraCount = (group.memberCount ?? group.members.length) - 4;
 
   return (
     <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>

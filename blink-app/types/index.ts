@@ -19,6 +19,7 @@ export interface Group {
   category: GroupCategory;
   emoji: string;
   members: GroupMember[];
+  memberCount?: number;
   lastActive: string;
   hasActiveChallenge: boolean;
   challengeDeadline?: string;

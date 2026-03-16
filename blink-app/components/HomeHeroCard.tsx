@@ -129,9 +129,9 @@ function ChallengeCard({ group, onRespond }: { group: Group; onRespond?: () => v
               <Image source={{ uri: m.avatar }} style={styles.avatar} contentFit="cover" />
             </View>
           ))}
-          {group.members.length > 4 && (
+          {(group.memberCount ?? group.members.length) > 4 && (
             <View style={[styles.avatarWrap, styles.extraBadge, { marginLeft: -10 }]}>
-              <Text style={styles.extraText}>+{group.members.length - 4}</Text>
+              <Text style={styles.extraText}>+{(group.memberCount ?? group.members.length) - 4}</Text>
             </View>
           )}
         </View>

@@ -64,8 +64,18 @@ export default function GroupPromptScreen() {
 
   if (!group || !prompt) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text style={styles.errorText}>Prompt not found</Text>
+      <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={{ marginLeft: 20, marginTop: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' }}
+        >
+          <ArrowLeft size={22} color={theme.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>😅</Text>
+          <Text style={{ color: theme.text, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Prompt not found</Text>
+          <Text style={{ color: theme.textMuted, fontSize: 14, textAlign: 'center' }}>This prompt may have expired or been removed.</Text>
+        </View>
       </View>
     );
   }

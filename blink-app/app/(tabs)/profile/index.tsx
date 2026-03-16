@@ -20,6 +20,7 @@ import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
+import { api } from '@/services/api';
 import { Skeleton, GlassCard } from '@/components/ui';
 import StreakCalendar from '@/components/StreakCalendar';
 
@@ -58,6 +59,7 @@ const AnimatedStatCard = React.memo(function AnimatedStatCard({
   );
 });
 
+const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
 const APP_VERSION = '1.0.0';
 
 export default function ProfileScreen() {
@@ -87,6 +89,17 @@ export default function ProfileScreen() {
   }, [logout]);
 
   const handleDeleteAccount = useCallback(() => {
+    const doDelete = async () => {
+      try {
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        await api('/auth/delete-account', { method: 'DELETE' });
+        await logout();
+      } catch {
+        // Server-side delete failed -- still log out locally to unblock the user
+        await logout();
+      }
+    };
+
     Alert.alert(
       'Delete Account',
       'This action is permanent and cannot be undone. All your data will be deleted.',
@@ -95,10 +108,7 @@ export default function ProfileScreen() {
         {
           text: 'Delete Account',
           style: 'destructive',
-          onPress: () => {
-            // TODO: call delete account API then logout
-            logout();
-          },
+          onPress: doDelete,
         },
       ]
     );
@@ -151,7 +161,7 @@ export default function ProfileScreen() {
           <GlassCard style={styles.profileCard}>
             <View style={styles.profileCardInner}>
               <View style={styles.avatarRing}>
-                <Image source={{ uri: user.avatar }} style={styles.avatar} contentFit="cover" />
+                <Image source={{ uri: user.avatar || DEFAULT_AVATAR }} style={styles.avatar} contentFit="cover" />
               </View>
               <Text style={[typography.displayMedium, { color: theme.text, marginTop: spacing.md }]}>
                 {user.name}

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Animated, Dimensions, Platform, KeyboardAvoidingView, Alert, TouchableOpacity, Linking, NativeSyntheticEvent, TextInputKeyPressEventData } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Animated, Dimensions, Platform, KeyboardAvoidingView, Alert, TouchableOpacity, Linking, NativeSyntheticEvent, TextInputKeyPressEventData, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, Users, Zap, Sparkles, Phone, Check, Shield, FileText, ChevronRight, ChevronDown } from 'lucide-react-native';
+import { Camera, Users, Zap, Sparkles, Phone, Check, Shield, FileText, ChevronRight, ChevronDown, ArrowLeft } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
@@ -280,6 +280,15 @@ export default function OnboardingScreen() {
     }
   }, [resendCountdown, isSubmitting, phone, countryCode, requestOtp]);
 
+  const previousStep: Record<string, OnboardingStep | null> = {
+    welcome: null,
+    phone: 'welcome',
+    otp: 'phone',
+    age: 'otp',
+    terms: 'age',
+    name: 'terms',
+  };
+
   const isNextDisabled =
     isSubmitting ||
     (step === 'phone' && !phone.trim()) ||
@@ -328,6 +337,26 @@ export default function OnboardingScreen() {
               />
             ))}
           </View>
+
+          {previousStep[step] && (
+            <TouchableOpacity
+              style={{
+                position: 'absolute',
+                top: insets.top + 10,
+                left: 20,
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 10,
+              }}
+              onPress={() => animateTransition(previousStep[step]!)}
+            >
+              <ArrowLeft size={20} color={theme.text} />
+            </TouchableOpacity>
+          )}
 
           <Animated.View style={[styles.stepContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
             {step === 'welcome' && (
@@ -418,7 +447,7 @@ export default function OnboardingScreen() {
 
                 {/* Social proof */}
                 <Animated.Text style={[styles.socialProof, { opacity: socialProofOpacity }]}>
-                  Join 1,000+ friend groups already blinking
+                  Your friends are waiting
                 </Animated.Text>
               </View>
             )}
@@ -458,25 +487,27 @@ export default function OnboardingScreen() {
 
                 {showCountryPicker && (
                   <View style={styles.countryPickerContainer}>
-                    {COUNTRY_CODES.map((c) => (
-                      <TouchableOpacity
-                        key={c.code}
-                        style={[
-                          styles.countryPickerItem,
-                          c.code === countryCode.code && styles.countryPickerItemActive,
-                        ]}
-                        onPress={() => {
-                          setCountryCode(c);
-                          setShowCountryPicker(false);
-                          phoneInputRef.current?.focus();
-                        }}
-                      >
-                        <Text style={styles.countryPickerLabel}>{c.label}</Text>
-                        {c.code === countryCode.code && (
-                          <Check size={16} color={theme.coral} />
-                        )}
-                      </TouchableOpacity>
-                    ))}
+                    <ScrollView nestedScrollEnabled>
+                      {COUNTRY_CODES.map((c) => (
+                        <TouchableOpacity
+                          key={c.code}
+                          style={[
+                            styles.countryPickerItem,
+                            c.code === countryCode.code && styles.countryPickerItemActive,
+                          ]}
+                          onPress={() => {
+                            setCountryCode(c);
+                            setShowCountryPicker(false);
+                            phoneInputRef.current?.focus();
+                          }}
+                        >
+                          <Text style={styles.countryPickerLabel}>{c.label}</Text>
+                          {c.code === countryCode.code && (
+                            <Check size={16} color={theme.coral} />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
                   </View>
                 )}
 
@@ -719,6 +750,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 2,
     borderColor: '#1a1a2e',
+    backgroundColor: '#2a1a3e',
   },
   collageCenter: {
     width: 52,

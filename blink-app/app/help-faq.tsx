@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
@@ -110,7 +110,14 @@ export default function HelpFAQScreen() {
         <View style={styles.contactSection}>
           <Text style={styles.contactTitle}>Still need help?</Text>
           <Text style={styles.contactText}>
-            Reach out to us at support@blink.app and we'll get back to you within 24 hours.
+            Reach out to us at{' '}
+            <Text
+              style={styles.emailLink}
+              onPress={() => Linking.openURL('mailto:support@blink.app')}
+            >
+              support@blink.app
+            </Text>
+            {' '}and we'll get back to you within 24 hours.
           </Text>
         </View>
 
@@ -222,5 +229,10 @@ const styles = StyleSheet.create({
     color: theme.textSecondary,
     textAlign: 'center',
     lineHeight: 19,
+  },
+  emailLink: {
+    color: theme.coral,
+    textDecorationLine: 'underline' as const,
+    fontWeight: '600' as const,
   },
 });
