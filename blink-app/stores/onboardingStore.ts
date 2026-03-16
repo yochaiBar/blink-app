@@ -13,6 +13,7 @@ interface OnboardingState {
   completeTour: () => void;
   setDemoPhotoUri: (uri: string) => void;
   completeDemoChallenge: () => void;
+  reset: () => Promise<void>;
   hydrate: () => Promise<void>;
 }
 
@@ -42,6 +43,14 @@ const storage = {
     const SecureStore = await import('expo-secure-store');
     await SecureStore.setItemAsync(key, value);
   },
+  async remove(key: string): Promise<void> {
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(key);
+      return;
+    }
+    const SecureStore = await import('expo-secure-store');
+    await SecureStore.deleteItemAsync(key);
+  },
 };
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
@@ -70,6 +79,11 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   completeDemoChallenge: () => {
     set({ demoChallengeCompleted: true });
     storage.set(DEMO_CHALLENGE_KEY, 'true');
+  },
+
+  reset: async () => {
+    await Promise.all([storage.remove(STORAGE_KEY), storage.remove(DEMO_CHALLENGE_KEY)]);
+    set({ tourComplete: false, tourStep: null, demoChallengeCompleted: false, demoPhotoUri: null });
   },
 
   hydrate: async () => {

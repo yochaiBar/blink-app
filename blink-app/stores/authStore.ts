@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Platform } from 'react-native';
 import { api, setTokens, clearTokens, loadToken } from '@/services/api';
 import { sendPushTokenToServer } from '@/utils/notifications';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 
 interface User {
   id: string;
@@ -62,6 +63,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     await clearTokens();
+    await useOnboardingStore.getState().reset();
     set({ user: null, isAuthenticated: false });
   },
 
