@@ -101,11 +101,11 @@ describe('ErrorBoundary', () => {
     shouldThrow = true;
     const fallback = React.createElement('Text', null, 'Custom fallback UI');
 
+    const child = React.createElement(ThrowingChild);
     const tree = createWithAct(
       React.createElement(
         ErrorBoundary,
-        { fallback },
-        React.createElement(ThrowingChild),
+        { fallback, children: child },
       ),
     );
 
@@ -139,7 +139,7 @@ describe('ErrorBoundary', () => {
     expect(touchables.length).toBeGreaterThan(0);
 
     act(() => {
-      touchables[0].props.onPress();
+      (touchables[0].props as { onPress: () => void }).onPress();
     });
 
     // After reset, children should render normally

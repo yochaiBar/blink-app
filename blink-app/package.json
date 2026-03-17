@@ -13,7 +13,11 @@
     "test:coverage": "jest --coverage --forceExit",
     "test:watch": "jest --watch",
     "lint": "eslint app/ components/ services/ stores/ hooks/ utils/ --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prebuild:check": "npm run typecheck && npm test",
+    "build:preview": "npm run prebuild:check && eas build --profile preview --platform all",
+    "build:preview:ios": "npm run prebuild:check && eas build --profile preview --platform ios",
+    "build:preview:android": "npm run prebuild:check && eas build --profile preview --platform android"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
