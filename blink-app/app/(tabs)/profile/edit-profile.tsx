@@ -1,5 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, Alert } from 'react-native';
+import {
+  View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
+  Platform, Alert, ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Camera, Check } from 'lucide-react-native';
@@ -15,7 +18,7 @@ export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { groups } = useGroups();
-  const { userProfile: user, updateProfile } = useProfile(groups.length);
+  const { userProfile: user, updateProfile, isUploading } = useProfile(groups.length);
 
   const [name, setName] = useState<string>(user.name);
   const [username, setUsername] = useState<string>(user.username.replace('@', ''));
@@ -123,7 +126,7 @@ export default function EditProfileScreen() {
         <TouchableOpacity
           onPress={handleSave}
           style={[styles.saveBtn, !hasChanges && styles.saveBtnDisabled]}
-          disabled={!hasChanges || isSaving}
+          disabled={!hasChanges || isSaving || isUploading}
           testID="save-profile-btn"
         >
           <Check size={18} color={hasChanges ? theme.white : theme.textMuted} />
@@ -132,8 +135,18 @@ export default function EditProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.avatarSection}>
-          <TouchableOpacity style={styles.avatarContainer} onPress={handleChangePhoto} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={handleChangePhoto}
+            activeOpacity={0.8}
+            disabled={isUploading}
+          >
             <Image source={{ uri: avatar }} style={styles.avatar} contentFit="cover" />
+            {isUploading && (
+              <View style={styles.avatarUploadOverlay}>
+                <ActivityIndicator size="small" color={theme.white} />
+              </View>
+            )}
             <View style={styles.editAvatarBtn}>
               <Camera size={16} color={theme.white} />
             </View>
@@ -190,12 +203,12 @@ export default function EditProfileScreen() {
 
         <View style={{ gap: 10, marginTop: 8 }}>
           <Button
-            title={isSaving ? 'Saving...' : 'Save Changes'}
+            title={isUploading ? 'Uploading photo...' : isSaving ? 'Saving...' : 'Save Changes'}
             onPress={handleSave}
             variant="primary"
             size="lg"
-            loading={isSaving}
-            disabled={!hasChanges || isSaving}
+            loading={isSaving || isUploading}
+            disabled={!hasChanges || isSaving || isUploading}
             fullWidth
           />
           <Button
@@ -265,6 +278,13 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     borderWidth: 3,
     borderColor: theme.coral,
+  },
+  avatarUploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   editAvatarBtn: {
     position: 'absolute',

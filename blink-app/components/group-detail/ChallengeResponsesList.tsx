@@ -45,6 +45,7 @@ export interface ChallengeResponsesListProps {
   } | null;
   progressData: ProgressData | null;
   aiCommentary: { challengeId: string; commentary: string } | null;
+  challengeJustTriggered?: boolean;
   onRespond: () => void;
   onReact: (snapId: string, emoji: string) => void;
   onReport: (snapId: string, userId: string) => void;
@@ -69,6 +70,7 @@ export default function ChallengeResponsesList({
   previewData,
   progressData,
   aiCommentary,
+  challengeJustTriggered,
   onRespond,
   onReact,
   onReport,
@@ -94,6 +96,7 @@ export default function ChallengeResponsesList({
             previewData?.respondedUsers ??
             snaps.map((sn) => ({ displayName: sn.userName, avatarUrl: sn.userAvatar }))
           }
+          challengeJustStarted={challengeJustTriggered}
           onRespond={onRespond}
           activityPulseProps={
             progressData
@@ -102,6 +105,7 @@ export default function ChallengeResponsesList({
                   totalMembers: progressData.totalMembers,
                   currentUserId,
                   hasResponded: false,
+                  challengeJustStarted: challengeJustTriggered,
                 }
               : undefined
           }

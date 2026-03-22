@@ -10,6 +10,7 @@ export interface BlurredPreviewCardProps {
   totalReactions: number;
   topReactionEmoji?: string;
   respondedUsers: Array<{ displayName: string; avatarUrl?: string }>;
+  challengeJustStarted?: boolean;
   onRespond: () => void;
   activityPulseProps?: ActivityPulseProps;
 }
@@ -26,6 +27,7 @@ export default function BlurredPreviewCard({
   totalReactions,
   topReactionEmoji,
   respondedUsers,
+  challengeJustStarted,
   onRespond,
   activityPulseProps,
 }: BlurredPreviewCardProps) {
@@ -108,8 +110,9 @@ export default function BlurredPreviewCard({
 
       <View style={styles.infoSection}>
         <Text style={styles.friendsText}>
-          {respondedCount} friend{respondedCount !== 1 ? 's' : ''} already
-          responded
+          {challengeJustStarted && respondedCount === 0
+            ? 'Challenge just started -- be the first!'
+            : `${respondedCount} friend${respondedCount !== 1 ? 's' : ''} already responded`}
         </Text>
 
         {respondedUsers.length > 0 && (

@@ -30,6 +30,7 @@ export interface ChallengeSectionProps {
   currentUserId: string;
   onRespond: () => void;
   challengeBarRef: React.RefObject<View | null>;
+  challengeJustTriggered?: boolean;
 }
 
 export default function ChallengeSection({
@@ -43,6 +44,7 @@ export default function ChallengeSection({
   currentUserId,
   onRespond,
   challengeBarRef,
+  challengeJustTriggered,
 }: ChallengeSectionProps) {
   return (
     <View ref={challengeBarRef} collapsable={false}>
@@ -74,6 +76,14 @@ export default function ChallengeSection({
             <Text style={styles.timerText}>{countdown} remaining</Text>
           </View>
         ) : null}
+
+        {/* "Your turn" nudge when user just triggered the challenge */}
+        {challengeJustTriggered && !hasSubmittedToday && (
+          <View style={styles.yourTurnRow}>
+            <View style={styles.yourTurnDot} />
+            <Text style={styles.yourTurnText}>Challenge started -- your turn!</Text>
+          </View>
+        )}
 
         {/* Respond button OR ActivityPulse */}
         {!hasSubmittedToday ? (
@@ -156,6 +166,28 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: theme.textSecondary,
     fontVariant: ['tabular-nums'],
+  },
+  yourTurnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: theme.coralMuted,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.md,
+  },
+  yourTurnDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: theme.coral,
+  },
+  yourTurnText: {
+    ...typography.bodySmall,
+    color: theme.coral,
+    fontWeight: '700',
   },
   respondBtn: {
     flexDirection: 'row',

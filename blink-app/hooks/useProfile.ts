@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { UserProfile } from '@/types';
@@ -13,6 +13,7 @@ export function useProfile(groupCount: number) {
   const authUser = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const queryClient = useQueryClient();
+  const [isUploading, setIsUploading] = useState(false);
 
   const statsQuery = useQuery({
     queryKey: queryKeys.user.stats,
@@ -62,7 +63,18 @@ export function useProfile(groupCount: number) {
 
         // If the avatar is a local file URI (not already an http URL), upload it first
         if (avatarUrl && !avatarUrl.startsWith('http')) {
-          avatarUrl = await uploadAvatar(avatarUrl);
+          // Optimistically show the local URI as the avatar while uploading
+          authStore.updateAvatar(avatarUrl);
+          setIsUploading(true);
+          try {
+            avatarUrl = await uploadAvatar(avatarUrl);
+          } catch (uploadErr) {
+            // Revert optimistic avatar on upload failure
+            authStore.updateAvatar(authUser?.avatar_url ?? '');
+            setIsUploading(false);
+            throw uploadErr;
+          }
+          setIsUploading(false);
         }
 
         // Only send avatar_url if it is a valid http URL (S3 or dev fallback)
@@ -114,5 +126,6 @@ export function useProfile(groupCount: number) {
     userProfile,
     displayName,
     updateProfile,
+    isUploading,
   };
 }

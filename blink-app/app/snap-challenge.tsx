@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, Check, RotateCcw, SwitchCamera } from 'lucide-react-native';
+import { X, Check, RotateCcw, SwitchCamera, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
@@ -91,6 +91,13 @@ function SnapChallengeScreen() {
   const promptText =
     challengeData?.prompt_text ?? challengeData?.prompt ?? null;
   const resolvedChallengeId = challengeId ?? challengeData?.id;
+
+  // Check if the challenge has expired (skip for demo mode)
+  const isExpired = !isDemo && challengeData != null && (
+    challengeData.status === 'completed' ||
+    challengeData.status === 'expired' ||
+    (challengeData.expires_at != null && new Date(challengeData.expires_at).getTime() <= Date.now())
+  );
 
   // Fetch progress (who has responded)
   const progressQuery = useQuery({
@@ -465,6 +472,36 @@ function SnapChallengeScreen() {
       </View>
     );
   };
+
+  if (isExpired) {
+    return (
+      <View style={styles.container}>
+        <LinearGradient
+          colors={['#0A0A0F', '#1a0a1e', '#0A0A0F']}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[styles.expiredContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          <View style={styles.expiredContent}>
+            <View style={styles.expiredIconCircle}>
+              <Clock size={48} color={theme.textMuted} />
+            </View>
+            <Text style={styles.expiredTitle}>This challenge has expired</Text>
+            <Text style={styles.expiredSubtitle}>
+              You can no longer submit a snap for this challenge. Head back to the group to see what's next.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.expiredButton}
+            onPress={() => router.replace(`/group-detail?id=${groupId}` as never)}
+            activeOpacity={0.85}
+            testID="expired-back-btn"
+          >
+            <Text style={styles.expiredButtonText}>Back to Group</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -1030,6 +1067,53 @@ const styles = StyleSheet.create({
     backgroundColor: theme.coral,
   },
   submitBtnText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.white,
+  },
+
+  // ── Expired ──
+  expiredContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  expiredContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  expiredIconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: theme.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  expiredTitle: {
+    ...typography.headlineLarge,
+    color: theme.text,
+    textAlign: 'center',
+  },
+  expiredSubtitle: {
+    ...typography.bodyLarge,
+    color: theme.textMuted,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  expiredButton: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: theme.coral,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  expiredButtonText: {
     fontSize: 16,
     fontWeight: '800',
     color: theme.white,

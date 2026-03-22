@@ -14,6 +14,7 @@ export interface ActivityPulseProps {
   totalMembers: number;
   currentUserId: string;
   hasResponded: boolean;
+  challengeJustStarted?: boolean;
 }
 
 const AVATAR_SIZE = 28;
@@ -25,6 +26,7 @@ export default function ActivityPulse({
   totalMembers,
   currentUserId,
   hasResponded,
+  challengeJustStarted,
 }: ActivityPulseProps) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0.3)).current;
@@ -81,7 +83,9 @@ export default function ActivityPulse({
     MAX_VISIBLE - respondedVisible.length
   );
 
-  const statusText = everyoneResponded
+  const statusText = challengeJustStarted && respondedCount === 0
+    ? 'Waiting for responses...'
+    : everyoneResponded
     ? "Everyone's in!"
     : justUserLeft
     ? 'Just you left!'

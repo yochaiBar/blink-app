@@ -71,6 +71,7 @@ export default function GroupDetailScreen() {
     topReactionEmoji?: string;
     respondedUsers: Array<{ displayName: string; avatarUrl?: string }>;
   } | null>(null);
+  const [challengeJustTriggered, setChallengeJustTriggered] = useState(false);
 
   // ── Animations ──
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -216,7 +217,10 @@ export default function GroupDetailScreen() {
     (async () => {
       try {
         const data = await api<{ responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>; totalMembers?: number }>(`/challenges/${activeChallenge.id}/progress`);
-        if (!cancelled && data) setProgressData({ responded: data.responded ?? [], totalMembers: data.totalMembers ?? 0 });
+        if (!cancelled && data) {
+          setProgressData({ responded: data.responded ?? [], totalMembers: data.totalMembers ?? 0 });
+          setChallengeJustTriggered(false);
+        }
       } catch { /* endpoint may not exist */ }
     })();
     return () => { cancelled = true; };
@@ -242,7 +246,10 @@ export default function GroupDetailScreen() {
     const socket = getSocket();
     if (!socket || isDemo) return;
     const handleProgress = (data: { responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>; totalMembers?: number }) => {
-      if (data.responded && data.totalMembers) setProgressData({ responded: data.responded, totalMembers: data.totalMembers });
+      if (data.responded && data.totalMembers) {
+        setProgressData({ responded: data.responded, totalMembers: data.totalMembers });
+        setChallengeJustTriggered(false);
+      }
     };
     const handleResponse = () => {
       if (activeChallenge?.id) {
@@ -283,23 +290,18 @@ export default function GroupDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       setShowRingModal(false);
 
-      // Optimistic UI: include the triggerer in the responded count so it doesn't show 0/N
+      // Optimistic UI: show challenge started state without inflating the response count
       const memberCount = groupQuery.data?.members?.length ?? group?.memberCount ?? group?.members.length ?? 0;
-      const currentUserMember = groupQuery.data?.members?.find((m) => m.user_id === user.id);
-      const optimisticUser = {
-        userId: user.id,
-        displayName: currentUserMember?.display_name ?? user.name ?? 'You',
-        avatarUrl: currentUserMember?.avatar_url ?? user.avatar,
-      };
+      setChallengeJustTriggered(true);
       setProgressData({
-        responded: [optimisticUser],
+        responded: [],
         totalMembers: memberCount,
       });
       setPreviewData({
-        respondedCount: 1,
+        respondedCount: 0,
         totalMembers: memberCount,
         totalReactions: 0,
-        respondedUsers: [{ displayName: optimisticUser.displayName, avatarUrl: optimisticUser.avatarUrl }],
+        respondedUsers: [],
       });
 
       if (type === 'snap') {
@@ -534,6 +536,7 @@ export default function GroupDetailScreen() {
             currentUserId={user.id}
             onRespond={handleSnapChallenge}
             challengeBarRef={challengeBarRef}
+            challengeJustTriggered={challengeJustTriggered}
           />
         )}
 
@@ -555,6 +558,7 @@ export default function GroupDetailScreen() {
           previewData={previewData}
           progressData={progressData}
           aiCommentary={aiCommentary}
+          challengeJustTriggered={challengeJustTriggered}
           onRespond={handleSnapChallenge}
           onReact={handleReaction}
           onReport={handleReportSnap}
