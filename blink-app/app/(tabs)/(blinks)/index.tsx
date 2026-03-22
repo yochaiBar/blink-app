@@ -30,6 +30,7 @@ import AvatarRing from '@/components/ui/AvatarRing';
 import FeedItem, { FeedItemData } from '@/components/FeedItem';
 import DemoChallengeAlert from '@/components/DemoChallengeAlert';
 import { useOnboardingStore } from '@/stores/onboardingStore';
+import { isDemoGroup } from '@/constants/demoData';
 
 // ── Types ──
 
@@ -224,7 +225,7 @@ export default function BlinksScreen() {
     queryKey: ['feed-active-challenges', [...groups.map((g) => g.id)].sort().join(',')],
     queryFn: async (): Promise<PendingChallenge[]> => {
       const results: PendingChallenge[] = [];
-      const groupsWithChallenge = groups.filter((g) => g.hasActiveChallenge);
+      const groupsWithChallenge = groups.filter((g) => g.hasActiveChallenge && !isDemoGroup(g.id));
       const fetches = groupsWithChallenge.map(async (group) => {
         try {
           const challenge: ApiChallenge = await api(
@@ -265,8 +266,9 @@ export default function BlinksScreen() {
       const allItems: FeedItemData[] = [];
       const groupMap = new Map(groups.map((g) => [g.id, g]));
 
-      // Fetch history + responses for each group in parallel
-      const fetches = groups.map(async (group) => {
+      // Fetch history + responses for each group in parallel (skip demo groups)
+      const realGroups = groups.filter((g) => !isDemoGroup(g.id));
+      const fetches = realGroups.map(async (group) => {
         try {
           const history: ChallengeHistoryItem[] = await api(
             `/challenges/groups/${group.id}/challenges/history?limit=5`,
@@ -344,8 +346,8 @@ export default function BlinksScreen() {
         }
       });
 
-      // Fetch spotlights for each group
-      const spotlightFetches = groups.map(async (group) => {
+      // Fetch spotlights for each group (skip demo groups)
+      const spotlightFetches = realGroups.map(async (group) => {
         try {
           const spotlight: ApiSpotlight = await api(`/spotlight/${group.id}`);
           if (spotlight && spotlight.featured_user_id) {

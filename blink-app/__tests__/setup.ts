@@ -70,33 +70,6 @@ jest.mock('expo-constants', () => ({
   },
 }));
 
-// ── Mock expo-file-system ─────────────────────────────────────────
-const mockFileExists = false;
-jest.mock('expo-file-system', () => {
-  const mockFile = {
-    exists: mockFileExists,
-    uri: 'file:///mock/path',
-    write: jest.fn(),
-    text: jest.fn().mockReturnValue(''),
-    delete: jest.fn(),
-  };
-  const mockDirectory = {
-    exists: false,
-    uri: 'file:///mock/dir/',
-    create: jest.fn(),
-    delete: jest.fn(),
-    list: jest.fn().mockReturnValue([]),
-  };
-  return {
-    File: jest.fn().mockImplementation(() => ({ ...mockFile })),
-    Directory: jest.fn().mockImplementation(() => ({ ...mockDirectory })),
-    Paths: {
-      document: { uri: 'file:///mock/document/' },
-      cache: { uri: 'file:///mock/cache/' },
-    },
-  };
-});
-
 // ── Mock @noble/ciphers/aes.js ───────────────────────────────────
 jest.mock('@noble/ciphers/aes.js', () => ({
   gcm: jest.fn().mockReturnValue({

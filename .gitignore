@@ -42,3 +42,4 @@ docs/adrs/003-server-side-otp.md
 docs/adrs/004-s3-presigned-uploads.md
 docs/adrs/005-zustand-over-redux.md
 docs/adrs/006-postgresql-otp-storage.md
+.claude/scheduled_tasks.lock

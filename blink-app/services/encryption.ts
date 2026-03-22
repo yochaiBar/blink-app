@@ -1,11 +1,9 @@
 import { Platform } from 'react-native';
-import { File, Directory, Paths } from 'expo-file-system';
 import { gcm } from '@noble/ciphers/aes.js';
 import { api } from '@/services/api';
 import type { EncryptionMetadata } from '@/types/api';
 
 // ── Constants ──
-const CACHE_DIR_NAME = 'decrypted-photos';
 const GROUP_KEY_PREFIX = 'enc_group_key_';
 
 // ── SecureStore wrapper (matches api.ts pattern) ──
@@ -47,8 +45,9 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// ── In-memory cache for group keys ──
+// ── In-memory caches ──
 const groupKeyCache = new Map<string, Uint8Array>();
+const photoCache = new Map<string, string>(); // responseId → data URI
 
 /**
  * Retrieve the 256-bit AES group key for the given group.
@@ -107,10 +106,8 @@ export function decryptPhotoBlob(
   metadata: EncryptionMetadata,
   groupKey: Uint8Array,
 ): Uint8Array {
-  // Unwrap the per-photo key
   const photoKey = unwrapPhotoKey(metadata.key_enc, groupKey);
 
-  // Decrypt the photo data
   const iv = base64ToUint8Array(metadata.iv);
   const tag = base64ToUint8Array(metadata.tag);
 
@@ -123,75 +120,46 @@ export function decryptPhotoBlob(
   return aes.decrypt(dataWithTag);
 }
 
-// ── File system cache for decrypted photos ──
-
-function getCacheDir(): Directory {
-  return new Directory(Paths.document, CACHE_DIR_NAME);
-}
-
-async function ensureCacheDir(): Promise<void> {
-  if (Platform.OS === 'web') return;
-  const dir = getCacheDir();
-  if (!dir.exists) {
-    dir.create();
-  }
-}
+// ── Photo cache (in-memory data URIs) ──
 
 /**
- * Check if a decrypted photo is already cached on disk.
- * Returns the local file URI or null.
+ * Check if a decrypted photo is cached in memory.
  */
 export async function getCachedPhotoUri(responseId: string): Promise<string | null> {
-  if (Platform.OS === 'web') return null;
-  const file = new File(getCacheDir(), `${responseId}.jpg`);
-  return file.exists ? file.uri : null;
+  return photoCache.get(responseId) ?? null;
 }
 
 /**
- * Write decrypted JPEG bytes to the file cache.
- * Returns the local file URI.
+ * Cache a decrypted photo as a data URI in memory.
  */
 export async function cacheDecryptedPhoto(responseId: string, jpegBytes: Uint8Array): Promise<string> {
-  if (Platform.OS === 'web') {
-    // Web: return data URI
-    const b64 = uint8ArrayToBase64(jpegBytes);
-    return `data:image/jpeg;base64,${b64}`;
+  const b64 = uint8ArrayToBase64(jpegBytes);
+  const dataUri = `data:image/jpeg;base64,${b64}`;
+  photoCache.set(responseId, dataUri);
+
+  // Evict oldest entries if cache exceeds 50 photos
+  if (photoCache.size > 50) {
+    const firstKey = photoCache.keys().next().value;
+    if (firstKey) photoCache.delete(firstKey);
   }
 
-  await ensureCacheDir();
-  const file = new File(getCacheDir(), `${responseId}.jpg`);
-  const b64 = uint8ArrayToBase64(jpegBytes);
-  file.write(b64, { encoding: 'base64' });
-  return file.uri;
+  return dataUri;
 }
 
 /**
- * Clear all encryption data: in-memory key cache, SecureStore keys, and decrypted photo cache.
+ * Clear all encryption data: in-memory key cache, SecureStore keys, and photo cache.
  * Call on logout.
  */
 export async function clearEncryptionData(): Promise<void> {
-  // Clear in-memory cache
   const groupIds = Array.from(groupKeyCache.keys());
   groupKeyCache.clear();
+  photoCache.clear();
 
-  // Clear SecureStore entries
   for (const gid of groupIds) {
     try {
       await storage.remove(`${GROUP_KEY_PREFIX}${gid}`);
     } catch {
       // Ignore individual removal failures
-    }
-  }
-
-  // Clear file cache
-  if (Platform.OS !== 'web') {
-    try {
-      const dir = getCacheDir();
-      if (dir.exists) {
-        dir.delete();
-      }
-    } catch {
-      // Ignore cache cleanup failures
     }
   }
 }
