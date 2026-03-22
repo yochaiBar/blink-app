@@ -41,6 +41,13 @@ export interface SnapSubmission {
   imageUrl: string;
   timestamp: string;
   reactions: Reaction[];
+  encryptionMetadata?: {
+    v: number;
+    alg: string;
+    iv: string;
+    tag: string;
+    key_enc: string;
+  } | null;
 }
 
 export interface Reaction {

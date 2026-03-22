@@ -148,6 +148,7 @@ export default function ChallengeResponsesList({
             key={snap.id}
             snap={snap}
             isLocked={false}
+            currentUserId={currentUserId}
             onReact={onReact}
             onReport={onReport}
             onBlock={onBlock}

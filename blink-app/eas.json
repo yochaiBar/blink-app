@@ -31,7 +31,9 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "API_URL": "https://blink-api-production.up.railway.app/api"
+        "API_URL": "https://blink-api-production.up.railway.app/api",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "SENTRY_ALLOW_FAILURE": "true"
       },
       "ios": {
         "image": "latest"
@@ -44,9 +46,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "REPLACE_WITH_APPLE_ID",
-        "ascAppId": "REPLACE_WITH_ASC_APP_ID",
-        "appleTeamId": "REPLACE_WITH_TEAM_ID"
+        "appleId": "yochai456@gmail.com",
+        "ascAppId": "6760708125",
+        "appleTeamId": "RW54G9U2AP"
       },
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",

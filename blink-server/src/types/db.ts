@@ -73,6 +73,23 @@ export interface ChallengeResponseRow {
   answer_text: string | null;
   responded_at: Date;
   response_time_ms: number | null;
+  encryption_metadata: EncryptionMetadata | null;
+}
+
+export interface EncryptionMetadata {
+  v: number;
+  alg: string;
+  iv: string;
+  tag: string;
+  key_enc: string;
+}
+
+export interface GroupEncryptionKeyRow {
+  group_id: string;
+  encrypted_key: Buffer;
+  key_version: number;
+  created_at: Date;
+  rotated_at: Date | null;
 }
 
 // ── Supporting tables ────────────────────────────────────────────

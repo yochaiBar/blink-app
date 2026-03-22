@@ -542,3 +542,83 @@ describe('DELETE /api/groups/:id', () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────
+// GET /api/groups/:id/stats
+// ─────────────────────────────────────────────────────────────────
+describe('GET /api/groups/:id/stats', () => {
+  const token = generateAccessToken(TEST_USER_ID);
+
+  it('should return group stats for a member', async () => {
+    // 1. verifyMembership
+    mockQuery.mockResolvedValueOnce(queryResult([makeMembership()]));
+    // 2. top_trigger
+    mockQuery.mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2, display_name: 'Alex', count: 12 }]));
+    // 3. longest_streak
+    mockQuery.mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_3, display_name: 'Jordan', streak: 7 }]));
+    // 4. fastest_responder
+    mockQuery.mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2, display_name: 'Alex', avg_ms: 4200 }]));
+    // 5. total_challenges
+    mockQuery.mockResolvedValueOnce(queryResult([{ count: '45' }]));
+    // 6. completed_challenges
+    mockQuery.mockResolvedValueOnce(queryResult([{ count: '37' }]));
+
+    const res = await request(app)
+      .get(`/api/groups/${TEST_GROUP_ID}/stats`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.top_trigger).toEqual({ user_id: TEST_USER_ID_2, display_name: 'Alex', count: 12 });
+    expect(res.body.longest_streak).toEqual({ user_id: TEST_USER_ID_3, display_name: 'Jordan', streak: 7 });
+    expect(res.body.fastest_responder).toEqual({ user_id: TEST_USER_ID_2, display_name: 'Alex', avg_ms: 4200 });
+    expect(res.body.total_challenges).toBe(45);
+    expect(res.body.completion_rate).toBeCloseTo(0.82, 1);
+  });
+
+  it('should return nulls when no data exists', async () => {
+    mockQuery.mockResolvedValueOnce(queryResult([makeMembership()]));
+    // All queries return empty
+    mockQuery.mockResolvedValueOnce(queryResult([]));
+    mockQuery.mockResolvedValueOnce(queryResult([]));
+    mockQuery.mockResolvedValueOnce(queryResult([]));
+    mockQuery.mockResolvedValueOnce(queryResult([{ count: '0' }]));
+    mockQuery.mockResolvedValueOnce(queryResult([{ count: '0' }]));
+
+    const res = await request(app)
+      .get(`/api/groups/${TEST_GROUP_ID}/stats`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.top_trigger).toBeNull();
+    expect(res.body.longest_streak).toBeNull();
+    expect(res.body.fastest_responder).toBeNull();
+    expect(res.body.total_challenges).toBe(0);
+    expect(res.body.completion_rate).toBe(0);
+  });
+
+  it('should return 403 when user is not a member', async () => {
+    mockQuery.mockResolvedValueOnce(queryResult([]));
+
+    const res = await request(app)
+      .get(`/api/groups/${TEST_GROUP_ID}/stats`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('Not a member of this group');
+  });
+
+  it('should return 401 without authentication', async () => {
+    const res = await request(app)
+      .get(`/api/groups/${TEST_GROUP_ID}/stats`);
+
+    expect(res.status).toBe(401);
+  });
+
+  it('should return 400 for invalid UUID', async () => {
+    const res = await request(app)
+      .get('/api/groups/not-a-uuid/stats')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+});

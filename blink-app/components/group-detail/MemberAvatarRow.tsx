@@ -71,14 +71,19 @@ export interface MemberAvatarRowProps {
   members: MemberAvatarData[];
   respondedUserIds: Set<string>;
   hasActiveChallenge: boolean;
+  currentUserId?: string;
 }
 
 export default function MemberAvatarRow({
   members,
   respondedUserIds,
   hasActiveChallenge,
+  currentUserId,
 }: MemberAvatarRowProps) {
   const [tooltipName, setTooltipName] = useState<string | null>(null);
+
+  // Filter out the current user from the avatar row
+  const visibleMembers = currentUserId ? members.filter((m) => m.id !== currentUserId) : members;
 
   const respondedCount = hasActiveChallenge
     ? members.filter((m) => respondedUserIds.has(m.id)).length
@@ -91,7 +96,7 @@ export default function MemberAvatarRow({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.memberRingRow}
       >
-        {members.map((member) => {
+        {visibleMembers.map((member) => {
           const hasResponded = respondedUserIds.has(member.id);
           return (
             <AnimatedMemberAvatar
@@ -105,9 +110,9 @@ export default function MemberAvatarRow({
           );
         })}
       </ScrollView>
-      {hasActiveChallenge && members.length > 0 && (
+      {hasActiveChallenge && visibleMembers.length > 0 && (
         <Text style={styles.respondedCount}>
-          {respondedCount}/{members.length} responded
+          {respondedCount}/{visibleMembers.length + (currentUserId ? 1 : 0)} responded (incl. you)
         </Text>
       )}
     </View>

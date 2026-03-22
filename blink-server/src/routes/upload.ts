@@ -4,10 +4,11 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { validateBody } from '../middleware/validate';
-import { presignUploadSchema } from '../utils/schemas';
+import { presignUploadSchema, encryptedUploadSchema } from '../utils/schemas';
 import logger from '../utils/logger';
 import { PRESIGNED_URL_EXPIRY_SECONDS } from '../utils/constants';
-import { v4 as uuid } from 'uuid';
+import { isEncryptionEnabled, encryptPhoto } from '../services/encryptionService';
+import { moderateImageBuffer, logModerationResult } from '../services/contentModeration';
 
 const router = Router();
 
@@ -45,8 +46,7 @@ function getS3Client(): S3Client | null {
 // POST /api/upload/presign - Get a pre-signed S3 URL
 router.post('/presign', validateBody(presignUploadSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { groupId, challengeId } = req.body;
-  const photoId = uuid();
-  const fileKey = `groups/${groupId}/${challengeId}/${photoId}/original.jpg`;
+  const fileKey = `users/${req.userId}/groups/${groupId}/${challengeId}.jpg`;
 
   const client = getS3Client();
   const bucket = process.env.AWS_S3_BUCKET;
@@ -70,6 +70,76 @@ router.post('/presign', validateBody(presignUploadSchema), asyncHandler(async (r
   // Dev mode: no S3 configured -- client falls back to base64
   logger.warn('Presign URL skipped: S3 not configured (dev mode)', { userId: req.userId });
   res.json({ uploadUrl: null, fileKey: null, publicUrl: null, dev_mode: true });
+}));
+
+// POST /api/upload/encrypted - Encrypt and upload a photo
+router.post('/encrypted', validateBody(encryptedUploadSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { image_base64, groupId, challengeId } = req.body;
+
+  // Encryption must be enabled
+  if (!isEncryptionEnabled()) {
+    res.status(400).json({ error: 'Encryption is not enabled. Use /upload/presign instead.' });
+    return;
+  }
+
+  // Decode base64 to buffer
+  const imageBuffer = Buffer.from(image_base64, 'base64');
+
+  // Validate decoded size (max 5MB)
+  const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+  if (imageBuffer.length > MAX_IMAGE_SIZE) {
+    res.status(400).json({ error: 'Image exceeds maximum size of 5MB' });
+    return;
+  }
+
+  // Content moderation on the plaintext image
+  const moderationResult = await moderateImageBuffer(imageBuffer);
+
+  // Log moderation result (fire-and-forget)
+  logModerationResult(req.userId!, `encrypted/${req.userId}/${groupId}/${challengeId}.enc`, moderationResult).catch(() => {});
+
+  if (!moderationResult.safe) {
+    logger.warn('Encrypted upload rejected by content moderation', {
+      userId: req.userId,
+      groupId,
+      challengeId,
+      labels: moderationResult.labels,
+    });
+    res.status(400).json({
+      error: 'Your photo was flagged by our content moderation system and cannot be posted. Please try a different photo.',
+      moderation_labels: moderationResult.labels,
+    });
+    return;
+  }
+
+  // Encrypt the photo
+  const { encryptedBuffer, metadata } = await encryptPhoto(imageBuffer, groupId);
+
+  const s3Key = `encrypted/${req.userId}/${groupId}/${challengeId}.enc`;
+
+  const client = getS3Client();
+  const bucket = process.env.AWS_S3_BUCKET;
+  const region = process.env.AWS_REGION;
+
+  if (client && bucket && region) {
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: s3Key,
+      Body: encryptedBuffer,
+      ContentType: 'application/octet-stream',
+      Tagging: `userId=${req.userId}&groupId=${groupId}&challengeId=${challengeId}&encrypted=true`,
+    });
+    await client.send(command);
+
+    const publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`;
+    logger.info('Encrypted photo uploaded to S3', { s3Key, userId: req.userId });
+    res.json({ photo_url: publicUrl, encryption_metadata: metadata, dev_mode: false });
+    return;
+  }
+
+  // Dev mode: no S3 configured
+  logger.warn('Encrypted upload: S3 not configured (dev mode)', { userId: req.userId });
+  res.json({ photo_url: null, encryption_metadata: metadata, dev_mode: true });
 }));
 
 export default router;

@@ -57,6 +57,7 @@ export default function OnboardingScreen() {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
+  const isProcessing = useRef(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const otpInputRefs = useRef<Array<TextInput | null>>(Array(OTP_LENGTH).fill(null));
@@ -144,74 +145,82 @@ export default function OnboardingScreen() {
     ]).start(() => {
       setStep(nextStep);
       slideAnim.setValue(30);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-      ]).start();
+      requestAnimationFrame(() => {
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+        ]).start();
+      });
     });
   }, [fadeAnim, slideAnim]);
 
   const handleNext = useCallback(async () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    // Ref-based guard prevents double-tap: multiple rapid presses can queue up
+    // before React state (isSubmitting) updates, causing duplicate alerts that flicker.
+    if (isProcessing.current) return;
+    isProcessing.current = true;
 
-    if (step === 'welcome') {
-      animateTransition('phone');
-      return;
-    }
-
-    if (step === 'phone' && phone.trim()) {
-      setIsSubmitting(true);
-      try {
-        // Build full phone number from country code + local number
-        const localNumber = phone.trim().replace(/[\s\-()]/g, '');
-        const normalized = countryCode.code + localNumber;
-        await requestOtp(normalized);
-        setResendCountdown(RESEND_COOLDOWN_SECONDS);
-        animateTransition('otp');
-        // Focus the first OTP box after transition
-        setTimeout(() => otpInputRefs.current[0]?.focus(), 400);
-      } catch (e: unknown) {
-        Alert.alert('Error', e instanceof Error ? e.message : 'Failed to send verification code');
-      } finally {
-        setIsSubmitting(false);
+    try {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
-      return;
-    }
 
-    if (step === 'otp' && otp.length === OTP_LENGTH) {
-      setIsSubmitting(true);
-      try {
-        const localNumber = phone.trim().replace(/[\s\-()]/g, '');
-        const normalized = countryCode.code + localNumber;
-        await verifyOtp(normalized, otp);
-        animateTransition('age');
-      } catch (e: unknown) {
-        Alert.alert('Error', e instanceof Error ? e.message : 'Invalid verification code');
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
-    if (step === 'age') {
-      if (!ageConfirmed) {
-        Alert.alert('Age Required', 'You must be at least 13 to use Blink');
+      if (step === 'welcome') {
+        animateTransition('phone');
         return;
       }
-      animateTransition('terms');
-      return;
-    }
 
-    if (step === 'terms') {
-      if (!termsAccepted) return;
-      animateTransition('name');
-      return;
-    }
+      if (step === 'phone' && phone.trim()) {
+        setIsSubmitting(true);
+        try {
+          // Build full phone number from country code + local number
+          const localNumber = phone.trim().replace(/[\s\-()]/g, '');
+          const normalized = countryCode.code + localNumber;
+          await requestOtp(normalized);
+          setResendCountdown(RESEND_COOLDOWN_SECONDS);
+          animateTransition('otp');
+          // Focus the first OTP box after transition
+          setTimeout(() => otpInputRefs.current[0]?.focus(), 100);
+        } catch (e: unknown) {
+          Alert.alert('Error', e instanceof Error ? e.message : 'Failed to send verification code');
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
 
-    if (step === 'name') {
-      if (name.trim()) {
+      if (step === 'otp' && otp.length === OTP_LENGTH) {
+        setIsSubmitting(true);
+        try {
+          const localNumber = phone.trim().replace(/[\s\-()]/g, '');
+          const normalized = countryCode.code + localNumber;
+          await verifyOtp(normalized, otp);
+          animateTransition('age');
+        } catch (e: unknown) {
+          Alert.alert('Error', e instanceof Error ? e.message : 'Invalid verification code');
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
+      if (step === 'age') {
+        if (!ageConfirmed) {
+          Alert.alert('Age Required', 'You must be at least 13 to use Blink');
+          return;
+        }
+        animateTransition('terms');
+        return;
+      }
+
+      if (step === 'terms') {
+        if (!termsAccepted) return;
+        animateTransition('name');
+        return;
+      }
+
+      if (step === 'name') {
+        if (!name.trim()) return;
         updateName(name.trim());
         // Persist name to server
         try {
@@ -222,8 +231,10 @@ export default function OnboardingScreen() {
         } catch {
           // Non-blocking — name is saved locally, server sync can happen later
         }
+        router.replace('/');
       }
-      router.replace('/');
+    } finally {
+      isProcessing.current = false;
     }
   }, [step, phone, otp, name, countryCode, ageConfirmed, termsAccepted, animateTransition, requestOtp, verifyOtp, updateName, router]);
 
@@ -294,7 +305,8 @@ export default function OnboardingScreen() {
     (step === 'phone' && !phone.trim()) ||
     (step === 'otp' && otp.length < OTP_LENGTH) ||
     (step === 'age' && !ageConfirmed) ||
-    (step === 'terms' && !termsAccepted);
+    (step === 'terms' && !termsAccepted) ||
+    (step === 'name' && !name.trim());
 
   const features = [
     { icon: Camera, label: 'Snap Challenges', desc: 'Drop everything. Capture the chaos.', color: theme.coral },
@@ -310,7 +322,7 @@ export default function OnboardingScreen() {
       case 'otp': return 'Verify';
       case 'age': return 'Continue';
       case 'terms': return 'I Agree';
-      case 'name': return name.trim() ? 'Start Blinking' : 'Skip';
+      case 'name': return 'Start Blinking';
     }
   };
 
@@ -541,6 +553,8 @@ export default function OnboardingScreen() {
                       onKeyPress={(e) => handleOtpKeyPress(e, index)}
                       keyboardType="number-pad"
                       maxLength={index === 0 ? OTP_LENGTH : 1}
+                      placeholder="·"
+                      placeholderTextColor={theme.textMuted}
                       selectTextOnFocus
                       testID={`onboarding-otp-digit-${index}`}
                     />

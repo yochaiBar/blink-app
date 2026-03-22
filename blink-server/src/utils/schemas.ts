@@ -91,6 +91,13 @@ export const respondChallengeSchema = z.object({
   response_time_ms: z.number().int().positive().optional(),
   answer_index: z.number().int().min(0).optional(),
   answer_text: z.string().max(500).optional(),
+  encryption_metadata: z.object({
+    v: z.number(),
+    alg: z.string(),
+    iv: z.string(),
+    tag: z.string(),
+    key_enc: z.string(),
+  }).optional(),
 });
 
 // ── Reaction schemas ─────────────────────────────────────────
@@ -134,6 +141,12 @@ export const pushTokenSchema = z.object({
 // ── Upload schemas ──────────────────────────────────────────
 
 export const presignUploadSchema = z.object({
+  groupId: z.string().uuid('Invalid group ID'),
+  challengeId: z.string().uuid('Invalid challenge ID'),
+});
+
+export const encryptedUploadSchema = z.object({
+  image_base64: z.string().max(7_000_000, 'Image data too large (max ~5MB after base64 encoding)'),
   groupId: z.string().uuid('Invalid group ID'),
   challengeId: z.string().uuid('Invalid challenge ID'),
 });

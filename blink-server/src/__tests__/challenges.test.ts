@@ -30,6 +30,7 @@ const mockQuery = query as jest.MockedFunction<typeof query>;
 const mockEmit = emitToGroup as jest.MockedFunction<typeof emitToGroup>;
 const app = createTestApp(challengeRouter, '/api/challenges');
 
+
 // ─────────────────────────────────────────────────────────────────
 // POST /api/challenges/groups/:groupId/challenges (trigger)
 // ─────────────────────────────────────────────────────────────────
@@ -41,8 +42,8 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
 
     mockQuery
       .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership check
-      .mockResolvedValueOnce(queryResult([]))                      // no active challenges
-      .mockResolvedValueOnce(queryResult([]))                      // expire active (noop)
+      .mockResolvedValueOnce(queryResult([]))                      // cooldown check (no recent)
+      .mockResolvedValueOnce(queryResult([]))                      // no active challenges (FOR UPDATE)
       .mockResolvedValueOnce(queryResult([challenge]))             // INSERT challenge
       .mockResolvedValueOnce(queryResult([]))                      // group members for notification
       .mockResolvedValueOnce(queryResult([makeUser()]))            // trigger user name
@@ -63,13 +64,13 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
     const challenge = makeChallenge({ type: 'quiz' });
 
     mockQuery
-      .mockResolvedValueOnce(queryResult([makeMembership()]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([challenge]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([makeUser()]))
-      .mockResolvedValueOnce(queryResult([{ name: 'Test Group' }]));
+      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership check
+      .mockResolvedValueOnce(queryResult([]))                      // cooldown check (no recent)
+      .mockResolvedValueOnce(queryResult([]))                      // no active challenges (FOR UPDATE)
+      .mockResolvedValueOnce(queryResult([challenge]))             // INSERT challenge
+      .mockResolvedValueOnce(queryResult([]))                      // group members for notification
+      .mockResolvedValueOnce(queryResult([makeUser()]))            // trigger user name
+      .mockResolvedValueOnce(queryResult([{ name: 'Test Group' }])); // group name
 
     const res = await request(app)
       .post(`/api/challenges/groups/${TEST_GROUP_ID}/challenges`)
@@ -89,6 +90,80 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.error).toBe('Not a member of this group');
+  });
+
+  it('should return 409 when a challenge was triggered within 5s cooldown (Bug #3a)', async () => {
+    mockQuery
+      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership check
+      .mockResolvedValueOnce(queryResult([{ id: 'recent-challenge' }])); // cooldown check returns recent
+
+    const res = await request(app)
+      .post(`/api/challenges/groups/${TEST_GROUP_ID}/challenges`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('A challenge was just started');
+  });
+
+  it('should expire active challenges and process skips when creating new (Bug #3a)', async () => {
+    const expiredChallengeId = 'e5f6a7b8-aaaa-4e1f-9a2b-3c4d5e6f7a8b';
+    const newChallenge = makeChallenge();
+
+    mockQuery
+      .mockResolvedValueOnce(queryResult([makeMembership()]))              // membership check
+      .mockResolvedValueOnce(queryResult([]))                               // cooldown check (none recent)
+      .mockResolvedValueOnce(queryResult([{ id: expiredChallengeId }]))    // active challenges FOR UPDATE
+      .mockResolvedValueOnce(queryResult([], 1))                           // UPDATE expired
+      .mockResolvedValueOnce(queryResult([newChallenge]))                  // INSERT new challenge
+      .mockResolvedValueOnce(queryResult([]))                               // group members for notification
+      .mockResolvedValueOnce(queryResult([makeUser()]))                    // trigger user name
+      .mockResolvedValueOnce(queryResult([{ name: 'Test Group' }]))        // group name
+      .mockResolvedValueOnce(queryResult([]));                              // processSkipsForChallenge queries
+
+    const res = await request(app)
+      .post(`/api/challenges/groups/${TEST_GROUP_ID}/challenges`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(201);
+    expect(mockEmit).toHaveBeenCalledWith(TEST_GROUP_ID, 'challenge:started', expect.any(Object));
+  });
+
+  it('should include groupId in challenge:response socket payload (Bug #3b)', async () => {
+    // This test verifies via the trigger+respond flow that groupId is emitted
+    const challenge = makeChallenge({ triggered_by: TEST_USER_ID_2 });
+    const response = makeChallengeResponse();
+
+    mockQuery
+      .mockResolvedValueOnce(queryResult([challenge]))            // find challenge
+      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership
+      .mockResolvedValueOnce(queryResult([]))                      // no existing response
+      .mockResolvedValueOnce(queryResult([response]))              // INSERT response
+      .mockResolvedValueOnce(queryResult([makeUser()]))            // R1: responder name (notifyUserOfResponse)
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
+      .mockResolvedValueOnce(queryResult([{ count: '2' }]))        // R2: completion total members
+      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
+
+    const respondApp = createTestApp(
+      (await import('../routes/challenges')).default,
+      '/api/challenges'
+    );
+
+    const res = await request(respondApp)
+      .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
+      .set('Authorization', `Bearer ${generateAccessToken(TEST_USER_ID)}`)
+      .send({ photo_url: 'https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg' });
+
+    expect(res.status).toBe(201);
+    expect(mockEmit).toHaveBeenCalledWith(
+      TEST_GROUP_ID,
+      'challenge:response',
+      expect.objectContaining({ groupId: TEST_GROUP_ID })
+    );
   });
 
   it('should return 400 for invalid challenge type', async () => {
@@ -176,12 +251,16 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership
       .mockResolvedValueOnce(queryResult([]))                      // no existing response
       .mockResolvedValueOnce(queryResult([response]))              // INSERT response
-      // No notification queries since triggered_by === req.userId
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allMembers
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allResponded
-      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // streak check
-      .mockResolvedValueOnce(queryResult([{ count: '2' }]))        // total members
-      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // total responses
+      // Fire-and-forget mocks ordered by round-robin interleaving:
+      // Round 1: socialObligation(1), streakRewards(1), completionCheck(1)
+      // Round 2: socialObligation(2), completionCheck(2)
+      // Round 3: completionCheck(3)
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
+      .mockResolvedValueOnce(queryResult([{ count: '2' }]))        // R2: completion total members (joined_at filter)
+      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
 
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
@@ -202,13 +281,17 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([makeMembership()]))
       .mockResolvedValueOnce(queryResult([]))
       .mockResolvedValueOnce(queryResult([response]))
-      .mockResolvedValueOnce(queryResult([makeUser()]))            // responder name for notification
-      // createNotification mock is handled globally
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allMembers
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allResponded
-      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // streak check
-      .mockResolvedValueOnce(queryResult([{ count: '2' }]))
-      .mockResolvedValueOnce(queryResult([{ count: '1' }]));
+      // Fire-and-forget mocks ordered by round-robin interleaving:
+      // Round 1: notifyResponse(1), socialObligation(1), streakRewards(1), completionCheck(1)
+      // Round 2: socialObligation(2), completionCheck(2)
+      // Round 3: completionCheck(3)
+      .mockResolvedValueOnce(queryResult([makeUser()]))            // R1: responder name (notifyUserOfResponse)
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
+      .mockResolvedValueOnce(queryResult([{ count: '2' }]))        // R2: completion total members
+      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
 
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
@@ -232,11 +315,13 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([makeMembership()]))
       .mockResolvedValueOnce(queryResult([]))
       .mockResolvedValueOnce(queryResult([response]))
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allMembers
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allResponded
-      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // streak check
-      .mockResolvedValueOnce(queryResult([{ count: '5' }]))
-      .mockResolvedValueOnce(queryResult([{ count: '1' }]));
+      // Fire-and-forget mocks (round-robin): social(1), streak(1), completion(1), social(2), completion(2), completion(3)
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
+      .mockResolvedValueOnce(queryResult([{ count: '5' }]))        // R2: completion total members
+      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
 
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
@@ -255,11 +340,13 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([makeMembership()]))
       .mockResolvedValueOnce(queryResult([]))
       .mockResolvedValueOnce(queryResult([response]))
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allMembers
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // social obligation: allResponded
-      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // streak check
-      .mockResolvedValueOnce(queryResult([{ count: '3' }]))
-      .mockResolvedValueOnce(queryResult([{ count: '1' }]));
+      // Fire-and-forget mocks (round-robin): social(1), streak(1), completion(1), social(2), completion(2), completion(3)
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
+      .mockResolvedValueOnce(queryResult([{ count: '3' }]))        // R2: completion total members
+      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
 
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)

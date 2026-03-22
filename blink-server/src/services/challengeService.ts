@@ -1,4 +1,4 @@
-import { query } from '../config/database';
+import { query, withTransaction } from '../config/database';
 import logger from '../utils/logger';
 import { emitToGroup } from '../socket';
 import { moderateImage, deleteS3Object, extractS3Key, logModerationResult } from './contentModeration';
@@ -63,7 +63,8 @@ export async function submitResponse(
   photoUrl: string | null,
   responseTimeMs: number | null,
   answerIndex: number | null,
-  answerText: string | null
+  answerText: string | null,
+  encryptionMetadata?: object,
 ): Promise<{ response: ChallengeResponseRow; challenge: ChallengeRow }> {
   // Fetch challenge
   const challenge = await query<ChallengeRow>(`SELECT * FROM challenges WHERE id = $1`, [challengeId]);
@@ -102,10 +103,10 @@ export async function submitResponse(
   // Insert response
   const responseType = (c.type === 'quiz' || c.type === 'prompt') ? 'answer' : 'photo';
   const result = await query<ChallengeResponseRow>(
-    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, answer_index, answer_text, response_time_ms)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, answer_index, answer_text, response_time_ms, encryption_metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [challengeId, userId, responseType, photoUrl, answerIndex ?? null, answerText || null, responseTimeMs || null]
+    [challengeId, userId, responseType, photoUrl, answerIndex ?? null, answerText || null, responseTimeMs || null, encryptionMetadata ? JSON.stringify(encryptionMetadata) : null]
   );
 
   return { response: result.rows[0], challenge: c };
@@ -119,20 +120,39 @@ export async function checkChallengeCompletion(
   challengeId: string,
   groupId: string
 ): Promise<boolean> {
-  const totalMembers = await query<CountRow>(
-    `SELECT COUNT(*) FROM group_members WHERE group_id = $1`,
-    [groupId]
-  );
-  const totalResponses = await query<CountRow>(
-    `SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = $1`,
-    [challengeId]
-  );
+  const completed = await withTransaction(async (client) => {
+    // Fetch the challenge's created_at to only count members who were in the group at that time
+    const challengeResult = await client.query<{ created_at: Date; status: string }>(
+      `SELECT created_at, status FROM challenges WHERE id = $1 FOR UPDATE`,
+      [challengeId]
+    );
+    if (challengeResult.rows.length === 0 || challengeResult.rows[0].status !== 'active') {
+      return false;
+    }
+    const challengeCreatedAt = challengeResult.rows[0].created_at;
 
-  if (parseInt(totalResponses.rows[0].count) < parseInt(totalMembers.rows[0].count)) {
+    // Only count members who joined before the challenge was created
+    const totalMembers = await client.query<CountRow>(
+      `SELECT COUNT(*) FROM group_members WHERE group_id = $1 AND joined_at <= $2`,
+      [groupId, challengeCreatedAt]
+    );
+    const totalResponses = await client.query<CountRow>(
+      `SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = $1`,
+      [challengeId]
+    );
+
+    if (parseInt(totalResponses.rows[0].count) < parseInt(totalMembers.rows[0].count)) {
+      return false;
+    }
+
+    await client.query(`UPDATE challenges SET status = 'completed' WHERE id = $1 AND status = 'active'`, [challengeId]);
+    return true;
+  });
+
+  if (!completed) {
     return false;
   }
 
-  await query(`UPDATE challenges SET status = 'completed' WHERE id = $1`, [challengeId]);
   await processSkipsForChallenge(challengeId, groupId);
 
   // Emit challenge completed event
@@ -156,8 +176,9 @@ async function generateAiCommentary(challengeId: string, groupId: string): Promi
     `SELECT cr.answer_text, cr.response_time_ms, COALESCE(u.display_name, u.phone_number) AS display_name
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
+     JOIN group_members gm ON gm.group_id = $2 AND gm.user_id = cr.user_id
      WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
-    [challengeId]
+    [challengeId, groupId]
   );
   const responsesData = allResponsesForCommentary.rows.map((r) => ({
     userName: r.display_name || 'Someone',

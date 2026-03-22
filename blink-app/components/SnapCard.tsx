@@ -4,12 +4,14 @@ import { Image } from 'expo-image';
 import { Lock, MoreHorizontal } from 'lucide-react-native';
 import { SnapSubmission } from '@/types';
 import { theme } from '@/constants/colors';
+import EncryptedImage from '@/components/EncryptedImage';
 import { getRelativeTime } from '@/utils/time';
 import * as Haptics from 'expo-haptics';
 
 interface SnapCardProps {
   snap: SnapSubmission;
   isLocked: boolean;
+  currentUserId?: string;
   onReact?: (snapId: string, emoji: string) => void;
   onReport?: (snapId: string, userId: string) => void;
   onBlock?: (userId: string, userName: string) => void;
@@ -17,7 +19,44 @@ interface SnapCardProps {
 
 const quickReactions = ['😂', '🔥', '💀', '😍', '👀'];
 
-export default React.memo(function SnapCard({ snap, isLocked, onReact, onReport, onBlock }: SnapCardProps) {
+// ─── Animated Reaction Button ────────────────────────────────────────
+function AnimatedQuickReactBtn({ emoji, isSelected, count, onPress }: { emoji: string; isSelected: boolean; count: number; onPress: () => void }) {
+  const bounceAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePress = useCallback(() => {
+    bounceAnim.setValue(1);
+    Animated.sequence([
+      Animated.spring(bounceAnim, {
+        toValue: 1.3,
+        tension: 300,
+        friction: 6,
+        useNativeDriver: true,
+      }),
+      Animated.spring(bounceAnim, {
+        toValue: 1,
+        tension: 200,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    onPress();
+  }, [bounceAnim, onPress]);
+
+  return (
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
+      <Animated.View style={[styles.quickReactBtn, isSelected && styles.reactionSelected, { transform: [{ scale: bounceAnim }] }]}>
+        <Text style={styles.quickReactEmoji}>{emoji}</Text>
+        {count > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{count}</Text>
+          </View>
+        )}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
+export default React.memo(function SnapCard({ snap, isLocked, currentUserId, onReact, onReport, onBlock }: SnapCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const [showMenu, setShowMenu] = useState(false);
 
@@ -78,8 +117,11 @@ export default React.memo(function SnapCard({ snap, isLocked, onReact, onReport,
               <Text style={styles.lockedText}>Submit your snap to unlock</Text>
             </View>
           ) : (
-            <Image
-              source={{ uri: snap.imageUrl }}
+            <EncryptedImage
+              uri={snap.imageUrl}
+              encryptionMetadata={snap.encryptionMetadata}
+              groupId={snap.groupId}
+              responseId={snap.id}
               style={styles.image}
               contentFit="cover"
               transition={300}
@@ -98,15 +140,20 @@ export default React.memo(function SnapCard({ snap, isLocked, onReact, onReport,
               ))}
             </View>
             <View style={styles.quickReactions}>
-              {quickReactions.map((emoji) => (
-                <TouchableOpacity
-                  key={emoji}
-                  onPress={() => handleReact(emoji)}
-                  style={styles.quickReactBtn}
-                >
-                  <Text style={styles.quickReactEmoji}>{emoji}</Text>
-                </TouchableOpacity>
-              ))}
+              {quickReactions.map((emoji) => {
+                const reaction = snap.reactions.find((r) => r.emoji === emoji);
+                const isSelected = !!(currentUserId && reaction?.userIds?.includes(currentUserId));
+                const count = reaction?.count ?? 0;
+                return (
+                  <AnimatedQuickReactBtn
+                    key={emoji}
+                    emoji={emoji}
+                    isSelected={isSelected}
+                    count={count}
+                    onPress={() => handleReact(emoji)}
+                  />
+                );
+              })}
             </View>
           </View>
         )}
@@ -245,6 +292,28 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surface,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  reactionSelected: {
+    borderWidth: 2,
+    borderColor: theme.coral,
+  },
+  countBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: theme.coral,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  countBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: theme.white,
+    textAlign: 'center',
   },
   quickReactEmoji: {
     fontSize: 16,

@@ -26,7 +26,8 @@ import { useApp } from '@/providers/AppProvider';
 import AvatarRing from '@/components/ui/AvatarRing';
 import GlassCard from '@/components/ui/GlassCard';
 import AiCommentaryCard from '@/components/AiCommentaryCard';
-import { ApiChallengeResponse, ApiChallenge, ApiGroupDetail } from '@/types/api';
+import EncryptedImage from '@/components/EncryptedImage';
+import { ApiChallengeResponse, ApiChallenge, ApiGroupDetail, ApiReaction } from '@/types/api';
 import { isDemoGroup, DEMO_RESPONSES, DEMO_GROUP_DETAIL, DEMO_CHALLENGE } from '@/constants/demoData';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { Users, UserPlus } from 'lucide-react-native';
@@ -93,9 +94,65 @@ interface RevealData {
   challenge: ApiChallenge | null;
 }
 
+// ─── Animated Reaction Button ────────────────────────────────────────
+interface AnimatedReactionBtnProps {
+  emoji: string;
+  isSelected: boolean;
+  count: number;
+  onPress: () => void;
+  variant: 'photo' | 'quiz';
+}
+
+function AnimatedReactionBtn({ emoji, isSelected, count, onPress, variant }: AnimatedReactionBtnProps) {
+  const bounceAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePress = useCallback(() => {
+    bounceAnim.setValue(1);
+    Animated.sequence([
+      Animated.spring(bounceAnim, {
+        toValue: 1.3,
+        tension: 300,
+        friction: 6,
+        useNativeDriver: true,
+      }),
+      Animated.spring(bounceAnim, {
+        toValue: 1,
+        tension: 200,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    onPress();
+  }, [bounceAnim, onPress]);
+
+  const btnStyle = variant === 'photo' ? styles.quickReactBtn : styles.quizReactBtn;
+
+  return (
+    <TouchableOpacity
+      onPress={handlePress}
+      activeOpacity={0.7}
+    >
+      <Animated.View
+        style={[
+          btnStyle,
+          isSelected && styles.reactionSelected,
+          { transform: [{ scale: bounceAnim }] },
+        ]}
+      >
+        <Text style={styles.quickReactEmoji}>{emoji}</Text>
+        {count > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{count}</Text>
+          </View>
+        )}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
 // ─── Main Screen ─────────────────────────────────────────────────────
 export default function ChallengeRevealScreen() {
-  const { challengeId, groupId, isDemo } = useLocalSearchParams<{ challengeId: string; groupId: string; isDemo?: string }>();
+  const { challengeId, groupId, isDemo, localPhotoUri } = useLocalSearchParams<{ challengeId: string; groupId: string; isDemo?: string; localPhotoUri?: string }>();
   const isDemoMode = isDemo === '1';
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -137,6 +194,9 @@ export default function ChallengeRevealScreen() {
 
   // Track when the screen was mounted to stop refetching after 10s
   const mountedAt = useRef(Date.now()).current;
+
+  // ── Selected reactions (local state for visual feedback) ───────
+  const [selectedReactions, setSelectedReactions] = useState<Record<string, Set<string>>>({});
 
   // ── Data Fetching ────────────────────────────────────────────────
   const { data: revealData, isLoading } = useQuery<RevealData>({
@@ -216,8 +276,13 @@ export default function ChallengeRevealScreen() {
       if (b.user_id === user.id) return 1;
       return new Date(a.responded_at).getTime() - new Date(b.responded_at).getTime();
     });
+    // If the user's own response has no photo_url yet (upload still propagating),
+    // fall back to the local photo URI passed from snap-challenge
+    if (localPhotoUri && responses.length > 0 && responses[0].user_id === user.id && !responses[0].photo_url) {
+      responses[0] = { ...responses[0], photo_url: localPhotoUri };
+    }
     return responses;
-  }, [revealData?.responses, user.id]);
+  }, [revealData?.responses, user.id, localPhotoUri]);
 
   const totalResponses = sortedResponses.length;
   const memberCount = groupData?.members?.length ?? totalResponses;
@@ -385,12 +450,61 @@ export default function ChallengeRevealScreen() {
     }
   }, [hasScrolledManually, phase, revealedCount, totalResponses, cardAnims]);
 
+  // ── Initialize selected reactions from API data ─────────────────
+  const initializedResponseIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!sortedResponses.length || !user.id) return;
+    setSelectedReactions((prev) => {
+      const next = { ...prev };
+      for (const response of sortedResponses) {
+        if (initializedResponseIds.current.has(response.id)) continue;
+        initializedResponseIds.current.add(response.id);
+        if (response.reactions) {
+          const userEmojis = new Set<string>();
+          for (const r of response.reactions) {
+            if (r.user_ids?.includes(user.id)) {
+              userEmojis.add(r.emoji);
+            }
+          }
+          if (userEmojis.size > 0) {
+            next[response.id] = userEmojis;
+          }
+        }
+      }
+      return next;
+    });
+  }, [sortedResponses, user.id]);
+
+  // ── Helper to get reaction count for a specific emoji on a response ──
+  const getReactionCount = useCallback(
+    (response: ApiChallengeResponse, emoji: string): number => {
+      if (!response.reactions) return 0;
+      const reaction = response.reactions.find((r) => r.emoji === emoji);
+      return reaction?.count ?? 0;
+    },
+    [],
+  );
+
   // ── Reaction handler ────────────────────────────────────────────
   const handleReact = useCallback(
     async (responseId: string, emoji: string) => {
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
+
+      // Toggle local selected state
+      setSelectedReactions((prev) => {
+        const next = { ...prev };
+        const current = new Set(prev[responseId] ?? []);
+        if (current.has(emoji)) {
+          current.delete(emoji);
+        } else {
+          current.add(emoji);
+        }
+        next[responseId] = current;
+        return next;
+      });
+
       if (isDemoMode) return;
       await addReaction(responseId, emoji);
       queryClient.invalidateQueries({ queryKey: ['challenge-reveal', challengeId] });
@@ -486,8 +600,11 @@ export default function ChallengeRevealScreen() {
         <View style={styles.photoContainer}>
           {/* Photo -- render for any non-empty photo_url including file:// and data: URIs */}
           {response.photo_url ? (
-            <Image
-              source={{ uri: response.photo_url }}
+            <EncryptedImage
+              uri={response.photo_url}
+              encryptionMetadata={response.encryption_metadata}
+              groupId={groupId}
+              responseId={response.id}
               style={styles.photo}
               contentFit="cover"
               transition={300}
@@ -539,14 +656,14 @@ export default function ChallengeRevealScreen() {
           >
             <View style={styles.quickReactions}>
               {QUICK_REACTIONS.map((emoji) => (
-                <TouchableOpacity
+                <AnimatedReactionBtn
                   key={emoji}
-                  style={styles.quickReactBtn}
+                  emoji={emoji}
+                  isSelected={selectedReactions[response.id]?.has(emoji) ?? false}
+                  count={getReactionCount(response, emoji)}
                   onPress={() => handleReact(response.id, emoji)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.quickReactEmoji}>{emoji}</Text>
-                </TouchableOpacity>
+                  variant="photo"
+                />
               ))}
             </View>
           </LinearGradient>
@@ -567,12 +684,19 @@ export default function ChallengeRevealScreen() {
         : null) ??
       'No answer';
 
-    // Tally votes per option
+    // Tally votes per option and collect voter info
     const voteCounts: Record<number, number> = {};
+    const votersByOption: Record<number, { userId: string; name: string; avatar: string }[]> = {};
     if (challengeOptions) {
       sortedResponses.forEach((r) => {
         if (r.answer_index != null) {
           voteCounts[r.answer_index] = (voteCounts[r.answer_index] ?? 0) + 1;
+          if (!votersByOption[r.answer_index]) votersByOption[r.answer_index] = [];
+          votersByOption[r.answer_index].push({
+            userId: r.user_id,
+            name: r.display_name ?? 'User',
+            avatar: r.avatar_url ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
+          });
         }
       });
     }
@@ -628,27 +752,48 @@ export default function ChallengeRevealScreen() {
                 const count = voteCounts[optIdx] ?? 0;
                 const pct = totalResponses > 0 ? (count / totalResponses) * 100 : 0;
                 const isSelected = response.answer_index === optIdx;
+                const voters = votersByOption[optIdx] ?? [];
                 return (
-                  <View key={optIdx} style={styles.quizOptionRow}>
-                    <View
-                      style={[
-                        styles.quizOptionBar,
-                        { width: `${Math.max(pct, 4)}%` as `${number}%` },
-                        isSelected && styles.quizOptionBarSelected,
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.quizOptionLabel,
-                        isSelected && styles.quizOptionLabelSelected,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {option}
-                    </Text>
-                    <Text style={styles.quizOptionPct}>
-                      {Math.round(pct)}%
-                    </Text>
+                  <View key={optIdx} style={styles.quizOptionGroup}>
+                    <View style={styles.quizOptionRow}>
+                      <View
+                        style={[
+                          styles.quizOptionBar,
+                          { width: `${Math.max(pct, 4)}%` as `${number}%` },
+                          isSelected && styles.quizOptionBarSelected,
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.quizOptionLabel,
+                          isSelected && styles.quizOptionLabelSelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {option}
+                      </Text>
+                      <Text style={styles.quizOptionPct}>
+                        {Math.round(pct)}%
+                      </Text>
+                    </View>
+                    {voters.length > 0 && (
+                      <View style={styles.quizVoterAvatars}>
+                        {voters.slice(0, 5).map((v, vi) => (
+                          <Image
+                            key={v.userId}
+                            source={{ uri: v.avatar }}
+                            style={[
+                              styles.quizVoterAvatar,
+                              { marginLeft: vi > 0 ? -6 : 0, zIndex: 5 - vi },
+                            ]}
+                            contentFit="cover"
+                          />
+                        ))}
+                        {voters.length > 5 && (
+                          <Text style={styles.quizVoterOverflow}>+{voters.length - 5}</Text>
+                        )}
+                      </View>
+                    )}
                   </View>
                 );
               })}
@@ -658,14 +803,14 @@ export default function ChallengeRevealScreen() {
           {/* Reactions */}
           <View style={styles.quizReactions}>
             {QUICK_REACTIONS.map((emoji) => (
-              <TouchableOpacity
+              <AnimatedReactionBtn
                 key={emoji}
-                style={styles.quizReactBtn}
+                emoji={emoji}
+                isSelected={selectedReactions[response.id]?.has(emoji) ?? false}
+                count={getReactionCount(response, emoji)}
                 onPress={() => handleReact(response.id, emoji)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.quickReactEmoji}>{emoji}</Text>
-              </TouchableOpacity>
+                variant="quiz"
+              />
             ))}
           </View>
         </GlassCard>
@@ -1131,6 +1276,28 @@ const styles = StyleSheet.create({
   quickReactEmoji: {
     fontSize: 18,
   },
+  reactionSelected: {
+    borderWidth: 2,
+    borderColor: theme.coral,
+  },
+  countBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: theme.coral,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  countBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: theme.white,
+    textAlign: 'center',
+  },
 
   // ── Quiz card ──
   quizCardWrapper: {
@@ -1191,11 +1358,32 @@ const styles = StyleSheet.create({
     color: theme.coral,
     fontWeight: '600',
   },
+  quizOptionGroup: {
+    gap: 4,
+  },
   quizOptionPct: {
     ...typography.labelSmall,
     color: theme.textMuted,
     paddingHorizontal: spacing.sm,
     zIndex: 1,
+  },
+  quizVoterAvatars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: spacing.xs,
+  },
+  quizVoterAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: theme.bgCard,
+  },
+  quizVoterOverflow: {
+    ...typography.labelSmall,
+    color: theme.textMuted,
+    marginLeft: 4,
+    fontSize: 10,
   },
   quizReactions: {
     flexDirection: 'row',

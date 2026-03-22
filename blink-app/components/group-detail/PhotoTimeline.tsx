@@ -6,6 +6,8 @@ import { ChevronRight } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
+import EncryptedImage from '@/components/EncryptedImage';
+import type { EncryptionMetadata } from '@/types/api';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const THUMB_COLS = 3;
@@ -21,6 +23,7 @@ export interface GroupPhoto {
   challenge_type: string;
   display_name: string;
   avatar_url: string | null;
+  encryption_metadata?: EncryptionMetadata | null;
 }
 
 function getRelativeTime(dateStr: string): string {
@@ -75,8 +78,11 @@ export default function PhotoTimeline({
               })
             }
           >
-            <Image
-              source={{ uri: photo.photo_url }}
+            <EncryptedImage
+              uri={photo.photo_url}
+              encryptionMetadata={photo.encryption_metadata}
+              groupId={groupId}
+              responseId={photo.id}
               style={styles.thumbImage}
               contentFit="cover"
               transition={200}

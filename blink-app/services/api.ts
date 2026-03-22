@@ -206,6 +206,41 @@ export async function uploadPhoto(imageUri: string, groupId: string, challengeId
   return presign.publicUrl;
 }
 
+// ── Encrypted Upload ──
+interface EncryptedUploadResponse {
+  photo_url: string | null;
+  encryption_metadata: { v: number; alg: string; iv: string; tag: string; key_enc: string } | null;
+  dev_mode: boolean;
+}
+
+export async function uploadPhotoEncrypted(
+  imageUri: string,
+  groupId: string,
+  challengeId: string,
+): Promise<EncryptedUploadResponse> {
+  let base64: string;
+  if (imageUri.startsWith('data:')) {
+    base64 = imageUri.replace(/^data:image\/\w+;base64,/, '');
+  } else {
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+    base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        resolve(result.replace(/^data:.*?;base64,/, ''));
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  return api<EncryptedUploadResponse>('/upload/encrypted', {
+    method: 'POST',
+    body: JSON.stringify({ image_base64: base64, groupId, challengeId }),
+  });
+}
+
 // ── User Stats ──
 export async function getUserStats(): Promise<UserStatsResponse> {
   return api<UserStatsResponse>('/auth/stats');

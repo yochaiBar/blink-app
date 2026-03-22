@@ -21,8 +21,13 @@ process.env.PORT = '0'; // Use random port for tests
 // mockResolvedValueOnce / mockImplementation on the mock.
 jest.mock('../config/database', () => {
   const mockQuery = jest.fn().mockResolvedValue({ rows: [], rowCount: 0 });
+  const withTransaction = async (fn: (client: any) => Promise<any>) => {
+    const pseudoClient = { query: mockQuery, release: () => {} };
+    return fn(pseudoClient);
+  };
   return {
     query: mockQuery,
+    withTransaction,
     __esModule: true,
     default: {
       query: mockQuery,

@@ -165,6 +165,81 @@ export async function moderateImage(s3Key: string): Promise<ModerationResult> {
   }
 }
 
+// ── Buffer-based moderation (for encrypted upload flow) ─────────
+
+/**
+ * Analyse an in-memory image buffer for content moderation violations.
+ *
+ * Uses Rekognition's `Image.Bytes` instead of `Image.S3Object`.
+ * Behaviour mirrors `moderateImage`: feature gate, fail-closed when
+ * Rekognition is unavailable, same blocked categories and thresholds.
+ */
+export async function moderateImageBuffer(imageBytes: Buffer): Promise<ModerationResult> {
+  // Feature gate
+  if (!isEnabled()) {
+    return { safe: true, labels: [], confidence: 0 };
+  }
+
+  const client = getRekognitionClient();
+  if (!client) {
+    logger.warn('Content moderation enabled but AWS credentials are missing; failing closed');
+    return { safe: false, labels: ['moderation_unavailable'], confidence: 0 };
+  }
+
+  const threshold = getThreshold();
+
+  try {
+    const command = new DetectModerationLabelsCommand({
+      Image: {
+        Bytes: imageBytes,
+      },
+      MinConfidence: threshold,
+    });
+
+    const response = await client.send(command);
+    const moderationLabels: ModerationLabel[] = response.ModerationLabels || [];
+
+    // Filter to labels that match our blocked categories
+    const flaggedLabels = moderationLabels.filter((label) => {
+      const name = label.Name || '';
+      const parent = label.ParentName || '';
+      return BLOCKED_CATEGORIES.has(name) || BLOCKED_CATEGORIES.has(parent);
+    });
+
+    const highestConfidence = flaggedLabels.reduce(
+      (max, label) => Math.max(max, label.Confidence || 0),
+      0,
+    );
+
+    const labelNames = flaggedLabels.map(
+      (l) => `${l.Name} (${(l.Confidence || 0).toFixed(1)}%)`,
+    );
+
+    const safe = flaggedLabels.length === 0;
+
+    if (!safe) {
+      logger.warn('Image buffer flagged by content moderation', {
+        labels: labelNames,
+        confidence: highestConfidence,
+      });
+    } else {
+      logger.debug('Image buffer passed content moderation');
+    }
+
+    return {
+      safe,
+      labels: labelNames,
+      confidence: highestConfidence,
+    };
+  } catch (err: unknown) {
+    // Fail closed: if Rekognition is unavailable, reject the image
+    logger.error('Content moderation buffer check failed; rejecting image (fail closed)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { safe: false, labels: ['moderation_error'], confidence: 0 };
+  }
+}
+
 // ── Helper: delete a flagged S3 object ──────────────────────────
 
 export async function deleteS3Object(s3Key: string): Promise<void> {
@@ -188,8 +263,8 @@ export async function deleteS3Object(s3Key: string): Promise<void> {
 // ── Helper: extract S3 key from a full S3 URL ──────────────────
 
 /**
- * Given a URL like `https://bucket.s3.region.amazonaws.com/groups/abc/def/id/original.jpg`
- * returns `groups/abc/def/id/original.jpg`.
+ * Given a URL like `https://bucket.s3.region.amazonaws.com/users/uid/groups/gid/cid.jpg`
+ * returns `users/uid/groups/gid/cid.jpg`.
  * Returns `null` if the URL is not an S3 URL (e.g. base64 data URI).
  */
 export function extractS3Key(photoUrl: string): string | null {

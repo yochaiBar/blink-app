@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   optionTextSelected: {
-    color: theme.coral,
+    color: theme.text,
     fontWeight: '700',
   },
   // Results

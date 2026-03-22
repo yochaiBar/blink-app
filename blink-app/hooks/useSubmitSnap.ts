@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, uploadPhoto } from '@/services/api';
+import { api, uploadPhoto, uploadPhotoEncrypted } from '@/services/api';
 import { isDemoGroup } from '@/constants/demoData';
 import { ApiChallenge } from '@/types/api';
 import { queryKeys } from '@/utils/queryKeys';
@@ -30,8 +30,17 @@ export function useSubmitSnap() {
 
       const body: Record<string, unknown> = {};
       if (imageUri) {
-        const photoUrl = await uploadPhoto(imageUri, groupId, challengeId);
-        body.photo_url = photoUrl;
+        try {
+          const encResult = await uploadPhotoEncrypted(imageUri, groupId, challengeId);
+          body.photo_url = encResult.photo_url ?? imageUri;
+          if (encResult.encryption_metadata) {
+            body.encryption_metadata = encResult.encryption_metadata;
+          }
+        } catch {
+          // Fall back to regular upload
+          const photoUrl = await uploadPhoto(imageUri, groupId, challengeId);
+          body.photo_url = photoUrl;
+        }
       }
       body.response_time_ms = 5000;
 

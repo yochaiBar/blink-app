@@ -61,6 +61,12 @@ export interface ApiChallenge {
   user_has_responded?: boolean;
 }
 
+export interface ApiReaction {
+  emoji: string;
+  count: number;
+  user_ids?: string[];
+}
+
 export interface ApiChallengeResponse {
   id: string;
   challenge_id: string;
@@ -73,6 +79,16 @@ export interface ApiChallengeResponse {
   response_time_ms: number | null;
   responded_at: string;
   created_at: string;
+  reactions?: ApiReaction[];
+  encryption_metadata?: EncryptionMetadata | null;
+}
+
+export interface EncryptionMetadata {
+  v: number;
+  alg: string;
+  iv: string;
+  tag: string;
+  key_enc: string;
 }
 
 export interface ApiSpotlight {

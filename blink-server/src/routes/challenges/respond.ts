@@ -15,14 +15,14 @@ const router = Router();
 // ── POST respond to challenge ──
 router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChallengeSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
-  const { photo_url, photo_base64, response_time_ms, answer_index, answer_text } = req.body;
+  const { photo_url, photo_base64, response_time_ms, answer_index, answer_text, encryption_metadata } = req.body;
   const resolvedPhotoUrl = photo_url || photo_base64 || null;
 
   // Submit the response (validates challenge, membership, duplicates, moderation)
   let response, challenge;
   try {
     ({ response, challenge } = await submitResponse(
-      id, req.userId!, resolvedPhotoUrl, response_time_ms || null, answer_index ?? null, answer_text || null
+      id, req.userId!, resolvedPhotoUrl, response_time_ms || null, answer_index ?? null, answer_text || null, encryption_metadata
     ));
   } catch (err: unknown) {
     if (err instanceof ModerationError) {
@@ -49,6 +49,7 @@ router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChalle
   // Emit real-time event for the response
   emitToGroup(c.group_id, 'challenge:response', {
     challengeId: id,
+    groupId: c.group_id,
     response,
   });
 

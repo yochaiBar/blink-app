@@ -37,6 +37,7 @@ interface ResponseWithUserRow {
   answer_text: string | null;
   responded_at: Date;
   response_time_ms: number | null;
+  encryption_metadata: object | null;
   display_name: string;
   avatar_url: string | null;
 }
@@ -72,7 +73,10 @@ router.get('/pending', asyncHandler(async (req: AuthRequest, res: Response) => {
             c.type, c.prompt_text as prompt, c.options_json as options,
             c.expires_at, c.countdown_seconds, c.triggered_by, c.is_auto_generated,
             (SELECT COUNT(*)::int FROM group_members WHERE group_id = c.group_id) as total_members,
-            (SELECT COUNT(*)::int FROM challenge_responses WHERE challenge_id = c.id AND response_type != 'skip') as responded_count
+            LEAST(
+              (SELECT COUNT(*)::int FROM challenge_responses WHERE challenge_id = c.id AND response_type != 'skip'),
+              (SELECT COUNT(*)::int FROM group_members WHERE group_id = c.group_id)
+            ) as responded_count
      FROM challenges c
      JOIN groups g ON g.id = c.group_id
      JOIN group_members gm ON gm.group_id = c.group_id AND gm.user_id = $1
@@ -267,14 +271,15 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
     return;
   }
 
-  // Fetch all non-skip responses with user info
+  // Fetch all non-skip responses with user info (only from current group members)
   const responses = await query<ResponseWithUserRow>(
     `SELECT cr.*, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
+     JOIN group_members gm ON gm.group_id = $2 AND gm.user_id = cr.user_id
      WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'
      ORDER BY cr.responded_at ASC`,
-    [id]
+    [id, c.group_id]
   );
 
   // Fetch reactions for all responses
@@ -349,6 +354,7 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
     answerIndex: r.answer_index,
     answerText: r.answer_text,
     responseTimeMs: r.response_time_ms,
+    encryptionMetadata: r.encryption_metadata,
     respondedAt: r.responded_at,
     reactions: reactionsMap[r.id] || [],
   }));
@@ -391,7 +397,10 @@ router.get('/groups/:groupId/challenges/history', validateUuidParams('groupId'),
        c.triggered_by as created_by,
        c.triggered_at as created_at,
        c.expires_at, c.status, c.countdown_seconds,
-       (SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = c.id AND response_type != 'skip') as response_count,
+       LEAST(
+         (SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = c.id AND response_type != 'skip'),
+         (SELECT COUNT(*)::int FROM group_members WHERE group_id = c.group_id)
+       ) as response_count,
        (SELECT COUNT(*)::int FROM group_members WHERE group_id = c.group_id) as member_count,
        EXISTS(SELECT 1 FROM challenge_responses WHERE challenge_id = c.id AND user_id = $2 AND response_type != 'skip') as user_responded,
        (SELECT cr.photo_url FROM challenge_responses cr WHERE cr.challenge_id = c.id AND cr.photo_url IS NOT NULL LIMIT 1) as photo_url
@@ -427,7 +436,7 @@ router.get('/groups/:groupId/photos', validateUuidParams('groupId'), asyncHandle
   }
 
   const result = await query(
-    `SELECT cr.id, cr.challenge_id, cr.photo_url, cr.responded_at,
+    `SELECT cr.id, cr.challenge_id, cr.photo_url, cr.responded_at, cr.encryption_metadata,
        c.prompt_text as prompt, c.type as challenge_type,
        COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr

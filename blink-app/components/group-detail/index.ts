@@ -7,6 +7,7 @@ export { default as QuizResultsSection } from './QuizResultsSection';
 export { default as ChallengeResponsesList } from './ChallengeResponsesList';
 export { default as BottomActions } from './BottomActions';
 export { default as GroupMiniFeed } from './GroupMiniFeed';
+export { default as GroupStatsCard } from './GroupStatsCard';
 
 export type { MemberAvatarRowProps, MemberAvatarData } from './MemberAvatarRow';
 export type { ChallengeSectionProps, ChallengeTriggerInfo, ProgressData } from './ChallengeSection';

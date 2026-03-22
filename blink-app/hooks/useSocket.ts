@@ -3,14 +3,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
 import { connectSocket, disconnectSocket, joinGroups, getSocket } from '@/services/socket';
 import { api } from '@/services/api';
+import { playChallengeRing } from '@/utils/challengeSound';
 
 interface ChallengeStartedPayload {
   id: string;
   group_id: string;
+  created_by?: string;
 }
 
 interface ChallengeResponsePayload {
   challengeId: string;
+  groupId?: string;
   response: { id: string; challenge_id: string; user_id: string };
 }
 
@@ -58,11 +61,23 @@ export function useSocket() {
         const groupId = data.group_id;
         queryClient.invalidateQueries({ queryKey: ['challenge', groupId] });
         queryClient.invalidateQueries({ queryKey: ['groups'] });
+
+        // Play distinctive alert sound + haptics for group members (skip for originator)
+        if (data.created_by !== user?.id) {
+          playChallengeRing().catch(() => {});
+        }
       });
 
       socket.on('challenge:response', (data: ChallengeResponsePayload) => {
         if (__DEV__) console.log('[Socket] challenge:response', data);
         queryClient.invalidateQueries({ queryKey: ['responses', data.challengeId] });
+        queryClient.invalidateQueries({ queryKey: ['groups'] });
+        queryClient.invalidateQueries({ queryKey: ['challenge-reveal', data.challengeId] });
+        queryClient.invalidateQueries({ queryKey: ['feed-active-challenges'] });
+        queryClient.invalidateQueries({ queryKey: ['blinks-feed-v2'] });
+        if (data.groupId) {
+          queryClient.invalidateQueries({ queryKey: ['challenge', data.groupId] });
+        }
       });
 
       socket.on('challenge:completed', (data: ChallengeCompletedPayload) => {

@@ -2,15 +2,29 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { registerPushToken } from '@/services/api';
+import { wasRecentChallengeRing } from '@/utils/challengeSound';
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const data = notification.request.content.data as Record<string, string | undefined> | undefined;
-    // Always show challenge notifications prominently (even when app is in foreground)
     const isChallenge = data?.type === 'challenge_started' || data?.type === 'challenge' || data?.screen === 'challenge';
+    const isLocalRing = data?._challenge_ring === 'true';
+
+    // If this is a server push for a challenge AND we already played the local
+    // ring sound via the socket event, suppress the duplicate banner/sound.
+    if (isChallenge && !isLocalRing && wasRecentChallengeRing()) {
+      return {
+        shouldShowAlert: false,
+        shouldPlaySound: false,
+        shouldSetBadge: true,
+        shouldShowBanner: false,
+        shouldShowList: false,
+      };
+    }
+
     return {
       shouldShowAlert: true,
-      shouldPlaySound: isChallenge ? true : true,
+      shouldPlaySound: true,
       shouldSetBadge: true,
       shouldShowBanner: true,
       shouldShowList: true,

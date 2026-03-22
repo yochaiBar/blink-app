@@ -31,6 +31,7 @@ import {
   ChallengeResponsesList,
   BottomActions,
   GroupMiniFeed,
+  GroupStatsCard,
 } from '@/components/group-detail';
 import type { ChallengeType, ProgressData, GroupPhoto } from '@/components/group-detail';
 
@@ -306,7 +307,10 @@ export default function GroupDetailScreen() {
   // ── Event handlers ──
   const handleSnapChallenge = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (isDemo) { advanceTour('fab'); router.back(); return; }
+    if (isDemo) {
+      router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
+      return;
+    }
     if (activeChallenge?.type === 'snap') {
       router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
     } else if (activeChallenge?.type === 'quiz' || activeChallenge?.type === 'quiz_food' || activeChallenge?.type === 'quiz_most_likely' || activeChallenge?.type === 'quiz_rate_day') {
@@ -489,7 +493,10 @@ export default function GroupDetailScreen() {
           members={(groupQuery.data?.members ?? []).map((m) => ({ id: m.user_id, name: m.display_name ?? 'User', avatar: m.avatar_url ?? '' }))}
           respondedUserIds={respondedUserIds}
           hasActiveChallenge={group.hasActiveChallenge}
+          currentUserId={user.id}
         />
+
+        {!isDemo && id && <GroupStatsCard groupId={id} />}
 
         {group.aiPersonality && (
           <View style={s.personalityRow}><AiPersonalityPill personality={group.aiPersonality} /></View>

@@ -12,6 +12,7 @@ import { sendPushToUser } from '../services/pushNotifications';
 import { validateUuidParams } from '../middleware/validateParams';
 import { GroupRow, CountRow, UserDisplayNameRow } from '../types/db';
 import { verifyMembership, getGroupWithMembers, handleAdminLeave } from '../services/groupService';
+import { getOrCreateGroupKey, isEncryptionEnabled } from '../services/encryptionService';
 import type { QueryResult } from 'pg';
 
 /** Minimal query interface compatible with both PoolClient and the pool query helper */
@@ -75,6 +76,16 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
   const newGroup = typeof withTransaction === 'function'
     ? await withTransaction(createGroupQueries)
     : await createGroupQueries({ query });
+
+  // Pre-create encryption key for the group (fire-and-forget)
+  if (isEncryptionEnabled()) {
+    getOrCreateGroupKey(newGroup.id).catch((err: unknown) => {
+      logger.error('Failed to pre-create group encryption key', {
+        groupId: newGroup.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
 
   logger.info('Group created', { groupId: newGroup.id, userId: req.userId });
   res.status(201).json(newGroup);
@@ -261,6 +272,124 @@ router.delete('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthReq
 
   logger.info('Group deleted by admin', { groupId: id, userId: req.userId });
   res.json({ message: 'Group deleted successfully' });
+}));
+
+// ── GET /api/groups/:id/encryption-key -- Retrieve the group encryption key (member-only) ──
+router.get('/:id/encryption-key', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+
+  if (!isEncryptionEnabled()) {
+    res.status(404).json({ error: 'Encryption is not enabled' });
+    return;
+  }
+
+  try {
+    await verifyMembership(req.userId!, id);
+  } catch (err: unknown) {
+    if (err instanceof Error && 'statusCode' in err) {
+      const statusErr = err as Error & { statusCode: number };
+      res.status(statusErr.statusCode).json({ error: statusErr.message });
+      return;
+    }
+    throw err;
+  }
+
+  const groupKey = await getOrCreateGroupKey(id);
+  res.json({ key: groupKey.toString('base64'), version: 1 });
+}));
+
+// ── GET /api/groups/:id/stats -- Group statistics (top trigger, longest streak, fastest responder) ──
+router.get('/:id/stats', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+
+  try {
+    await verifyMembership(req.userId!, id);
+  } catch (err: unknown) {
+    if (err instanceof Error && 'statusCode' in err) {
+      const statusErr = err as Error & { statusCode: number };
+      res.status(statusErr.statusCode).json({ error: statusErr.message });
+      return;
+    }
+    throw err;
+  }
+
+  // Top trigger: user who triggered the most challenges in this group
+  const topTriggerResult = await query(
+    `SELECT c.triggered_by AS user_id,
+            COALESCE(u.display_name, u.phone_number) AS display_name,
+            COUNT(*)::int AS count
+     FROM challenges c
+     JOIN users u ON u.id = c.triggered_by
+     WHERE c.group_id = $1 AND c.triggered_by IS NOT NULL
+     GROUP BY c.triggered_by, u.display_name, u.phone_number
+     ORDER BY count DESC
+     LIMIT 1`,
+    [id]
+  );
+
+  // Longest streak: member with the highest current_streak in this group
+  const longestStreakResult = await query(
+    `SELECT gm.user_id,
+            COALESCE(u.display_name, u.phone_number) AS display_name,
+            gm.current_streak AS streak
+     FROM group_members gm
+     JOIN users u ON u.id = gm.user_id
+     WHERE gm.group_id = $1
+     ORDER BY gm.current_streak DESC
+     LIMIT 1`,
+    [id]
+  );
+
+  // Fastest responder: user with the lowest average response_time_ms
+  const fastestResponderResult = await query(
+    `SELECT cr.user_id,
+            COALESCE(u.display_name, u.phone_number) AS display_name,
+            AVG(cr.response_time_ms)::int AS avg_ms
+     FROM challenge_responses cr
+     JOIN challenges c ON c.id = cr.challenge_id
+     JOIN users u ON u.id = cr.user_id
+     WHERE c.group_id = $1 AND cr.response_time_ms IS NOT NULL
+     GROUP BY cr.user_id, u.display_name, u.phone_number
+     ORDER BY avg_ms ASC
+     LIMIT 1`,
+    [id]
+  );
+
+  // Total challenges in this group
+  const totalChallengesResult = await query<CountRow>(
+    `SELECT COUNT(*)::int AS count FROM challenges WHERE group_id = $1`,
+    [id]
+  );
+
+  // Completion rate: challenges with status='completed' / total
+  const completedChallengesResult = await query<CountRow>(
+    `SELECT COUNT(*)::int AS count FROM challenges WHERE group_id = $1 AND status = 'completed'`,
+    [id]
+  );
+
+  const totalChallenges = parseInt(totalChallengesResult.rows[0]?.count ?? '0');
+  const completedChallenges = parseInt(completedChallengesResult.rows[0]?.count ?? '0');
+  const completionRate = totalChallenges > 0 ? Math.round((completedChallenges / totalChallenges) * 100) / 100 : 0;
+
+  const topTrigger = topTriggerResult.rows[0]
+    ? { user_id: topTriggerResult.rows[0].user_id, display_name: topTriggerResult.rows[0].display_name, count: topTriggerResult.rows[0].count }
+    : null;
+
+  const longestStreak = longestStreakResult.rows[0]
+    ? { user_id: longestStreakResult.rows[0].user_id, display_name: longestStreakResult.rows[0].display_name, streak: longestStreakResult.rows[0].streak }
+    : null;
+
+  const fastestResponder = fastestResponderResult.rows[0]
+    ? { user_id: fastestResponderResult.rows[0].user_id, display_name: fastestResponderResult.rows[0].display_name, avg_ms: fastestResponderResult.rows[0].avg_ms }
+    : null;
+
+  res.json({
+    top_trigger: topTrigger,
+    longest_streak: longestStreak,
+    fastest_responder: fastestResponder,
+    total_challenges: totalChallenges,
+    completion_rate: completionRate,
+  });
 }));
 
 // ── GET /api/groups/:id/streaks -- Group streak + member streaks + shields ──

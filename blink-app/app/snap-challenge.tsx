@@ -347,6 +347,7 @@ function SnapChallengeScreen() {
           params: {
             challengeId: resolvedChallengeId,
             groupId: groupId ?? '',
+            localPhotoUri: capturedUri ?? '',
           },
         });
       } else {
