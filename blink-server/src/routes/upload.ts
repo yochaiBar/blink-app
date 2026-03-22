@@ -43,6 +43,35 @@ function getS3Client(): S3Client | null {
   return s3Client;
 }
 
+// POST /api/upload/avatar-presign - Get a pre-signed S3 URL for avatar upload
+router.post('/avatar-presign', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const fileKey = `avatars/${req.userId}.jpg`;
+
+  const client = getS3Client();
+  const bucket = process.env.AWS_S3_BUCKET;
+  const region = process.env.AWS_REGION;
+
+  if (client && bucket && region) {
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: fileKey,
+      ContentType: 'image/jpeg',
+      Tagging: `userId=${req.userId}&type=avatar`,
+    });
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn: PRESIGNED_URL_EXPIRY_SECONDS });
+    // Append cache-busting timestamp so CDN/client sees the new image
+    const publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${fileKey}?t=${Date.now()}`;
+
+    logger.info('Avatar presign URL generated (S3)', { fileKey, userId: req.userId });
+    res.json({ uploadUrl, fileKey, publicUrl, dev_mode: false });
+    return;
+  }
+
+  // Dev mode: no S3 configured -- client keeps the local URI
+  logger.warn('Avatar presign URL skipped: S3 not configured (dev mode)', { userId: req.userId });
+  res.json({ uploadUrl: null, fileKey: null, publicUrl: null, dev_mode: true });
+}));
+
 // POST /api/upload/presign - Get a pre-signed S3 URL
 router.post('/presign', validateBody(presignUploadSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const { groupId, challengeId } = req.body;

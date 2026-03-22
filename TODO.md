@@ -1,17 +1,21 @@
 # Blink — To Do List
 
-> Last updated: 2026-03-21
+> Last updated: 2026-03-22
 
 ---
 
 ## Bugs (Open)
 
-- [ ] **Responded count starts at 0 for challenge triggerer** — When a user triggers a challenge, the responded count shows 0/N even though they're about to respond. Consider optimistic UI or auto-responding on trigger.
 - [ ] **Advisory #5: Cooldown race window** — The 5-second challenge cooldown check has a narrow race window (no row lock on the cooldown SELECT itself). Low priority — mitigated by the transaction + FOR UPDATE on active challenges.
-- [ ] **Push notifications don't navigate to relevant screen** — Tapping a notification should deep-link to the specific group/challenge, currently does nothing or goes to home.
-- [ ] **Profile photo not saved after changing** — User can pick a new photo in the profile page but it doesn't persist after leaving the screen.
-- [ ] **Member avatar tap doesn't show name** — In a group, pressing a member avatar should show who it is (name tooltip or profile preview). Currently no visible feedback.
-- [ ] **Bottom tab bar disappears on some screens** — The bottom navigation should always be visible. It's hidden on certain screens where it shouldn't be.
+
+## Bugs (Fixed — 2026-03-22)
+
+- [x] Demo group UUID leak to API — `demo_welcome_crew` was sent to real endpoints, causing Sentry errors. Added `isDemoGroup` filter in feed screen.
+- [x] Push notifications don't navigate — added routing for all notification types + push on challenge completion
+- [x] Profile photo not saved — added `POST /upload/avatar-presign` endpoint + full upload→S3→save→cache-invalidate flow
+- [x] Member avatar tap no feedback — fixed tooltip positioning above avatar, fade animation, auto-dismiss after 2s
+- [x] Responded count starts at 0 for triggerer — optimistic UI sets creator as responded immediately on challenge creation
+- [x] Bottom tab bar disappears — moved 8 screens into `(tabs)` layout groups so tab bar stays visible
 
 ## Bugs (Fixed — 2026-03-21)
 

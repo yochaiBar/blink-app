@@ -282,6 +282,26 @@ export default function GroupDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['challenge', id] });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       setShowRingModal(false);
+
+      // Optimistic UI: include the triggerer in the responded count so it doesn't show 0/N
+      const memberCount = groupQuery.data?.members?.length ?? group?.memberCount ?? group?.members.length ?? 0;
+      const currentUserMember = groupQuery.data?.members?.find((m) => m.user_id === user.id);
+      const optimisticUser = {
+        userId: user.id,
+        displayName: currentUserMember?.display_name ?? user.name ?? 'You',
+        avatarUrl: currentUserMember?.avatar_url ?? user.avatar,
+      };
+      setProgressData({
+        responded: [optimisticUser],
+        totalMembers: memberCount,
+      });
+      setPreviewData({
+        respondedCount: 1,
+        totalMembers: memberCount,
+        totalReactions: 0,
+        respondedUsers: [{ displayName: optimisticUser.displayName, avatarUrl: optimisticUser.avatarUrl }],
+      });
+
       if (type === 'snap') {
         router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
       } else if (type === 'quiz_food' || type === 'quiz_most_likely' || type === 'quiz_rate_day') {

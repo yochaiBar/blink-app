@@ -206,6 +206,47 @@ export async function uploadPhoto(imageUri: string, groupId: string, challengeId
   return presign.publicUrl;
 }
 
+// ── Avatar Upload ──
+export async function uploadAvatar(imageUri: string): Promise<string> {
+  const presign = await api<PresignResponse>('/upload/avatar-presign', {
+    method: 'POST',
+  });
+
+  // Dev mode (no S3) -- return the local URI as-is
+  if (!presign.uploadUrl) return imageUri;
+
+  // Convert image URI to blob for S3 upload
+  let blob: Blob;
+  try {
+    if (imageUri.startsWith('data:')) {
+      const base64Data = imageUri.replace(/^data:image\/\w+;base64,/, '');
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      blob = new Blob([bytes], { type: 'image/jpeg' });
+    } else {
+      const fileRes = await fetch(imageUri);
+      blob = await fileRes.blob();
+    }
+  } catch (err) {
+    throw new Error(`Failed to read avatar photo: ${err instanceof Error ? err.message : 'unknown error'}`);
+  }
+
+  const uploadRes = await fetch(presign.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'image/jpeg' },
+    body: blob,
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`Avatar S3 upload failed: ${uploadRes.status}`);
+  }
+
+  return presign.publicUrl;
+}
+
 // ── Encrypted Upload ──
 interface EncryptedUploadResponse {
   photo_url: string | null;

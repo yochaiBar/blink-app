@@ -23,6 +23,7 @@ interface AuthState {
   logout: () => Promise<void>;
   updateName: (name: string) => void;
   updateBio: (bio: string) => void;
+  updateAvatar: (avatarUrl: string) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -78,6 +79,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   updateBio: (bio: string) => {
     set((state) => ({
       user: state.user ? { ...state.user, bio } : null,
+    }));
+  },
+
+  updateAvatar: (avatarUrl: string) => {
+    set((state) => ({
+      user: state.user ? { ...state.user, avatar_url: avatarUrl } : null,
     }));
   },
 }));

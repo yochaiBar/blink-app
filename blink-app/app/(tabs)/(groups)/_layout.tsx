@@ -15,6 +15,22 @@ export default function GroupsLayout() {
         name="index"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="group-detail"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="challenge-history"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="group-leaderboard"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="group-prompt"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

@@ -213,30 +213,6 @@ function RootLayoutNav() {
           }}
         />
         <Stack.Screen
-          name="challenge-history"
-          options={{
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
-          name="group-detail"
-          options={{
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
-          name="group-prompt"
-          options={{
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
-          name="group-leaderboard"
-          options={{
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
           name="join-group"
           options={{
             presentation: "modal",
@@ -247,30 +223,6 @@ function RootLayoutNav() {
           name="invite-members"
           options={{
             presentation: "modal",
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
-          name="notifications"
-          options={{
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
-          name="edit-profile"
-          options={{
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
-          name="settings"
-          options={{
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
-          name="help-faq"
-          options={{
             headerShown: false,
           }}
         />

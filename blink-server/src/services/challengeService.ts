@@ -4,6 +4,7 @@ import { emitToGroup } from '../socket';
 import { moderateImage, deleteS3Object, extractS3Key, logModerationResult } from './contentModeration';
 import { commentOnResponses, AiPersonality } from './aiService';
 import { processSkipsForChallenge } from './streakService';
+import { sendPushToGroup } from './pushNotifications';
 import { ChallengeRow, GroupMemberRow, ChallengeResponseRow, CountRow } from '../types/db';
 
 /** Error thrown when content moderation rejects an image */
@@ -157,6 +158,14 @@ export async function checkChallengeCompletion(
 
   // Emit challenge completed event
   emitToGroup(groupId, 'challenge:completed', { challengeId, groupId });
+
+  // Push notification for challenge completion (fire-and-forget)
+  sendPushToGroup(
+    groupId,
+    'Challenge Complete!',
+    'Everyone responded — check out the results!',
+    { type: 'challenge_completed', challengeId, groupId },
+  ).catch(() => {});
 
   // AI commentary on challenge results (fire-and-forget)
   generateAiCommentary(challengeId, groupId).catch((err: unknown) => {

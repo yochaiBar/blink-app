@@ -144,8 +144,10 @@ export function getNotificationRoute(
   if (!data || !data.type) return null;
 
   switch (data.type) {
+    // ── Challenge started: route to challenge screen (camera-first flow) ──
     case 'challenge_started':
-    case 'challenge': {
+    case 'challenge':
+    case 'social_obligation': {
       const groupId = data.groupId;
       const challengeId = data.challengeId;
       const challengeType = data.challengeType;
@@ -175,6 +177,68 @@ export function getNotificationRoute(
       return null;
     }
 
+    // ── Challenge completed / response received: route to reveal screen ──
+    case 'challenge_completed': {
+      const { groupId, challengeId } = data;
+      if (groupId && challengeId) {
+        return {
+          pathname: '/challenge-reveal',
+          params: { challengeId, groupId },
+        };
+      }
+      if (groupId) {
+        return {
+          pathname: '/group-detail',
+          params: { id: groupId },
+        };
+      }
+      return null;
+    }
+
+    case 'snap_received': {
+      const { groupId, challengeId } = data;
+      if (groupId && challengeId) {
+        return {
+          pathname: '/challenge-reveal',
+          params: { challengeId, groupId },
+        };
+      }
+      if (groupId) {
+        return {
+          pathname: '/group-detail',
+          params: { id: groupId },
+        };
+      }
+      return null;
+    }
+
+    // ── Reaction on a response: go to the group ──
+    case 'reaction': {
+      if (data.groupId) {
+        return {
+          pathname: '/group-detail',
+          params: { id: data.groupId },
+        };
+      }
+      return { pathname: '/' };
+    }
+
+    // ── Group-level notifications: go to group detail ──
+    case 'group':
+    case 'group_joined':
+    case 'streak_milestone':
+    case 'streak_shield_earned':
+    case 'streak_shield_used':
+    case 'group_streak_broken': {
+      if (data.groupId) {
+        return {
+          pathname: '/group-detail',
+          params: { id: data.groupId },
+        };
+      }
+      return null;
+    }
+
     // Also handle the explicit screen routing (data.screen === 'challenge')
     // This covers cases where the backend sends screen-based routing data
     default:
@@ -195,27 +259,5 @@ export function getNotificationRoute(
     };
   }
 
-  switch (data.type) {
-    case 'group':
-      if (data.groupId) {
-        return {
-          pathname: '/group-detail',
-          params: { id: data.groupId },
-        };
-      }
-      return null;
-
-    case 'reaction':
-      if (data.groupId) {
-        return {
-          pathname: '/group-detail',
-          params: { id: data.groupId },
-        };
-      }
-      // If no groupId, fall through to home
-      return { pathname: '/' };
-
-    default:
-      return null;
-  }
+  return null;
 }

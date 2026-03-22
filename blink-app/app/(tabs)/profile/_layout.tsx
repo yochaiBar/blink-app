@@ -15,6 +15,18 @@ export default function ProfileLayout() {
         name="index"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="edit-profile"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="settings"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="help-faq"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }
