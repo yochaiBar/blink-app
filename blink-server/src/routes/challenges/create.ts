@@ -34,6 +34,15 @@ router.post('/groups/:groupId/challenges', validateUuidParams('groupId'), valida
 
   // Wrap entire create flow in a transaction to prevent race conditions
   const result = await withTransaction(async (client) => {
+    // Advisory lock keyed on group_id to serialize challenge creation per group.
+    // This closes the race window where two concurrent requests could both pass
+    // the cooldown check before either INSERT commits (FOR UPDATE cannot lock
+    // rows that don't exist yet).
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      [groupId]
+    );
+
     // Cooldown check: reject if a challenge was created in the last 5 seconds for this group
     const recentChallenge = await client.query(
       `SELECT id FROM challenges WHERE group_id = $1 AND created_at > NOW() - INTERVAL '5 seconds' ORDER BY created_at DESC LIMIT 1`,

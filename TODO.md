@@ -6,10 +6,11 @@
 
 ## Bugs (Open)
 
-- [ ] **Advisory #5: Cooldown race window** — The 5-second challenge cooldown check has a narrow race window (no row lock on the cooldown SELECT itself). Low priority — mitigated by the transaction + FOR UPDATE on active challenges.
+(none)
 
 ## Bugs (Fixed — 2026-03-22)
 
+- [x] Cooldown race window — added `pg_advisory_xact_lock` per group to serialize concurrent challenge creation
 - [x] Demo group UUID leak to API — `demo_welcome_crew` was sent to real endpoints, causing Sentry errors. Added `isDemoGroup` filter in feed screen.
 - [x] Push notifications don't navigate — added routing for all notification types + push on challenge completion
 - [x] Profile photo not saved — added `POST /upload/avatar-presign` endpoint + full upload→S3→save→cache-invalidate flow

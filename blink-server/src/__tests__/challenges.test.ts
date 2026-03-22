@@ -42,6 +42,7 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
 
     mockQuery
       .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership check
+      .mockResolvedValueOnce(queryResult([]))                      // advisory lock (pg_advisory_xact_lock)
       .mockResolvedValueOnce(queryResult([]))                      // cooldown check (no recent)
       .mockResolvedValueOnce(queryResult([]))                      // no active challenges (FOR UPDATE)
       .mockResolvedValueOnce(queryResult([challenge]))             // INSERT challenge
@@ -65,6 +66,7 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
 
     mockQuery
       .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership check
+      .mockResolvedValueOnce(queryResult([]))                      // advisory lock (pg_advisory_xact_lock)
       .mockResolvedValueOnce(queryResult([]))                      // cooldown check (no recent)
       .mockResolvedValueOnce(queryResult([]))                      // no active challenges (FOR UPDATE)
       .mockResolvedValueOnce(queryResult([challenge]))             // INSERT challenge
@@ -95,6 +97,7 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
   it('should return 409 when a challenge was triggered within 5s cooldown (Bug #3a)', async () => {
     mockQuery
       .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership check
+      .mockResolvedValueOnce(queryResult([]))                      // advisory lock (pg_advisory_xact_lock)
       .mockResolvedValueOnce(queryResult([{ id: 'recent-challenge' }])); // cooldown check returns recent
 
     const res = await request(app)
@@ -112,6 +115,7 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
 
     mockQuery
       .mockResolvedValueOnce(queryResult([makeMembership()]))              // membership check
+      .mockResolvedValueOnce(queryResult([]))                               // advisory lock (pg_advisory_xact_lock)
       .mockResolvedValueOnce(queryResult([]))                               // cooldown check (none recent)
       .mockResolvedValueOnce(queryResult([{ id: expiredChallengeId }]))    // active challenges FOR UPDATE
       .mockResolvedValueOnce(queryResult([], 1))                           // UPDATE expired
