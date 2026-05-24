@@ -1,12 +1,12 @@
-# Blink — To Do List
+# Blink — To Do
 
-> Last updated: 2026-03-22
+> **Canonical tracker has moved to the Obsidian vault.**
+>
+> Open work: `~/Documents/Obsidian Vault/Blink/Tasks/00 - Day-to-Day Tracker.md`
+>
+> Update there. This file keeps only the historical "fixed bugs" log below for `git blame` value.
 
 ---
-
-## Bugs (Open)
-
-(none)
 
 ## Bugs (Fixed — 2026-03-22)
 
@@ -15,8 +15,10 @@
 - [x] Push notifications don't navigate — added routing for all notification types + push on challenge completion
 - [x] Profile photo not saved — added `POST /upload/avatar-presign` endpoint + full upload→S3→save→cache-invalidate flow
 - [x] Member avatar tap no feedback — fixed tooltip positioning above avatar, fade animation, auto-dismiss after 2s
-- [x] Responded count starts at 0 for triggerer — optimistic UI sets creator as responded immediately on challenge creation
+- [x] Responded count starts at 0 for triggerer — show "Challenge started" state instead of inflating count
 - [x] Bottom tab bar disappears — moved 8 screens into `(tabs)` layout groups so tab bar stays visible
+- [x] Snap challenge expiration — added expiration check before starting camera for stale notification taps
+- [x] Profile photo upload UX — added optimistic avatar display + spinner overlay during S3 upload
 
 ## Bugs (Fixed — 2026-03-21)
 
@@ -43,62 +45,3 @@
 - [x] GroupStatsCard shows "Best Streak: 0" — added `streak > 0` guard
 - [x] MemberAvatarRow count mismatch — fixed denominator to include current user
 - [x] SnapCard reaction buttons missing selection state — aligned with challenge-reveal pattern
-
----
-
-## Features — Next Up
-
-### P0 — Ship Blockers
-- [ ] **TestFlight build** — `eas build --platform ios --profile production`
-- [ ] **Google Play closed testing** — internal track APK
-- [ ] **App Store metadata** — screenshots, descriptions, keywords, categories
-- [ ] **Submit to App Store + Google Play**
-
-### P1 — Pre-Launch Polish
-- [ ] **Analytics integration** — PostHog or Mixpanel for key events (challenge triggered, response submitted, group created, onboarding completed)
-- [ ] **CI/CD pipeline** — GitHub Actions: lint + typecheck + test on PR, deploy on merge to main
-- [ ] **Lower OTP rate limit** — `OTP_RATE_LIMIT_PER_HOUR` on Railway from 50 to 3 for production
-- [ ] **Onboarding avatar upload** — let users set profile photo during onboarding
-- [ ] **Feed tab scroll-to-top on re-tap** — When already on the feed page, tapping the feed tab again should scroll to the top of the list
-- [ ] **Text responses to challenges/photos** — Allow users to respond with text to a challenge or a photo (design TBD — could be inline comment, reply bubble, or thread)
-
-### P2 — Growth & Engagement
-- [ ] **Invite flow improvements** — share invite link via native share sheet with preview card
-- [ ] **Streak notifications** — remind users before their streak breaks
-- [ ] **Challenge history gallery** — view past challenge photos in a grid
-- [ ] **Group chat / comments** — text reactions on snaps beyond emoji
-- [ ] **Custom challenge prompts** — let users write their own prompt challenges
-- [ ] **Explore page** — discover public challenges, trending groups, or featured content (design TBD)
-- [ ] **Group page redesign** — reorganize into card/box layout per group instead of a flat list (design TBD)
-
-### P3 — Infrastructure
-- [ ] **Local-only photo storage** — Store all photos on-device only (no cloud/S3). Remove S3 upload flow, use local filesystem or SQLite blob. Major architecture change — impacts upload, reveal, feed, and backup strategy.
-- [ ] **OpenAPI spec** — auto-generate from Zod schemas for API documentation
-- [ ] **80% test coverage** — currently at ~65%, add tests for untested hooks and components
-- [ ] **E2E tests** — Maestro or Detox for critical user flows (onboarding, challenge, quiz)
-- [ ] **Rate limiting audit** — review all public endpoints, add per-user throttling where missing
-- [ ] **Database indexes audit** — check query plans for slow queries as data grows
-
----
-
-## Infrastructure Status
-
-| Service | Status | Notes |
-|---------|--------|-------|
-| Railway API | Live | `blink-api-production.up.railway.app` |
-| Railway Postgres | Live | Auto-migrate on deploy |
-| AWS S3 | Active | `blinks3upload` bucket, us-east-1 |
-| Twilio SMS | Active | OTP working in production |
-| Sentry | Active | Server + app crash reporting |
-| Content Moderation | Active | AWS Rekognition |
-| Expo/EAS | Active | Preview builds configured |
-
----
-
-## Test Suite
-
-| Package | Tests | Status |
-|---------|-------|--------|
-| blink-server | 188 | All passing |
-| blink-app | 163 | All passing |
-| **Total** | **351** | **All passing** |
