@@ -12,6 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, Zap } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -219,6 +220,9 @@ export default function BlinksScreen() {
   const demoChallengeCompleted = useOnboardingStore((s) => s.demoChallengeCompleted);
   const [demoDismissed, setDemoDismissed] = useState(false);
   const showDemoAlert = shouldShowDemoGroup && !demoChallengeCompleted && !demoDismissed;
+
+  const flatListRef = useRef<FlatList>(null);
+  useScrollToTop(flatListRef);
 
   // ── Fetch active challenges across all groups ──
   const activeChallengesQuery = useQuery({
@@ -739,6 +743,7 @@ export default function BlinksScreen() {
 
       {/* Feed */}
       <FlatList
+        ref={flatListRef}
         data={feedItemsWithCallbacks}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
