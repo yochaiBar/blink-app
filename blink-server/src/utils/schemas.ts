@@ -109,6 +109,17 @@ export const addReactionSchema = z.object({
     .max(10, 'Emoji must be at most 10 characters'),
 });
 
+// ── Comment schemas ─────────────────────────────────────────
+
+export const createCommentSchema = z.object({
+  text: z
+    .string()
+    .trim()
+    .min(1, 'Comment cannot be empty')
+    .max(280, 'Comment must be at most 280 characters'),
+  parent_comment_id: z.string().uuid().optional(),
+});
+
 // ── Moderation schemas ──────────────────────────────────────
 
 const contentTypeEnum = z.enum(['photo', 'user', 'group', 'challenge_response']);
