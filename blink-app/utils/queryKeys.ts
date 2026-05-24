@@ -42,4 +42,7 @@ export const queryKeys = {
   groupDetailReveal: {
     detail: (groupId: string) => ['group-detail-reveal', groupId] as const,
   },
+  comments: {
+    forResponse: (responseId: string) => ['comments', responseId] as const,
+  },
 } as const;

@@ -28,6 +28,12 @@ interface MemberJoinedPayload {
   displayName: string;
 }
 
+interface CommentEventPayload {
+  response_id: string;
+  comment?: unknown;
+  comment_id?: string;
+}
+
 /**
  * Manages the Socket.io connection lifecycle and wires real-time events
  * to React Query cache invalidation.
@@ -90,6 +96,16 @@ export function useSocket() {
       socket.on('group:member-joined', (data: MemberJoinedPayload) => {
         if (__DEV__) console.log('[Socket] group:member-joined', data);
         queryClient.invalidateQueries({ queryKey: ['groups'] });
+      });
+
+      socket.on('comment:created', (data: CommentEventPayload) => {
+        if (__DEV__) console.log('[Socket] comment:created', data);
+        queryClient.invalidateQueries({ queryKey: ['comments', data.response_id] });
+      });
+
+      socket.on('comment:deleted', (data: CommentEventPayload) => {
+        if (__DEV__) console.log('[Socket] comment:deleted', data);
+        queryClient.invalidateQueries({ queryKey: ['comments', data.response_id] });
       });
     }
 

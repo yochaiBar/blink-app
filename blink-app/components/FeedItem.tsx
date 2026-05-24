@@ -17,6 +17,7 @@ import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import GlassCard from '@/components/ui/GlassCard';
 import AvatarRing from '@/components/ui/AvatarRing';
+import PhotoCommentsPreview from '@/components/PhotoCommentsPreview';
 
 // ── Types ──
 
@@ -71,6 +72,12 @@ const QUICK_REACTIONS = ['\uD83D\uDD25', '\uD83D\uDC80', '\uD83D\uDE0D', '\uD83D
 // ── Photo Feed Item ──
 
 function PhotoFeedItem({ item }: { item: FeedItemData }) {
+  // The Blinks feed assigns id as `photo_${responseId}` — peel back to the
+  // raw response_id so the comments hook can fetch/post against it. If the
+  // id doesn't follow the convention (defensive: feed items pre-rename, AI
+  // commentary aliases, future shapes), skip the comments section entirely.
+  const responseId = item.id.startsWith('photo_') ? item.id.slice('photo_'.length) : null;
+
   const handleReact = useCallback(
     (emoji: string) => {
       if (Platform.OS !== 'web') {
@@ -166,6 +173,8 @@ function PhotoFeedItem({ item }: { item: FeedItemData }) {
             </View>
           )}
         </View>
+
+        {responseId ? <PhotoCommentsPreview responseId={responseId} /> : null}
       </View>
     </TouchableOpacity>
   );

@@ -331,6 +331,38 @@ export function removeReactionApi(responseId: string, emoji: string): Promise<vo
   });
 }
 
+// ── Comments ──
+export interface CommentItem {
+  id: string;
+  response_id: string;
+  user_id: string;
+  parent_comment_id: string | null;
+  text: string;
+  created_at: string;
+  updated_at: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+export function fetchComments(responseId: string): Promise<CommentItem[]> {
+  return api<CommentItem[]>(`/challenges/responses/${responseId}/comments`);
+}
+
+export function postComment(
+  responseId: string,
+  text: string,
+  parentCommentId?: string,
+): Promise<CommentItem> {
+  return api<CommentItem>(`/challenges/responses/${responseId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify(parentCommentId ? { text, parent_comment_id: parentCommentId } : { text }),
+  });
+}
+
+export function deleteComment(commentId: string): Promise<void> {
+  return api<void>(`/challenges/comments/${commentId}`, { method: 'DELETE' });
+}
+
 // ── Spotlight ──
 export async function getSpotlight(groupId: string): Promise<ApiSpotlight | null> {
   return api<ApiSpotlight | null>(`/spotlight/${groupId}`);

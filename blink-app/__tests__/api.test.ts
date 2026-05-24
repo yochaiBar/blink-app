@@ -31,6 +31,9 @@ import {
   unblockUser,
   getBlockedUsers,
   uploadPhoto,
+  fetchComments,
+  postComment,
+  deleteComment,
 } from '../services/api';
 
 const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
@@ -374,6 +377,69 @@ describe('Reactions', () => {
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('/challenges/responses/response-1/reactions/%F0%9F%94%A5'),
       expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Comments
+// ─────────────────────────────────────────────────────────────────
+describe('Comments', () => {
+  beforeEach(async () => {
+    await clearTokens();
+  });
+
+  it('fetches the comment list for a response', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(200, [{ id: 'c1', text: 'nice', parent_comment_id: null }]),
+    );
+
+    const list = await fetchComments('response-1');
+
+    expect(list).toHaveLength(1);
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/challenges/responses/response-1/comments'),
+      expect.anything(),
+    );
+  });
+
+  it('posts a top-level comment with only text in the body', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(201, { id: 'c2', text: 'hello' }));
+
+    const created = await postComment('response-1', 'hello');
+
+    expect(created.id).toBe('c2');
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/challenges/responses/response-1/comments'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ text: 'hello' }),
+      }),
+    );
+  });
+
+  it('posts a reply with parent_comment_id in the body', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(201, { id: 'c3' }));
+
+    await postComment('response-1', 'agreed', 'parent-1');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/challenges/responses/response-1/comments'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ text: 'agreed', parent_comment_id: 'parent-1' }),
+      }),
+    );
+  });
+
+  it('deletes a comment by id', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(200, { message: 'Comment deleted' }));
+
+    await deleteComment('c-1');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/challenges/comments/c-1'),
+      expect.objectContaining({ method: 'DELETE' }),
     );
   });
 });
