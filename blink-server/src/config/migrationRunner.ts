@@ -1,6 +1,7 @@
 import { query } from './database';
 import fs from 'fs';
 import path from 'path';
+import * as Sentry from '@sentry/node';
 import logger from '../utils/logger';
 
 // Create tracking table
@@ -65,13 +66,26 @@ export async function runMigrations(): Promise<void> {
 // Allow standalone execution: ts-node src/config/migrationRunner.ts
 // or: node dist/config/migrationRunner.js
 if (require.main === module) {
+  // Init Sentry locally so a startup-time crash (e.g. DB connect failure)
+  // gets reported. The main server in index.ts has its own Sentry.init.
+  if (process.env.SENTRY_DSN) {
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV,
+      tracesSampleRate: 0,
+      sendDefaultPii: false,
+    });
+  }
+
   runMigrations()
     .then(() => {
       logger.info('Migrations complete!');
       process.exit(0);
     })
-    .catch((err) => {
-      logger.error('Migration failed', { error: err.message });
+    .catch(async (err) => {
+      logger.error('Migration failed', { error: err.message, stack: err.stack });
+      Sentry.captureException(err);
+      await Sentry.flush(2000).catch(() => undefined);
       process.exit(1);
     });
 }
