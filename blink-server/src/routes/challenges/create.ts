@@ -43,9 +43,10 @@ router.post('/groups/:groupId/challenges', validateUuidParams('groupId'), valida
       [groupId]
     );
 
-    // Cooldown check: reject if a challenge was created in the last 5 seconds for this group
+    // Cooldown check: reject if a challenge was triggered in the last 5 seconds for this group.
+    // The challenges table uses `triggered_at` (see migration 001) — no `created_at` column exists.
     const recentChallenge = await client.query(
-      `SELECT id FROM challenges WHERE group_id = $1 AND created_at > NOW() - INTERVAL '5 seconds' ORDER BY created_at DESC LIMIT 1`,
+      `SELECT id FROM challenges WHERE group_id = $1 AND triggered_at > NOW() - INTERVAL '5 seconds' ORDER BY triggered_at DESC LIMIT 1`,
       [groupId]
     );
     if (recentChallenge.rows.length > 0) {
