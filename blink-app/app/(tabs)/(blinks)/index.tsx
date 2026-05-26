@@ -32,6 +32,7 @@ import FeedItem, { FeedItemData } from '@/components/FeedItem';
 import DemoChallengeAlert from '@/components/DemoChallengeAlert';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { isDemoGroup } from '@/constants/demoData';
+import { WORLDWIDE_EXAMPLES } from '@/constants/worldwideExamples';
 
 // ── Types ──
 
@@ -410,7 +411,32 @@ export default function BlinksScreen() {
     });
   }, [pendingChallenges]);
 
-  // Post-process: sort, deduplicate, and inject AI commentary
+  // Static "Trending around the world" section. Built once per session — these
+  // are illustrative examples to teach new users the concept (see
+  // ~/Documents/Obsidian Vault/Blink/Plans/Home screen + Trending Worldwide.md).
+  const worldwideSection = useMemo<FeedItemData[]>(() => {
+    const header: FeedItemData = {
+      id: 'ww_section_header',
+      type: 'section_header',
+      sectionTitle: '🌍 Trending around the world',
+      sectionSubtitle: 'See what people are sharing',
+    };
+    const items: FeedItemData[] = WORLDWIDE_EXAMPLES.map((ex) => ({
+      id: ex.id,
+      type: 'worldwide_example',
+      userName: ex.userName,
+      location: ex.location,
+      photoUrl: ex.photoUrl,
+      challengePrompt: ex.prompt,
+      timeAgo: ex.timeAgo,
+      reactions: ex.reactions,
+      worldwideComments: ex.comments,
+    }));
+    return [header, ...items];
+  }, []);
+
+  // Post-process: sort, deduplicate, inject AI commentary, then append the
+  // worldwide section so it always sits at the bottom of Home.
   const feedItems = useMemo(() => {
     const items = feedQuery.data ?? [];
 
@@ -434,13 +460,10 @@ export default function BlinksScreen() {
     // Inject AI commentary every ~6 items if we have enough content
     const withCommentary = injectAICommentary(unique);
 
-    // Prepend active challenge cards at the top of the feed
-    if (activeChallengeCards.length > 0) {
-      return [...activeChallengeCards, ...withCommentary];
-    }
-
-    return withCommentary;
-  }, [feedQuery.data, activeChallengeCards]);
+    // Compose: active challenge cards at top, then user feed, then worldwide.
+    const head = activeChallengeCards.length > 0 ? activeChallengeCards : [];
+    return [...head, ...withCommentary, ...worldwideSection];
+  }, [feedQuery.data, activeChallengeCards, worldwideSection]);
 
   // ── Socket listeners ──
   useEffect(() => {
@@ -593,102 +616,75 @@ export default function BlinksScreen() {
 
   const isLoading =
     isGroupsLoading || (groups.length > 0 && feedQuery.isLoading);
-  const isEmpty =
-    !isLoading && groups.length > 0 && feedItemsWithCallbacks.length === 0;
+  // "User has no real feed content of their own" — true when not loading AND
+  // either no groups or groups with no activity yet. Worldwide items don't
+  // count toward "real content" so they aren't checked here.
   const hasNoGroups = !isGroupsLoading && groups.length === 0;
+  const hasNoUserContent =
+    !isLoading &&
+    (hasNoGroups || (groups.length > 0 && feedQuery.isFetched && (feedQuery.data ?? []).length === 0));
 
   // ── List Header ──
+  // Stacks (in order): active challenge pills (when any), no-groups CTA
+  // (when applicable). Worldwide section is appended to feedItems so it
+  // renders below user content via the FlatList itself.
   const ListHeader = useMemo(() => {
-    if (pendingChallenges.length === 0) return null;
+    const hasPills = pendingChallenges.length > 0;
     return (
-      <ActiveChallengePills
-        pendingChallenges={pendingChallenges}
-        onPress={handlePillPress}
-      />
-    );
-  }, [pendingChallenges, handlePillPress]);
-
-  // ── List Empty ──
-  const ListEmpty = useMemo(() => {
-    if (isLoading) {
-      return <FeedSkeleton />;
-    }
-    if (hasNoGroups) {
-      return (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIconContainer}>
-            <Zap size={48} color={theme.coral} fill={theme.coral} />
-          </View>
-          <Text style={styles.emptyTitle}>No blinks yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Join or create a group to start sharing moments with friends
-          </Text>
-          <TouchableOpacity
-            style={styles.emptyAction}
-            onPress={() => {
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }
-              router.push('/(tabs)/(groups)' as never);
-            }}
-          >
-            <LinearGradient
-              colors={[theme.coral, theme.coralDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.emptyActionGradient}
+      <View>
+        {hasPills ? (
+          <ActiveChallengePills
+            pendingChallenges={pendingChallenges}
+            onPress={handlePillPress}
+          />
+        ) : null}
+        {hasNoUserContent ? (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconContainer}>
+              <Zap size={48} color={theme.coral} fill={theme.coral} />
+            </View>
+            <Text style={styles.emptyTitle}>
+              {hasNoGroups ? 'Welcome to Blink' : 'Your feed is empty'}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {hasNoGroups
+                ? 'Capture moments with your closest crew via daily snap challenges. Join a group to start, or scroll down to see what people are sharing around the world.'
+                : 'When friends respond to challenges, their photos show up here. Scroll down to see what people are sharing around the world.'}
+            </Text>
+            <TouchableOpacity
+              style={styles.emptyAction}
+              onPress={() => {
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                router.push('/(tabs)/(groups)' as never);
+              }}
             >
-              <Text style={styles.emptyActionText}>Go to Groups</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    if (isEmpty) {
-      return (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIconContainer}>
-            <Zap size={48} color={theme.textMuted} />
+              <LinearGradient
+                colors={[theme.coral, theme.coralDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.emptyActionGradient}
+              >
+                <Text style={styles.emptyActionText}>
+                  {hasNoGroups ? 'Create or Join a Group' : 'Go to Groups'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.emptyTitle}>Your feed is empty</Text>
-          <Text style={styles.emptySubtitle}>
-            When friends respond to challenges, their photos and answers will
-            show up here. Start a challenge to get things going!
-          </Text>
-          <TouchableOpacity
-            style={styles.emptyAction}
-            onPress={() => {
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }
-              router.push('/(tabs)/(groups)' as never);
-            }}
-          >
-            <LinearGradient
-              colors={[theme.coral, theme.coralDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.emptyActionGradient}
-            >
-              <Text style={styles.emptyActionText}>Go to Groups</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    return null;
-  }, [isLoading, hasNoGroups, isEmpty, router]);
-
-  // ── List Footer ──
-  const ListFooter = useMemo(() => {
-    if (feedItemsWithCallbacks.length === 0) return null;
-    return (
-      <View style={styles.footerContainer}>
-        <Text style={styles.footerText}>You are all caught up</Text>
-        <View style={{ height: 100 }} />
+        ) : null}
       </View>
     );
-  }, [feedItemsWithCallbacks.length]);
+  }, [pendingChallenges, handlePillPress, hasNoUserContent, hasNoGroups, router]);
+
+  // ── List Empty ──
+  // Worldwide items are always appended to feedItems, so this only fires
+  // during the very first load before any data resolves.
+  const ListEmpty = useMemo(() => (isLoading ? <FeedSkeleton /> : null), [isLoading]);
+
+  // ── List Footer ──
+  // Trailing spacer so the last worldwide card isn't flush with the tab bar.
+  const ListFooter = useMemo(() => <View style={{ height: 100 }} />, []);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -701,7 +697,7 @@ export default function BlinksScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Blinks</Text>
+          <Text style={styles.headerTitle}>Home</Text>
           <Zap size={20} color={theme.coral} fill={theme.coral} />
         </View>
         <View style={styles.headerRight}>

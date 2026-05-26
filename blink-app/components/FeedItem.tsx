@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
+import { Globe2 } from 'lucide-react-native';
 import GlassCard from '@/components/ui/GlassCard';
 import AvatarRing from '@/components/ui/AvatarRing';
 import PhotoCommentsPreview from '@/components/PhotoCommentsPreview';
@@ -27,7 +28,9 @@ export type FeedItemType =
   | 'quiz_result'
   | 'ai_commentary'
   | 'spotlight'
-  | 'active_challenge';
+  | 'active_challenge'
+  | 'worldwide_example'
+  | 'section_header';
 
 export interface FeedItemData {
   id: string;
@@ -57,6 +60,12 @@ export interface FeedItemData {
   responseCount?: number;
   memberCount?: number;
   challengeType?: string;
+  // Worldwide example items (Home screen "Trending around the world")
+  location?: string;
+  worldwideComments?: Array<{ userName: string; text: string }>;
+  // Section header (sticky-ish divider inserted between feed groups)
+  sectionTitle?: string;
+  sectionSubtitle?: string;
   // Sortable timestamp (ISO string)
   timestamp?: string;
   // Callbacks passed through
@@ -592,6 +601,110 @@ function ActiveChallengeFeedItem({ item }: { item: FeedItemData }) {
   );
 }
 
+// ── Section Header (e.g. "🌍 Trending around the world") ──
+
+function SectionHeaderFeedItem({ item }: { item: FeedItemData }) {
+  return (
+    <View style={styles.sectionHeader} testID={`section-header-${item.id}`}>
+      <Text style={styles.sectionHeaderTitle}>{item.sectionTitle}</Text>
+      {item.sectionSubtitle ? (
+        <Text style={styles.sectionHeaderSubtitle}>{item.sectionSubtitle}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+// ── Worldwide Example Feed Item ──
+// Read-only photo card sourced from constants/worldwideExamples.ts. Same visual
+// frame as PhotoFeedItem so the layout feels coherent, but with:
+//  - 🌍 + city in place of the group field
+//  - "Worldwide" badge top-right
+//  - Frozen reaction counts (no tap handler — these aren't real responses)
+//  - Pre-baked comments inline (no composer, no PhotoCommentsPreview)
+//
+// Tapping the card is a no-op for v1 — examples teach concept, they aren't
+// social objects.
+
+function WorldwideFeedItem({ item }: { item: FeedItemData }) {
+  return (
+    <View style={styles.photoItem} testID={`worldwide-${item.id}`}>
+      {/* Header row */}
+      <View style={styles.headerRow}>
+        <AvatarRing
+          uri={item.userAvatar}
+          name={item.userName}
+          size={32}
+          ringColor={theme.textMuted}
+          showStatus={false}
+        />
+        <View style={styles.headerText}>
+          <View style={styles.headerNameRow}>
+            <Text style={styles.userName} numberOfLines={1}>
+              {item.userName}
+            </Text>
+            <Text style={styles.dot}>{'·'}</Text>
+            <Text style={styles.groupName} numberOfLines={1}>
+              {'🌍'} {item.location}
+            </Text>
+            <Text style={styles.dot}>{'·'}</Text>
+            <Text style={styles.timeAgo}>{item.timeAgo}</Text>
+          </View>
+        </View>
+        <View style={styles.worldwideBadge}>
+          <Globe2 size={11} color={theme.textMuted} />
+          <Text style={styles.worldwideBadgeText}>Worldwide</Text>
+        </View>
+      </View>
+
+      {/* Full-width photo */}
+      <View style={styles.photoContainer}>
+        <Image
+          source={{ uri: item.photoUrl }}
+          style={styles.photo}
+          contentFit="cover"
+          transition={200}
+          recyclingKey={item.id}
+        />
+      </View>
+
+      {/* Challenge prompt */}
+      {item.challengePrompt ? (
+        <Text style={styles.challengePrompt} numberOfLines={2}>
+          {item.challengePrompt}
+        </Text>
+      ) : null}
+
+      {/* Frozen reactions — display only, no quick-react row */}
+      {item.reactions && item.reactions.length > 0 ? (
+        <View style={styles.reactionsContainer}>
+          <View style={styles.existingReactions}>
+            {item.reactions.map((r, i) => (
+              <View key={`${r.emoji}-${i}`} style={styles.reactionPillFrozen}>
+                <Text style={styles.reactionEmoji}>{r.emoji}</Text>
+                <Text style={styles.reactionCount}>{r.count}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {/* Pre-baked example comments (read-only) */}
+      {item.worldwideComments && item.worldwideComments.length > 0 ? (
+        <View style={styles.worldwideComments}>
+          {item.worldwideComments.map((c, i) => (
+            <View key={i} style={styles.worldwideCommentRow}>
+              <Text style={styles.worldwideCommentName}>{c.userName}</Text>
+              <Text style={styles.worldwideCommentText} numberOfLines={3}>
+                {' '}{c.text}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 // ── Main FeedItem Component ──
 
 function FeedItemComponent({ item }: { item: FeedItemData }) {
@@ -608,6 +721,10 @@ function FeedItemComponent({ item }: { item: FeedItemData }) {
       return <SpotlightFeedItem item={item} />;
     case 'active_challenge':
       return <ActiveChallengeFeedItem item={item} />;
+    case 'worldwide_example':
+      return <WorldwideFeedItem item={item} />;
+    case 'section_header':
+      return <SectionHeaderFeedItem item={item} />;
     default:
       return null;
   }
@@ -693,6 +810,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: borderRadius.full,
+  },
+  reactionPillFrozen: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: borderRadius.full,
+    opacity: 0.85,
+  },
+  worldwideBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: borderRadius.full,
+    backgroundColor: theme.surface,
+    marginLeft: 'auto',
+  },
+  worldwideBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: theme.textMuted,
+    letterSpacing: 0.3,
+  },
+  worldwideComments: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  worldwideCommentRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  worldwideCommentName: {
+    ...typography.bodySmall,
+    color: theme.text,
+    fontWeight: '700',
+  },
+  worldwideCommentText: {
+    ...typography.bodySmall,
+    color: theme.text,
+    flexShrink: 1,
+  },
+  sectionHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.sm,
+    gap: 2,
+  },
+  sectionHeaderTitle: {
+    ...typography.headlineMedium,
+    color: theme.text,
+    fontWeight: '800',
+  },
+  sectionHeaderSubtitle: {
+    ...typography.bodySmall,
+    color: theme.textMuted,
   },
   reactionEmoji: {
     fontSize: 14,

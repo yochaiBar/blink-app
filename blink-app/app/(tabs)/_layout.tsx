@@ -61,7 +61,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="(blinks)"
         options={{
-          title: "Blinks",
+          title: "Home",
           tabBarIcon: ({ color, size }) => (
             <Zap size={size} color={color} fill={color === theme.coral ? theme.coral : "transparent"} />
           ),
