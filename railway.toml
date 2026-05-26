@@ -1,6 +1,10 @@
 [build]
-# Build from monorepo root to access both blink-server/ and legal/
-dockerfilePath = "blink-server/Dockerfile"
+# Build from monorepo root to access both blink-server/ and legal/.
+# Dockerfile lives at the repo root (moved from blink-server/ on 2026-05-26)
+# because Railway's service-level config sets dockerfilePath="/Dockerfile"
+# and was overriding the value below — keeping them in sync means deploys
+# work whichever setting wins.
+dockerfilePath = "Dockerfile"
 watchPatterns = ["blink-server/**", "legal/**"]
 
 [deploy]

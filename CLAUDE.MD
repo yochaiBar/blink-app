@@ -15,7 +15,7 @@
 - **Lint:** `npm run lint` in each directory
 - **Dev server:** `cd blink-server && npm run dev` (port 3000)
 - **Dev app:** `cd blink-app && npx expo start`
-- **Deploy:** `cd blink-server && railway up --service blink-api --detach`
+- **Deploy:** `railway up --service blink-api --detach` from the **repo root** (NOT `blink-server/`). `railway.toml` sets `dockerfilePath = "blink-server/Dockerfile"` and the Dockerfile uses `COPY blink-server/...` paths — deploying from inside `blink-server/` uploads the wrong build context and the build fails silently while Railway keeps serving the old container.
 
 ## Code Conventions
 - TypeScript strict mode in both packages
