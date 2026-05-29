@@ -38,6 +38,12 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+// ── Stub react-native-get-random-values (Node has crypto.getRandomValues natively) ──
+// The real package patches global crypto for React Native; in Jest's Node
+// environment crypto.getRandomValues already exists, so the polyfill would
+// duplicate-declare its IIFE-scoped `module` shim and crash. No-op the import.
+jest.mock('react-native-get-random-values', () => ({}));
+
 // ── Mock expo-haptics ─────────────────────────────────────────────
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
@@ -70,13 +76,10 @@ jest.mock('expo-constants', () => ({
   },
 }));
 
-// ── Mock @noble/ciphers/aes.js ───────────────────────────────────
-jest.mock('@noble/ciphers/aes.js', () => ({
-  gcm: jest.fn().mockReturnValue({
-    encrypt: jest.fn().mockReturnValue(new Uint8Array([1, 2, 3])),
-    decrypt: jest.fn().mockReturnValue(new Uint8Array([4, 5, 6])),
-  }),
-}));
+// (Legacy noble/ciphers mock removed 2026-05-29: the legacy
+// services/encryption.ts has no tests, and the new groupCrypto tests
+// require the real AES-GCM primitive to verify IV uniqueness and tamper
+// detection. If a test needs the mock back, scope it to that file.)
 
 // ── Mock expo-image ───────────────────────────────────────────────
 jest.mock('expo-image', () => ({

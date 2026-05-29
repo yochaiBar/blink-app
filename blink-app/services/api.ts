@@ -331,6 +331,30 @@ export function removeReactionApi(responseId: string, emoji: string): Promise<vo
   });
 }
 
+// ── Device public key (E2E photo flow, Phase 2) ──
+export interface RegisterDeviceKeyBody {
+  v: 1;
+  device_id: string;
+  x25519_public_key_b64: string;
+  attestation_b64: string;
+}
+
+export interface RegisterDeviceKeyResult {
+  v: 1;
+  device_id: string;
+  key_version: number;
+  registered_at: string;
+}
+
+export function registerDeviceKey(
+  body: RegisterDeviceKeyBody,
+): Promise<RegisterDeviceKeyResult> {
+  return api<RegisterDeviceKeyResult>('/device-keys', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 // ── Comments ──
 export interface CommentItem {
   id: string;

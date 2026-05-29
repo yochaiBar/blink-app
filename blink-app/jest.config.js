@@ -24,7 +24,9 @@ module.exports = {
     '^.+\\.jsx?$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(expo-.*|@expo/.*|react-native|@react-native|zustand)/)',
+    // @noble/* ships as ESM-only in v2.x; let Jest transform it so test files
+    // that exercise the real crypto can import it.
+    'node_modules/(?!(expo-.*|@expo/.*|react-native|@react-native|zustand|@noble)/)',
   ],
   collectCoverageFrom: [
     'utils/**/*.ts',
