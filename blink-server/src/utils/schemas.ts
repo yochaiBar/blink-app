@@ -120,6 +120,21 @@ export const createCommentSchema = z.object({
   parent_comment_id: z.string().uuid().optional(),
 });
 
+// ── Device public key schemas (E2E photo flow, Phase 2) ─────
+
+// base64(32 bytes) = 44 chars. Strict — anything else is a protocol error.
+const base64_32bytes = z
+  .string()
+  .length(44, 'Must be base64-encoded 32 bytes (44 chars)')
+  .regex(/^[A-Za-z0-9+/]{43}=$/, 'Must be valid base64');
+
+export const registerDeviceKeySchema = z.object({
+  v: z.literal(1),
+  device_id: z.string().uuid(),
+  x25519_public_key_b64: base64_32bytes,
+  attestation_b64: base64_32bytes,
+});
+
 // ── Moderation schemas ──────────────────────────────────────
 
 const contentTypeEnum = z.enum(['photo', 'user', 'group', 'challenge_response']);

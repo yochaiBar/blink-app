@@ -14,13 +14,40 @@ dotenv.config();
 
 import { env } from './config/env';
 
-// Initialize Sentry before anything else
+// Initialize Sentry before anything else.
+//
+// Privacy hardening (Plan C1): request bodies for sensitive routes contain
+// ciphertext or near-ciphertext metadata that must never reach Sentry's
+// servers. `sendDefaultPii: false` suppresses headers and IPs but does NOT
+// strip `event.request.data`. We add a `beforeSend` that nulls the body for
+// every event — broad-brush by design. If we later want body capture on
+// some endpoints, allowlist them explicitly here.
 if (env.SENTRY_DSN) {
   Sentry.init({
     dsn: env.SENTRY_DSN,
     environment: env.NODE_ENV,
     tracesSampleRate: 0.2,
     sendDefaultPii: false,
+    beforeSend(event) {
+      if (event.request) {
+        // Drop the body entirely — we never need it to diagnose, and on the
+        // photo relay path it carries ciphertext. Defense in depth even on
+        // routes that aren't crypto-sensitive.
+        event.request.data = undefined;
+        // Cookies are off via sendDefaultPii, but belt-and-suspenders.
+        event.request.cookies = undefined;
+      }
+      // Strip any breadcrumb that looks like an HTTP body capture.
+      if (event.breadcrumbs) {
+        event.breadcrumbs = event.breadcrumbs.map((b) => {
+          if (b.data && 'body' in b.data) {
+            return { ...b, data: { ...b.data, body: undefined } };
+          }
+          return b;
+        });
+      }
+      return event;
+    },
   });
 }
 
@@ -33,6 +60,7 @@ import spotlightRoutes from './routes/spotlight';
 import activityRoutes from './routes/activity';
 import notificationRoutes from './routes/notifications';
 import moderationRoutes from './routes/moderation';
+import deviceKeysRoutes from './routes/deviceKeys';
 import logger from './utils/logger';
 import { RATE_LIMITS, OTP_RATE_LIMIT_PER_HOUR } from './utils/constants';
 import { initSocket } from './socket';
@@ -55,7 +83,17 @@ app.use(cors({
   origin: corsOrigins || ['http://localhost:8081', 'http://localhost:19006'],
   credentials: true,
 }));
-app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+// Morgan hardening (Plan C2): the combined access log records the full
+// request line (path + IDs) and response size. For the photo flow routes
+// (Phase 3+) that's privacy-sensitive metadata in Railway log retention.
+// Skip morgan for those paths; they'll use a dedicated minimal logger that
+// records only privacy-safe metrics (recipient count, success/fail) without
+// IDs or sizes.
+app.use(
+  morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev', {
+    skip: (req) => req.path.startsWith('/api/photos'),
+  }),
+);
 app.use(express.json({ limit: '10mb' }));
 
 // ── Global rate limit ──────────────────────────────────────────
@@ -124,6 +162,7 @@ app.use('/api/spotlight', spotlightRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/moderation', moderationRoutes);
+app.use('/api/device-keys', deviceKeysRoutes);
 
 // ── Legal pages ──────────────────────────────────────────────
 // Serve the legal HTML files at user-friendly URLs
