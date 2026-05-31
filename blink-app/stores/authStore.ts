@@ -13,8 +13,24 @@ interface User {
   bio: string | null;
 }
 
+// Server-controlled feature flags returned from /auth/me. Read per-request
+// on the server so ops can hot-rollback without forcing a client update;
+// see blink-server/src/routes/auth.ts getFeatureFlags().
+export interface FeatureFlags {
+  photo_v2: boolean;
+}
+
+const DEFAULT_FLAGS: FeatureFlags = {
+  // Default to FALSE app-side: if /auth/me hasn't returned flags yet (or
+  // the server doesn't speak v2), the app stays on the v1 photo path
+  // until the server explicitly opts in. Safer fallback than defaulting
+  // to true and getting "photo arriving" placeholders that never resolve.
+  photo_v2: false,
+};
+
 interface AuthState {
   user: User | null;
+  featureFlags: FeatureFlags;
   isLoading: boolean;
   isAuthenticated: boolean;
   requestOtp: (phone: string) => Promise<void>;
@@ -28,6 +44,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
+  featureFlags: DEFAULT_FLAGS,
   isLoading: true,
   isAuthenticated: false,
 
@@ -50,13 +67,31 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (Platform.OS !== 'web') {
       sendPushTokenToServer();
     }
+
+    // After auth, hit /auth/me to pull the server-side feature_flags.
+    // /verify-otp returns only the user shape; flags live on /me.
+    api<User & { feature_flags?: FeatureFlags }>('/auth/me')
+      .then((me) => {
+        if (me.feature_flags) {
+          set({ featureFlags: { ...DEFAULT_FLAGS, ...me.feature_flags } });
+        }
+      })
+      .catch(() => undefined);
   },
 
   restoreSession: async () => {
     try {
       await loadToken();
-      const user = await api<User>('/auth/me');
-      set({ user, isAuthenticated: true, isLoading: false });
+      const me = await api<User & { feature_flags?: FeatureFlags }>('/auth/me');
+      const { feature_flags, ...user } = me;
+      set({
+        user,
+        featureFlags: feature_flags
+          ? { ...DEFAULT_FLAGS, ...feature_flags }
+          : DEFAULT_FLAGS,
+        isAuthenticated: true,
+        isLoading: false,
+      });
     } catch {
       // Session restore failed (expired token, network error) -- treat as logged out
       set({ isAuthenticated: false, isLoading: false });
@@ -67,7 +102,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await clearTokens();
     await clearEncryptionData();
     await useOnboardingStore.getState().reset();
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, featureFlags: DEFAULT_FLAGS, isAuthenticated: false });
   },
 
   updateName: (name: string) => {

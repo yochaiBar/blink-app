@@ -12,6 +12,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Lock, Zap, Star, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { useQuery } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
@@ -19,6 +20,7 @@ import { Globe2 } from 'lucide-react-native';
 import GlassCard from '@/components/ui/GlassCard';
 import AvatarRing from '@/components/ui/AvatarRing';
 import PhotoCommentsPreview from '@/components/PhotoCommentsPreview';
+import { getReceivedPhotoUri } from '@/services/photoStore';
 
 // ── Types ──
 
@@ -87,6 +89,19 @@ function PhotoFeedItem({ item }: { item: FeedItemData }) {
   // commentary aliases, future shapes), skip the comments section entirely.
   const responseId = item.id.startsWith('photo_') ? item.id.slice('photo_'.length) : null;
 
+  // E2E photo flow (Phase 5): resolve the image URI from the local sandbox
+  // first. v2 responses arrive via /api/photos/relay → photoStore; the feed
+  // item itself carries no S3 URL. v1 responses fall back to item.photoUrl
+  // (S3). useSocket invalidates ['localPhoto', response_id] when a photo
+  // lands; this query re-runs and the Image swaps the source.
+  const localPhotoQuery = useQuery({
+    queryKey: ['localPhoto', responseId],
+    queryFn: () => (responseId ? getReceivedPhotoUri(responseId) : null),
+    enabled: !!responseId,
+    staleTime: 30_000,
+  });
+  const effectivePhotoUri = localPhotoQuery.data ?? item.photoUrl;
+
   const handleReact = useCallback(
     (emoji: string) => {
       if (Platform.OS !== 'web') {
@@ -132,15 +147,22 @@ function PhotoFeedItem({ item }: { item: FeedItemData }) {
           </View>
         </View>
 
-        {/* Full-width photo */}
+        {/* Full-width photo — local sandbox first (v2), S3 fallback (v1).
+            Shows a skeleton when the photo hasn't arrived yet (e.g. a v2
+            response we just heard about via socket but the relay frame
+            hasn't landed). Server-side pickup_request will get it sent. */}
         <View style={styles.photoContainer}>
-          <Image
-            source={{ uri: item.photoUrl }}
-            style={styles.photo}
-            contentFit="cover"
-            transition={200}
-            recyclingKey={item.id}
-          />
+          {effectivePhotoUri ? (
+            <Image
+              source={{ uri: effectivePhotoUri }}
+              style={styles.photo}
+              contentFit="cover"
+              transition={200}
+              recyclingKey={item.id}
+            />
+          ) : (
+            <View style={[styles.photo, styles.photoPending]} />
+          )}
         </View>
 
         {/* Challenge prompt */}
@@ -785,6 +807,9 @@ const styles = StyleSheet.create({
   photo: {
     width: '100%',
     height: '100%',
+  },
+  photoPending: {
+    backgroundColor: theme.bgCardSolid,
   },
   challengePrompt: {
     ...typography.bodySmall,

@@ -150,6 +150,9 @@ export function useSocket() {
               // FeedItem / reveal screen re-reads from the local sandbox.
               queryClient.invalidateQueries({ queryKey: ['responses', payload.challenge_id] });
               queryClient.invalidateQueries({ queryKey: ['blinks-feed-v2'] });
+              // FeedItem's local-photo query (Phase 5) — swap from
+              // pending skeleton to the freshly-decrypted file URI.
+              queryClient.invalidateQueries({ queryKey: ['localPhoto', payload.response_id] });
             }
           } catch (err) {
             if (__DEV__) console.warn('[Socket] photo:incoming handler threw', err);
