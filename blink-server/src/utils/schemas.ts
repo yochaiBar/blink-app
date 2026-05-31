@@ -63,6 +63,10 @@ export const createGroupSchema = z.object({
 
 export const joinGroupSchema = z.object({
   invite_code: z.string().min(1, 'invite_code is required'),
+  // Optional during the v1/v2 migration: v1 clients won't send a device_id
+  // and skip the keyshare enqueue. v2 clients always include it so the
+  // server can route the courier handshake to the right device.
+  device_id: z.string().uuid().optional(),
 });
 
 // ── Challenge schemas ─────────────────────────────────────────
@@ -170,6 +174,30 @@ export const relayPhotoSchema = z.object({
   recipient_user_ids: z.array(z.string().uuid()).min(1).max(64),
   ciphertext_b64: base64_ciphertext,
   pickup_id: z.string().uuid().optional(),
+});
+
+// ── Keyshare schemas (E2E photo flow, Phase 4) ───────────────
+
+// 32-byte group key + 16-byte GCM tag = 48 bytes → base64 = 64 chars with no
+// padding (48 is divisible by 3). The envelope is opaque to the server but
+// we sanity-check its length so a malformed payload fails at Zod, not at
+// the joiner.
+const base64_48bytes = z
+  .string()
+  .length(64, 'Must be base64-encoded 48 bytes (64 chars)')
+  .regex(/^[A-Za-z0-9+/]{64}$/, 'Must be valid base64');
+
+export const keyshareDeliverSchema = z.object({
+  v: z.literal(1),
+  pending_join_id: z.string().uuid(),
+  group_id: z.string().uuid(),
+  from_user_id: z.string().uuid(),
+  from_device_id: z.string().uuid(),
+  ephemeral_public_key_b64: base64_32bytes,
+  iv_b64: base64_12bytes,
+  auth_tag_b64: base64_16bytes,
+  ciphertext_b64: base64_48bytes,
+  group_key_version: z.number().int().nonnegative(),
 });
 
 // ── Moderation schemas ──────────────────────────────────────

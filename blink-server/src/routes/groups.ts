@@ -7,7 +7,11 @@ import { createGroupSchema, joinGroupSchema } from '../utils/schemas';
 import logger from '../utils/logger';
 import crypto from 'crypto';
 import { createNotification } from '../utils/notifications';
-import { emitToGroup } from '../socket';
+import { emitToGroup, isUserOnline } from '../socket';
+import {
+  enqueueKeyshare,
+  dispatchPendingKeysharesForUser,
+} from '../services/keyshareHub';
 import { sendPushToUser } from '../services/pushNotifications';
 import { validateUuidParams } from '../middleware/validateParams';
 import { GroupRow, CountRow, UserDisplayNameRow } from '../types/db';
@@ -138,7 +142,10 @@ router.get('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthReques
 
 // POST /api/groups/join - Join via invite code
 router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { invite_code } = req.body;
+  const { invite_code, device_id: joinerDeviceId } = req.body as {
+    invite_code: string;
+    device_id?: string;
+  };
 
   // 3-group free tier limit
   const userGroups = await query<CountRow>(
@@ -211,6 +218,38 @@ router.post('/join', validateBody(joinGroupSchema), asyncHandler(async (req: Aut
       `${joinerName} joined ${g.name}`,
       { type: 'group_joined', groupId: g.id }
     ).catch(() => {});
+  }
+
+  // ── Enqueue the group-key courier handshake (Phase 4 of the E2E flow) ──
+  // Only relevant when v2 client sends device_id AND the joiner isn't the
+  // only member (a 1-member group has no one to courier from). The first
+  // online existing member is invited to courier via dispatchPendingKeyshares
+  // synchronously; if no one is online, the row waits in `pending` until
+  // someone connects and the socket onUserConnect listener fires.
+  if (joinerDeviceId && existingMembers.rows.length > 0) {
+    try {
+      await enqueueKeyshare({
+        groupId: g.id,
+        joinerUserId: req.userId!,
+        joinerDeviceId,
+      });
+      // Try every online existing member — atomic claim inside dispatch
+      // means only one will actually emit. Sequential await is fine; the
+      // typical group size is tiny.
+      for (const m of existingMembers.rows) {
+        if (await isUserOnline(m.user_id)) {
+          dispatchPendingKeysharesForUser(m.user_id).catch(() => undefined);
+        }
+      }
+    } catch (err) {
+      // Non-blocking — joiner still gets their group_members row. If the
+      // enqueue failed, the joiner won't receive an envelope and Phase 5
+      // UX will show "Waiting for a member to share access."
+      logger.error('keyshare enqueue failed', {
+        groupId: g.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   logger.info('User joined group', { groupId: g.id, userId: req.userId });

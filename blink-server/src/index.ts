@@ -62,8 +62,10 @@ import notificationRoutes from './routes/notifications';
 import moderationRoutes from './routes/moderation';
 import deviceKeysRoutes from './routes/deviceKeys';
 import photoRelayRoutes from './routes/photos/relay';
+import keyshareRoutes from './routes/keyshare';
 import logger from './utils/logger';
 import { registerRelayHub, expireStalePendingPickups } from './services/relayHub';
+import { registerKeyshareHub, expireStalePendingJoins } from './services/keyshareHub';
 import { RATE_LIMITS, OTP_RATE_LIMIT_PER_HOUR } from './utils/constants';
 import { initSocket } from './socket';
 import { startChallengeScheduler } from './jobs/challengeScheduler';
@@ -169,6 +171,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/device-keys', deviceKeysRoutes);
 app.use('/api/photos', photoRelayRoutes);
+app.use('/api/keyshare', keyshareRoutes);
 
 // ── Legal pages ──────────────────────────────────────────────
 // Serve the legal HTML files at user-friendly URLs
@@ -262,6 +265,8 @@ export const io = initSocket(server);
 // Wire the photo relay's pickup-on-connect listener. Must come after
 // initSocket so the socket module's onUserConnect registry exists.
 registerRelayHub();
+// Wire the group-key courier handshake's connect listener too.
+registerKeyshareHub();
 
 server.listen(PORT, () => {
   logger.info(`Blink server running on port ${PORT}`);
@@ -274,23 +279,30 @@ server.listen(PORT, () => {
   // Start AI-powered challenge scheduler
   startChallengeScheduler();
 
-  // Expire stale pending_photo_pickups every hour. The query is a single
-  // indexed UPDATE; cheap enough to run frequently. 7-day TTL is enforced
-  // inside expireStalePendingPickups.
-  const PICKUP_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+  // Expire stale pending_photo_pickups + pending_joins every hour. Both
+  // queries are single indexed UPDATEs; cheap enough to run frequently.
+  // 7-day TTLs are enforced inside the expire* helpers.
+  const PENDING_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
   setInterval(() => {
     expireStalePendingPickups()
       .then((count) => {
-        if (count > 0) {
-          logger.info('expired stale pending pickups', { count });
-        }
+        if (count > 0) logger.info('expired stale pending pickups', { count });
       })
       .catch((err: unknown) => {
         logger.error('pending pickup cleanup failed', {
           error: err instanceof Error ? err.message : String(err),
         });
       });
-  }, PICKUP_CLEANUP_INTERVAL_MS).unref();
+    expireStalePendingJoins()
+      .then((count) => {
+        if (count > 0) logger.info('expired stale pending joins', { count });
+      })
+      .catch((err: unknown) => {
+        logger.error('pending join cleanup failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+  }, PENDING_CLEANUP_INTERVAL_MS).unref();
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────
