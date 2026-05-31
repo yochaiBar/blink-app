@@ -66,6 +66,11 @@ export async function submitResponse(
   answerIndex: number | null,
   answerText: string | null,
   encryptionMetadata?: object,
+  // v2 photo flow: client says "I will relay the bytes peer-to-peer."
+  // No photo_url; recipients fetch from their local sandbox once the
+  // /api/photos/relay arrives. Either path sets has_photo=true; only
+  // pure answers (quiz / prompt with no media) stay has_photo=false.
+  explicitHasPhoto?: boolean,
 ): Promise<{ response: ChallengeResponseRow; challenge: ChallengeRow }> {
   // Fetch challenge
   const challenge = await query<ChallengeRow>(`SELECT * FROM challenges WHERE id = $1`, [challengeId]);
@@ -101,13 +106,15 @@ export async function submitResponse(
     await moderateResponseImage(photoUrl, userId, challengeId);
   }
 
-  // Insert response
+  // Insert response. has_photo = either v1 (photo_url set) or v2 (client
+  // told us so explicitly via the new flow).
   const responseType = (c.type === 'quiz' || c.type === 'prompt') ? 'answer' : 'photo';
+  const hasPhoto = explicitHasPhoto === true || photoUrl != null;
   const result = await query<ChallengeResponseRow>(
-    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, answer_index, answer_text, response_time_ms, encryption_metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, has_photo, answer_index, answer_text, response_time_ms, encryption_metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [challengeId, userId, responseType, photoUrl, answerIndex ?? null, answerText || null, responseTimeMs || null, encryptionMetadata ? JSON.stringify(encryptionMetadata) : null]
+    [challengeId, userId, responseType, photoUrl, hasPhoto, answerIndex ?? null, answerText || null, responseTimeMs || null, encryptionMetadata ? JSON.stringify(encryptionMetadata) : null]
   );
 
   return { response: result.rows[0], challenge: c };

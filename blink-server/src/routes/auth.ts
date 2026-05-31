@@ -215,6 +215,19 @@ router.post(
   }
 );
 
+// ── Feature flags ────────────────────────────────────────────────
+// Read per-request so ops can flip the value without redeploying
+// (Plan §"Feature-flag design"). Default true since the migration
+// (014_challenge_response_has_photo) has already shipped — once code
+// is in the air the only reason to flag-off photo_v2 is incident
+// response. Set PHOTO_V2_ENABLED=false on Railway to hot-rollback.
+function getFeatureFlags() {
+  const v2 = process.env.PHOTO_V2_ENABLED;
+  return {
+    photo_v2: v2 === undefined ? true : v2 !== 'false',
+  };
+}
+
 // ── GET /api/auth/me ─────────────────────────────────────────────
 router.get(
   '/me',
@@ -231,7 +244,10 @@ router.get(
       return;
     }
 
-    res.json(result.rows[0]);
+    res.json({
+      ...result.rows[0],
+      feature_flags: getFeatureFlags(),
+    });
   })
 );
 

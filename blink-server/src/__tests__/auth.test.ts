@@ -306,6 +306,36 @@ describe('GET /api/auth/me', () => {
     expect(res.body.display_name).toBe(user.display_name);
   });
 
+  it('returns feature_flags.photo_v2 (default true) — Phase 5 flag carrier', async () => {
+    const user = makeUser();
+    mockQuery.mockResolvedValueOnce(queryResult([user]));
+    delete process.env.PHOTO_V2_ENABLED;
+
+    const token = generateAccessToken(TEST_USER_ID);
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.feature_flags).toEqual({ photo_v2: true });
+  });
+
+  it('respects PHOTO_V2_ENABLED=false hot-rollback', async () => {
+    const user = makeUser();
+    mockQuery.mockResolvedValueOnce(queryResult([user]));
+    process.env.PHOTO_V2_ENABLED = 'false';
+
+    const token = generateAccessToken(TEST_USER_ID);
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.feature_flags.photo_v2).toBe(false);
+
+    delete process.env.PHOTO_V2_ENABLED;
+  });
+
   it('should return 401 when no Authorization header is provided', async () => {
     const res = await request(app).get('/api/auth/me');
 

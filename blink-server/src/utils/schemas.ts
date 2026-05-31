@@ -92,6 +92,11 @@ export const respondChallengeSchema = z.object({
     { message: 'photo_url must be from the allowed S3 bucket or a data URI' }
   ).optional(),
   photo_base64: z.string().max(5_000_000, 'Image data too large (max ~3.75MB)').optional(),
+  // v2 photo flow flag: client tells us "I will relay the actual bytes
+  // via /api/photos/relay separately." Server records the response row
+  // with has_photo=true but no photo_url. Recipients render from their
+  // local sandbox once the relay arrives.
+  has_photo: z.boolean().optional(),
   response_time_ms: z.number().int().positive().optional(),
   answer_index: z.number().int().min(0).optional(),
   answer_text: z.string().max(500).optional(),

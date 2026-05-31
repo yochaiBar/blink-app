@@ -417,6 +417,71 @@ describe('POST /api/challenges/:id/respond', () => {
 
     expect(res.status).toBe(400);
   });
+
+  it('accepts v2 body { has_photo: true } and writes has_photo=true with no photo_url (Phase 5)', async () => {
+    const challenge = makeChallenge({ triggered_by: TEST_USER_ID });
+    const response = makeChallengeResponse({ photo_url: null, has_photo: true });
+
+    mockQuery
+      .mockResolvedValueOnce(queryResult([challenge]))            // find challenge
+      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership
+      .mockResolvedValueOnce(queryResult([]))                      // no existing response
+      .mockResolvedValueOnce(queryResult([response]))              // INSERT
+      // fire-and-forget mocks; minimal so the request returns 201
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }]))
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))
+      .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }]))
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }]))
+      .mockResolvedValueOnce(queryResult([{ count: '2' }]))
+      .mockResolvedValueOnce(queryResult([{ count: '1' }]));
+
+    const res = await request(app)
+      .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ has_photo: true, response_time_ms: 2500 });
+
+    expect(res.status).toBe(201);
+
+    // Verify the INSERT was called with photo_url=null + has_photo=true.
+    const insertCall = mockQuery.mock.calls.find((c) =>
+      String(c[0]).match(/INSERT INTO challenge_responses/i),
+    );
+    expect(insertCall).toBeDefined();
+    // Position 3 is photo_url (4th param, $4); position 4 is has_photo (5th, $5).
+    expect(insertCall![1]![3]).toBeNull();
+    expect(insertCall![1]![4]).toBe(true);
+  });
+
+  it('v1 photo_url path still works and sets has_photo=true (backwards compat)', async () => {
+    const challenge = makeChallenge({ triggered_by: TEST_USER_ID });
+    const response = makeChallengeResponse();
+
+    mockQuery
+      .mockResolvedValueOnce(queryResult([challenge]))
+      .mockResolvedValueOnce(queryResult([makeMembership()]))
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([response]))
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }]))
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))
+      .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }]))
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }]))
+      .mockResolvedValueOnce(queryResult([{ count: '2' }]))
+      .mockResolvedValueOnce(queryResult([{ count: '1' }]));
+
+    const res = await request(app)
+      .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ photo_url: 'https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg' });
+
+    expect(res.status).toBe(201);
+    const insertCall = mockQuery.mock.calls.find((c) =>
+      String(c[0]).match(/INSERT INTO challenge_responses/i),
+    );
+    expect(insertCall).toBeDefined();
+    expect(insertCall![1]![3]).toBe('https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg');
+    // has_photo is implicit from photoUrl presence
+    expect(insertCall![1]![4]).toBe(true);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────
