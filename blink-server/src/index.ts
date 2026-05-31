@@ -61,7 +61,9 @@ import activityRoutes from './routes/activity';
 import notificationRoutes from './routes/notifications';
 import moderationRoutes from './routes/moderation';
 import deviceKeysRoutes from './routes/deviceKeys';
+import photoRelayRoutes from './routes/photos/relay';
 import logger from './utils/logger';
+import { registerRelayHub, expireStalePendingPickups } from './services/relayHub';
 import { RATE_LIMITS, OTP_RATE_LIMIT_PER_HOUR } from './utils/constants';
 import { initSocket } from './socket';
 import { startChallengeScheduler } from './jobs/challengeScheduler';
@@ -94,7 +96,10 @@ app.use(
     skip: (req) => req.path.startsWith('/api/photos'),
   }),
 );
-app.use(express.json({ limit: '10mb' }));
+// Body limit covers the photo relay path: base64-encoded ciphertext for
+// photos up to ~8 MB binary expands to ~10.7 MB; we leave headroom for
+// the surrounding JSON envelope and Zod gives a clean 400 above the limit.
+app.use(express.json({ limit: '15mb' }));
 
 // ── Global rate limit ──────────────────────────────────────────
 app.use(rateLimit({
@@ -163,6 +168,7 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/device-keys', deviceKeysRoutes);
+app.use('/api/photos', photoRelayRoutes);
 
 // ── Legal pages ──────────────────────────────────────────────
 // Serve the legal HTML files at user-friendly URLs
@@ -253,6 +259,10 @@ const PORT = env.PORT;
 const server = http.createServer(app);
 export const io = initSocket(server);
 
+// Wire the photo relay's pickup-on-connect listener. Must come after
+// initSocket so the socket module's onUserConnect registry exists.
+registerRelayHub();
+
 server.listen(PORT, () => {
   logger.info(`Blink server running on port ${PORT}`);
   logger.info(`Environment: ${env.NODE_ENV}`);
@@ -263,6 +273,24 @@ server.listen(PORT, () => {
 
   // Start AI-powered challenge scheduler
   startChallengeScheduler();
+
+  // Expire stale pending_photo_pickups every hour. The query is a single
+  // indexed UPDATE; cheap enough to run frequently. 7-day TTL is enforced
+  // inside expireStalePendingPickups.
+  const PICKUP_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+  setInterval(() => {
+    expireStalePendingPickups()
+      .then((count) => {
+        if (count > 0) {
+          logger.info('expired stale pending pickups', { count });
+        }
+      })
+      .catch((err: unknown) => {
+        logger.error('pending pickup cleanup failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+  }, PICKUP_CLEANUP_INTERVAL_MS).unref();
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────

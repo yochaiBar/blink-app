@@ -135,6 +135,43 @@ export const registerDeviceKeySchema = z.object({
   attestation_b64: base64_32bytes,
 });
 
+// ── Photo relay schemas (E2E photo flow, Phase 3) ────────────
+
+// IV is 12 bytes for GCM → base64 = 16 chars with NO padding
+// (12 is divisible by 3, so the encoding ends cleanly).
+const base64_12bytes = z
+  .string()
+  .length(16, 'Must be base64-encoded 12 bytes (16 chars)')
+  .regex(/^[A-Za-z0-9+/]{16}$/, 'Must be valid base64');
+
+// GCM auth tag is 16 bytes → base64 = 24 chars.
+const base64_16bytes = z
+  .string()
+  .length(24, 'Must be base64-encoded 16 bytes (24 chars)')
+  .regex(/^[A-Za-z0-9+/]{22}==$/, 'Must be valid base64');
+
+// Generic base64 string for the ciphertext blob — bounded so we reject a
+// 50 MB body before the JSON parser melts. 12 MB base64 ≈ 9 MB binary, well
+// over a typical phone photo and matches the Socket.io maxHttpBufferSize.
+const base64_ciphertext = z
+  .string()
+  .min(1, 'ciphertext required')
+  .max(12 * 1024 * 1024, 'ciphertext exceeds size limit')
+  .regex(/^[A-Za-z0-9+/=]+$/, 'Must be valid base64');
+
+export const relayPhotoSchema = z.object({
+  v: z.literal(1),
+  group_id: z.string().uuid(),
+  challenge_id: z.string().uuid(),
+  response_id: z.string().uuid(),
+  sender_device_id: z.string().uuid(),
+  iv_b64: base64_12bytes,
+  auth_tag_b64: base64_16bytes,
+  recipient_user_ids: z.array(z.string().uuid()).min(1).max(64),
+  ciphertext_b64: base64_ciphertext,
+  pickup_id: z.string().uuid().optional(),
+});
+
 // ── Moderation schemas ──────────────────────────────────────
 
 const contentTypeEnum = z.enum(['photo', 'user', 'group', 'challenge_response']);

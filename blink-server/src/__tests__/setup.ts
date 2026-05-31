@@ -66,8 +66,17 @@ jest.mock('../config/sms', () => ({
 }));
 
 // ── Mock Socket.io ────────────────────────────────────────────────
+// Default mocks: pretend no users are online. Tests that need different
+// behavior (e.g. relayHub fan-out) override via mockResolvedValueOnce.
 jest.mock('../socket', () => ({
   emitToGroup: jest.fn(),
+  emitToUser: jest.fn(),
+  emitToUserDevice: jest.fn(),
+  isUserOnline: jest.fn().mockResolvedValue(false),
+  emitToUserWithAck: jest
+    .fn()
+    .mockResolvedValue({ acked: 0, nacked: 0, failed: 0 }),
+  onUserConnect: jest.fn(),
   initSocket: jest.fn().mockReturnValue({}),
   getIO: jest.fn().mockReturnValue(null),
 }));
