@@ -87,11 +87,13 @@ export const createChallengeSchema = z.object({
 );
 
 export const respondChallengeSchema = z.object({
+  // v1 photo_url accepted only for backwards compat during the v2 cutover.
+  // New v1 traffic gets HTTP 426 from /upload/* so this branch is dead in
+  // practice; we'll drop the field entirely once telemetry confirms it.
   photo_url: z.string().url().refine(
     (url) => isS3Url(url) || url.startsWith('data:image/'),
     { message: 'photo_url must be from the allowed S3 bucket or a data URI' }
   ).optional(),
-  photo_base64: z.string().max(5_000_000, 'Image data too large (max ~3.75MB)').optional(),
   // v2 photo flow flag: client tells us "I will relay the actual bytes
   // via /api/photos/relay separately." Server records the response row
   // with has_photo=true but no photo_url. Recipients render from their
@@ -100,13 +102,6 @@ export const respondChallengeSchema = z.object({
   response_time_ms: z.number().int().positive().optional(),
   answer_index: z.number().int().min(0).optional(),
   answer_text: z.string().max(500).optional(),
-  encryption_metadata: z.object({
-    v: z.number(),
-    alg: z.string(),
-    iv: z.string(),
-    tag: z.string(),
-    key_enc: z.string(),
-  }).optional(),
 });
 
 // ── Reaction schemas ─────────────────────────────────────────
@@ -234,15 +229,5 @@ export const pushTokenSchema = z.object({
     ),
 });
 
-// ── Upload schemas ──────────────────────────────────────────
-
-export const presignUploadSchema = z.object({
-  groupId: z.string().uuid('Invalid group ID'),
-  challengeId: z.string().uuid('Invalid challenge ID'),
-});
-
-export const encryptedUploadSchema = z.object({
-  image_base64: z.string().max(7_000_000, 'Image data too large (max ~5MB after base64 encoding)'),
-  groupId: z.string().uuid('Invalid group ID'),
-  challengeId: z.string().uuid('Invalid challenge ID'),
-});
+// (Legacy upload schemas removed in Phase 6 alongside the routes that
+// consumed them. The v2 photo flow uses relayPhotoSchema above.)

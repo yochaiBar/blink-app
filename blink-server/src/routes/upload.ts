@@ -1,174 +1,45 @@
 import { Router, Response } from 'express';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { validateBody } from '../middleware/validate';
-import { presignUploadSchema, encryptedUploadSchema } from '../utils/schemas';
 import logger from '../utils/logger';
-import { PRESIGNED_URL_EXPIRY_SECONDS } from '../utils/constants';
-import { isEncryptionEnabled, encryptPhoto } from '../services/encryptionService';
-import { moderateImageBuffer, logModerationResult } from '../services/contentModeration';
+
+// ─────────────────────────────────────────────────────────────────
+// LEGACY /api/upload/* — DEAD ROUTES
+//
+// The v1 photo flow (presigned S3 uploads + server-encrypted-blob
+// uploads + avatar presign) was retired in Phase 6 of the
+// no-server-photo-storage plan. The v2 flow uses
+// POST /api/photos/relay with bytes encrypted under a group key that
+// lives only on member devices; the server never holds plaintext OR
+// ciphertext.
+//
+// These routes remain ONLY to give old v1 app builds a clean
+// "please update" signal. They return HTTP 426 Upgrade Required so
+// the app can surface a forced-upgrade modal instead of a confusing
+// 404 or 500.
+//
+// Delete these stubs entirely once telemetry shows zero hits.
+// ─────────────────────────────────────────────────────────────────
 
 const router = Router();
-
 router.use(authenticate);
 
-// ── S3 configuration check at startup ────────────────────────────
-const AWS_REQUIRED_VARS = ['AWS_S3_BUCKET', 'AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'] as const;
-
-function checkAwsConfig(): string[] {
-  return AWS_REQUIRED_VARS.filter((key) => !process.env[key]);
-}
-
-const missingVars = checkAwsConfig();
-if (missingVars.length > 0) {
-  logger.warn(
-    `S3 upload disabled: missing environment variables: ${missingVars.join(', ')}. ` +
-    'Photo uploads will fall back to client-side base64 storage.'
-  );
-}
-
-// Lazy-init S3 client (only created when AWS env vars are present)
-let s3Client: S3Client | null = null;
-
-function getS3Client(): S3Client | null {
-  if (s3Client) return s3Client;
-  const { AWS_S3_BUCKET, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } = process.env;
-  if (!AWS_S3_BUCKET || !AWS_REGION || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) return null;
-  s3Client = new S3Client({
-    region: AWS_REGION,
-    credentials: { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY },
-  });
-  return s3Client;
-}
-
-// POST /api/upload/avatar-presign - Get a pre-signed S3 URL for avatar upload
-router.post('/avatar-presign', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const fileKey = `avatars/${req.userId}.jpg`;
-
-  const client = getS3Client();
-  const bucket = process.env.AWS_S3_BUCKET;
-  const region = process.env.AWS_REGION;
-
-  if (client && bucket && region) {
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: fileKey,
-      ContentType: 'image/jpeg',
-      Tagging: `userId=${req.userId}&type=avatar`,
-    });
-    const uploadUrl = await getSignedUrl(client, command, { expiresIn: PRESIGNED_URL_EXPIRY_SECONDS });
-    // Append cache-busting timestamp so CDN/client sees the new image
-    const publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${fileKey}?t=${Date.now()}`;
-
-    logger.info('Avatar presign URL generated (S3)', { fileKey, userId: req.userId });
-    res.json({ uploadUrl, fileKey, publicUrl, dev_mode: false });
-    return;
-  }
-
-  // Dev mode: no S3 configured -- client keeps the local URI
-  logger.warn('Avatar presign URL skipped: S3 not configured (dev mode)', { userId: req.userId });
-  res.json({ uploadUrl: null, fileKey: null, publicUrl: null, dev_mode: true });
-}));
-
-// POST /api/upload/presign - Get a pre-signed S3 URL
-router.post('/presign', validateBody(presignUploadSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { groupId, challengeId } = req.body;
-  const fileKey = `users/${req.userId}/groups/${groupId}/${challengeId}.jpg`;
-
-  const client = getS3Client();
-  const bucket = process.env.AWS_S3_BUCKET;
-  const region = process.env.AWS_REGION;
-
-  if (client && bucket && region) {
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: fileKey,
-      ContentType: 'image/jpeg',
-      Tagging: `userId=${req.userId}&groupId=${groupId}&challengeId=${challengeId}`,
-    });
-    const uploadUrl = await getSignedUrl(client, command, { expiresIn: PRESIGNED_URL_EXPIRY_SECONDS });
-    const publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${fileKey}`;
-
-    logger.info('Presign URL generated (S3)', { fileKey, userId: req.userId });
-    res.json({ uploadUrl, fileKey, publicUrl, dev_mode: false });
-    return;
-  }
-
-  // Dev mode: no S3 configured -- client falls back to base64
-  logger.warn('Presign URL skipped: S3 not configured (dev mode)', { userId: req.userId });
-  res.json({ uploadUrl: null, fileKey: null, publicUrl: null, dev_mode: true });
-}));
-
-// POST /api/upload/encrypted - Encrypt and upload a photo
-router.post('/encrypted', validateBody(encryptedUploadSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { image_base64, groupId, challengeId } = req.body;
-
-  // Encryption must be enabled
-  if (!isEncryptionEnabled()) {
-    res.status(400).json({ error: 'Encryption is not enabled. Use /upload/presign instead.' });
-    return;
-  }
-
-  // Decode base64 to buffer
-  const imageBuffer = Buffer.from(image_base64, 'base64');
-
-  // Validate decoded size (max 5MB)
-  const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-  if (imageBuffer.length > MAX_IMAGE_SIZE) {
-    res.status(400).json({ error: 'Image exceeds maximum size of 5MB' });
-    return;
-  }
-
-  // Content moderation on the plaintext image
-  const moderationResult = await moderateImageBuffer(imageBuffer);
-
-  // Log moderation result (fire-and-forget)
-  logModerationResult(req.userId!, `encrypted/${req.userId}/${groupId}/${challengeId}.enc`, moderationResult).catch(() => {});
-
-  if (!moderationResult.safe) {
-    logger.warn('Encrypted upload rejected by content moderation', {
+function upgradeRequired(routeName: string) {
+  return asyncHandler(async (req: AuthRequest, res: Response) => {
+    logger.info('legacy upload route hit (HTTP 426)', {
+      route: routeName,
       userId: req.userId,
-      groupId,
-      challengeId,
-      labels: moderationResult.labels,
     });
-    res.status(400).json({
-      error: 'Your photo was flagged by our content moderation system and cannot be posted. Please try a different photo.',
-      moderation_labels: moderationResult.labels,
+    res.status(426).json({
+      error:
+        'This app version is no longer supported. Please update to the latest version of Blink.',
+      upgrade_required: true,
     });
-    return;
-  }
+  });
+}
 
-  // Encrypt the photo
-  const { encryptedBuffer, metadata } = await encryptPhoto(imageBuffer, groupId);
-
-  const s3Key = `encrypted/${req.userId}/${groupId}/${challengeId}.enc`;
-
-  const client = getS3Client();
-  const bucket = process.env.AWS_S3_BUCKET;
-  const region = process.env.AWS_REGION;
-
-  if (client && bucket && region) {
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: s3Key,
-      Body: encryptedBuffer,
-      ContentType: 'application/octet-stream',
-      Tagging: `userId=${req.userId}&groupId=${groupId}&challengeId=${challengeId}&encrypted=true`,
-    });
-    await client.send(command);
-
-    const publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`;
-    logger.info('Encrypted photo uploaded to S3', { s3Key, userId: req.userId });
-    res.json({ photo_url: publicUrl, encryption_metadata: metadata, dev_mode: false });
-    return;
-  }
-
-  // Dev mode: no S3 configured
-  logger.warn('Encrypted upload: S3 not configured (dev mode)', { userId: req.userId });
-  res.json({ photo_url: null, encryption_metadata: metadata, dev_mode: true });
-}));
+router.post('/avatar-presign', upgradeRequired('avatar-presign'));
+router.post('/presign', upgradeRequired('presign'));
+router.post('/encrypted', upgradeRequired('encrypted'));
 
 export default router;

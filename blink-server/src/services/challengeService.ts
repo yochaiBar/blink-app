@@ -1,53 +1,25 @@
 import { query, withTransaction } from '../config/database';
 import logger from '../utils/logger';
 import { emitToGroup } from '../socket';
-import { moderateImage, deleteS3Object, extractS3Key, logModerationResult } from './contentModeration';
 import { commentOnResponses, AiPersonality } from './aiService';
 import { processSkipsForChallenge } from './streakService';
 import { sendPushToGroup } from './pushNotifications';
 import { ChallengeRow, GroupMemberRow, ChallengeResponseRow, CountRow } from '../types/db';
 
-/** Error thrown when content moderation rejects an image */
+/**
+ * Legacy moderation error type — retained so existing test fixtures and any
+ * remaining `instanceof ModerationError` checks compile. Server-side image
+ * moderation is gone (Phase 6: photos no longer reach the server). Future
+ * cleanup can drop this class entirely once all references are gone.
+ */
 export class ModerationError extends Error {
   labels: string[];
   confidence: number | undefined;
   constructor(labels: string[], confidence: number | undefined) {
-    super('Your photo was flagged by our content moderation system and cannot be posted. Please try a different photo.');
+    super('Your photo was flagged. Please try a different photo.');
     this.name = 'ModerationError';
     this.labels = labels;
     this.confidence = confidence;
-  }
-}
-
-/**
- * Moderate an uploaded image (S3 only). Returns true if safe or not an S3 image.
- * Throws ModerationError if the image is rejected.
- */
-export async function moderateResponseImage(
-  photoUrl: string,
-  userId: string,
-  challengeId: string
-): Promise<void> {
-  const s3Key = extractS3Key(photoUrl);
-  if (!s3Key) return; // not an S3 image, skip moderation
-
-  const moderationResult = await moderateImage(s3Key);
-
-  // Log every moderation check (async, fire-and-forget)
-  logModerationResult(userId, s3Key, moderationResult).catch(() => {});
-
-  if (!moderationResult.safe) {
-    // Delete the offending image from S3
-    await deleteS3Object(s3Key);
-
-    logger.warn('Challenge response rejected by content moderation', {
-      challengeId,
-      userId,
-      labels: moderationResult.labels,
-      confidence: moderationResult.confidence,
-    });
-
-    throw new ModerationError(moderationResult.labels, moderationResult.confidence);
   }
 }
 
@@ -65,7 +37,6 @@ export async function submitResponse(
   responseTimeMs: number | null,
   answerIndex: number | null,
   answerText: string | null,
-  encryptionMetadata?: object,
   // v2 photo flow: client says "I will relay the bytes peer-to-peer."
   // No photo_url; recipients fetch from their local sandbox once the
   // /api/photos/relay arrives. Either path sets has_photo=true; only
@@ -101,20 +72,18 @@ export async function submitResponse(
     throw Object.assign(new Error('Already responded'), { statusCode: 400 });
   }
 
-  // Content moderation for S3 images
-  if (photoUrl) {
-    await moderateResponseImage(photoUrl, userId, challengeId);
-  }
+  // (Phase 6: no server-side moderation — photos no longer reach the server.
+  // Reporting + block-list remain as the user-driven safety surface.)
 
-  // Insert response. has_photo = either v1 (photo_url set) or v2 (client
-  // told us so explicitly via the new flow).
+  // Insert response. has_photo = either v1 (photo_url set, legacy clients
+  // before HTTP 426 cutover) or v2 (client signaled explicitly).
   const responseType = (c.type === 'quiz' || c.type === 'prompt') ? 'answer' : 'photo';
   const hasPhoto = explicitHasPhoto === true || photoUrl != null;
   const result = await query<ChallengeResponseRow>(
-    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, has_photo, answer_index, answer_text, response_time_ms, encryption_metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, has_photo, answer_index, answer_text, response_time_ms)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [challengeId, userId, responseType, photoUrl, hasPhoto, answerIndex ?? null, answerText || null, responseTimeMs || null, encryptionMetadata ? JSON.stringify(encryptionMetadata) : null]
+    [challengeId, userId, responseType, photoUrl, hasPhoto, answerIndex ?? null, answerText || null, responseTimeMs || null]
   );
 
   return { response: result.rows[0], challenge: c };

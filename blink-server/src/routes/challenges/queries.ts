@@ -37,7 +37,6 @@ interface ResponseWithUserRow {
   answer_text: string | null;
   responded_at: Date;
   response_time_ms: number | null;
-  encryption_metadata: object | null;
   display_name: string;
   avatar_url: string | null;
 }
@@ -354,7 +353,6 @@ router.get('/:id/reveal', validateUuidParams('id'), asyncHandler(async (req: Aut
     answerIndex: r.answer_index,
     answerText: r.answer_text,
     responseTimeMs: r.response_time_ms,
-    encryptionMetadata: r.encryption_metadata,
     respondedAt: r.responded_at,
     reactions: reactionsMap[r.id] || [],
   }));
@@ -436,13 +434,13 @@ router.get('/groups/:groupId/photos', validateUuidParams('groupId'), asyncHandle
   }
 
   const result = await query(
-    `SELECT cr.id, cr.challenge_id, cr.photo_url, cr.responded_at, cr.encryption_metadata,
+    `SELECT cr.id, cr.challenge_id, cr.photo_url, cr.has_photo, cr.responded_at,
        c.prompt_text as prompt, c.type as challenge_type,
        COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
      FROM challenge_responses cr
      JOIN challenges c ON c.id = cr.challenge_id
      JOIN users u ON u.id = cr.user_id
-     WHERE c.group_id = $1 AND cr.photo_url IS NOT NULL
+     WHERE c.group_id = $1 AND cr.has_photo = TRUE
      ORDER BY cr.responded_at DESC
      LIMIT $2`,
     [groupId, limit]

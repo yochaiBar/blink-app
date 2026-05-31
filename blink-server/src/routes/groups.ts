@@ -16,7 +16,9 @@ import { sendPushToUser } from '../services/pushNotifications';
 import { validateUuidParams } from '../middleware/validateParams';
 import { GroupRow, CountRow, UserDisplayNameRow } from '../types/db';
 import { verifyMembership, getGroupWithMembers, handleAdminLeave } from '../services/groupService';
-import { getOrCreateGroupKey, isEncryptionEnabled } from '../services/encryptionService';
+// (Legacy server-side group encryption removed in Phase 6 — group keys
+// now live exclusively on member devices and arrive via the courier
+// handshake at join.)
 import type { QueryResult } from 'pg';
 
 /** Minimal query interface compatible with both PoolClient and the pool query helper */
@@ -81,15 +83,8 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
     ? await withTransaction(createGroupQueries)
     : await createGroupQueries({ query });
 
-  // Pre-create encryption key for the group (fire-and-forget)
-  if (isEncryptionEnabled()) {
-    getOrCreateGroupKey(newGroup.id).catch((err: unknown) => {
-      logger.error('Failed to pre-create group encryption key', {
-        groupId: newGroup.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
-  }
+  // (Phase 6: no server-side key generation — creator's device generates
+  // the group key locally via useGroups → newGroupKey + storeGroupKey.)
 
   logger.info('Group created', { groupId: newGroup.id, userId: req.userId });
   res.status(201).json(newGroup);
@@ -313,28 +308,17 @@ router.delete('/:id', validateUuidParams('id'), asyncHandler(async (req: AuthReq
   res.json({ message: 'Group deleted successfully' });
 }));
 
-// ── GET /api/groups/:id/encryption-key -- Retrieve the group encryption key (member-only) ──
+// ── GET /api/groups/:id/encryption-key (legacy) ──
+// Returns HTTP 426 to surface a forced-upgrade modal in v1 clients.
+// The v2 photo flow uses client-side group keys delivered via the
+// courier handshake (Phase 4) — no server-side key retrieval exists.
 router.get('/:id/encryption-key', validateUuidParams('id'), asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = req.params.id as string;
-
-  if (!isEncryptionEnabled()) {
-    res.status(404).json({ error: 'Encryption is not enabled' });
-    return;
-  }
-
-  try {
-    await verifyMembership(req.userId!, id);
-  } catch (err: unknown) {
-    if (err instanceof Error && 'statusCode' in err) {
-      const statusErr = err as Error & { statusCode: number };
-      res.status(statusErr.statusCode).json({ error: statusErr.message });
-      return;
-    }
-    throw err;
-  }
-
-  const groupKey = await getOrCreateGroupKey(id);
-  res.json({ key: groupKey.toString('base64'), version: 1 });
+  logger.info('legacy encryption-key route hit (HTTP 426)', { userId: req.userId });
+  res.status(426).json({
+    error:
+      'This app version is no longer supported. Please update to the latest version of Blink.',
+    upgrade_required: true,
+  });
 }));
 
 // ── GET /api/groups/:id/stats -- Group statistics (top trigger, longest streak, fastest responder) ──

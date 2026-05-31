@@ -15,16 +15,16 @@ const router = Router();
 // ── POST respond to challenge ──
 router.post('/:id/respond', validateUuidParams('id'), validateBody(respondChallengeSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
-  const { photo_url, photo_base64, has_photo, response_time_ms, answer_index, answer_text, encryption_metadata } = req.body;
-  const resolvedPhotoUrl = photo_url || photo_base64 || null;
+  const { photo_url, has_photo, response_time_ms, answer_index, answer_text } = req.body;
 
-  // Submit the response (validates challenge, membership, duplicates, moderation).
+  // Submit the response (validates challenge, membership, duplicates).
   // has_photo carries the v2 client's signal that bytes will arrive via
   // /api/photos/relay separately — the response row goes in with no URL.
+  // photo_url is kept only for v1 backwards compat during the cutover.
   let response, challenge;
   try {
     ({ response, challenge } = await submitResponse(
-      id, req.userId!, resolvedPhotoUrl, response_time_ms || null, answer_index ?? null, answer_text || null, encryption_metadata, has_photo
+      id, req.userId!, photo_url || null, response_time_ms || null, answer_index ?? null, answer_text || null, has_photo
     ));
   } catch (err: unknown) {
     if (err instanceof ModerationError) {

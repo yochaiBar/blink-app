@@ -68,20 +68,14 @@ export interface ChallengeResponseRow {
   challenge_id: string;
   user_id: string;
   response_type: string;
+  /** v1 only; null for v2 (Phase 6 cutover). Column itself gets dropped in migration 015. */
   photo_url: string | null;
+  /** True for both v1 (had photo_url) and v2 (relay flow). Added migration 014. */
+  has_photo: boolean;
   answer_index: number | null;
   answer_text: string | null;
   responded_at: Date;
   response_time_ms: number | null;
-  encryption_metadata: EncryptionMetadata | null;
-}
-
-export interface EncryptionMetadata {
-  v: number;
-  alg: string;
-  iv: string;
-  tag: string;
-  key_enc: string;
 }
 
 export interface GroupEncryptionKeyRow {
