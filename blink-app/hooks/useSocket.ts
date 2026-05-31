@@ -4,6 +4,12 @@ import { useAuthStore } from '@/stores/authStore';
 import { connectSocket, disconnectSocket, joinGroups, getSocket } from '@/services/socket';
 import { api } from '@/services/api';
 import { playChallengeRing } from '@/utils/challengeSound';
+import { getOrCreateDeviceKey } from '@/services/groupCrypto';
+import { receivePhoto, respondToPickup } from '@/services/photoTransfer';
+import type {
+  IncomingPhotoEnvelope,
+  PhotoPickupRequest,
+} from '@/shared/photoProtocol';
 
 interface ChallengeStartedPayload {
   id: string;
@@ -107,6 +113,58 @@ export function useSocket() {
         if (__DEV__) console.log('[Socket] comment:deleted', data);
         queryClient.invalidateQueries({ queryKey: ['comments', data.response_id] });
       });
+
+      // ── E2E photo flow (Phase 3) ─────────────────────────────
+      // Register this socket with our specific device_id so the server can
+      // target pickup_request to the device that holds the plaintext.
+      getOrCreateDeviceKey()
+        .then(({ device_id }) => socket.emit('register-device', device_id))
+        .catch(() => undefined);
+
+      // Incoming photo from a group member: decrypt, store, ACK.
+      // Server side uses emitWithAck so the third arg is the ACK callback —
+      // we call it with {ok: true} or {ok: false, error}.
+      socket.on(
+        'photo:incoming',
+        async (
+          payload: IncomingPhotoEnvelope & { ciphertext_b64: string },
+          ack: (response: { ok: boolean; error?: string }) => void,
+        ) => {
+          if (__DEV__) console.log('[Socket] photo:incoming', payload.response_id);
+          try {
+            const result = await receivePhoto(payload);
+            ack(result);
+            if (result.ok) {
+              // Invalidate any query that may show this photo so the
+              // FeedItem / reveal screen re-reads from the local sandbox.
+              queryClient.invalidateQueries({ queryKey: ['responses', payload.challenge_id] });
+              queryClient.invalidateQueries({ queryKey: ['blinks-feed-v2'] });
+            }
+          } catch (err) {
+            if (__DEV__) console.warn('[Socket] photo:incoming handler threw', err);
+            ack({ ok: false, error: 'BAD_PAYLOAD' });
+          }
+        },
+      );
+
+      // Server asks us (sender) to re-encrypt for a now-online recipient.
+      // Re-encrypt from our local plaintext cache and POST to /relay.
+      // If our cache has expired (TTL > 7d), respondToPickup returns null
+      // and the server's TTL job will eventually expire the pending row.
+      socket.on(
+        'photo:pickup_request',
+        async (payload: PhotoPickupRequest) => {
+          if (__DEV__) console.log('[Socket] photo:pickup_request', payload);
+          try {
+            await respondToPickup({
+              ...payload,
+              challengeId: payload.challenge_id,
+            });
+          } catch (err) {
+            if (__DEV__) console.warn('[Socket] pickup respond failed', err);
+          }
+        },
+      );
     }
 
     // Fetch user's groups and join the corresponding rooms

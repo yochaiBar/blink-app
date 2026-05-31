@@ -41,9 +41,9 @@ const DEVICE_SEED_KEY = 'blink.e2e.deviceSeed.v1';
 const DEVICE_ID_KEY = 'blink.e2e.deviceId.v1';
 const GROUP_KEY_PREFIX = 'blink.e2e.groupKey.v1.'; // suffixed with groupId
 
-const KEY_BYTES = 32; // both X25519 keys and AES-256 keys
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
+export const KEY_BYTES = 32; // both X25519 keys and AES-256 keys
+export const GCM_IV_BYTES = 12;
+export const GCM_TAG_BYTES = 16;
 
 // HKDF info strings — bind derivation context so the same shared secret
 // can't accidentally be reused across protocols.

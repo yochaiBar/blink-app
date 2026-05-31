@@ -81,19 +81,32 @@ export interface RelayPhotoMetadata {
   group_id: string;
   challenge_id: string;
   response_id: string;
+  // The originating device's UUID. Recorded on `pending_photo_pickups` so the
+  // server can later target pickup_request to this specific device (the one
+  // holding the plaintext locally).
+  sender_device_id: string;
   // Per-photo random IV (12 bytes for AES-GCM). MUST be freshly generated for
   // every encrypt call — never reused with the same group key (Plan H2 guard).
   iv_b64: string;
-  // GCM auth tag (16 bytes). Appended to ciphertext on the wire; carried
-  // separately here so the server can do length sanity checks without parsing
-  // ciphertext bytes.
+  // GCM auth tag (16 bytes). `@noble/ciphers`' AES-GCM appends the tag to
+  // ciphertext; the app slices it off and sends separately so the server can
+  // sanity-check sizes without parsing ciphertext bytes.
   auth_tag_b64: string;
-  // Bytes the server will see; sender promises this matches the request body
-  // length so the server can refuse oversized payloads early.
-  ciphertext_byte_length: number;
   // The recipient user IDs the sender expects to deliver to. Server intersects
-  // with group membership at fan-out time (defense in depth).
+  // with group membership and block-list at fan-out time (defense in depth).
   recipient_user_ids: string[];
+  // The encrypted bytes. Base64'd in JSON for simplicity in v1 — see Phase 3
+  // notes in the plan. Future optimization: multipart/form-data with raw bytes.
+  ciphertext_b64: string;
+  // OPTIONAL — present when this relay is fulfilling a pickup_request.
+  // Server uses it to ACK the corresponding pending_photo_pickups row.
+  pickup_id?: string;
+}
+
+export interface RelayPhotoResult {
+  v: 1;
+  delivered_user_ids: string[];
+  queued_user_ids: string[];
 }
 
 /**
@@ -144,14 +157,19 @@ export interface PhotoIncomingNack {
  *
  * Routed to the sender's originating device specifically (not any device of
  * the sender's account) — the originating device is the one that has the
- * plaintext cached locally.
+ * plaintext cached locally. The recipient's X25519 key is NOT included
+ * because photos are encrypted under the group key (which the recipient
+ * already has, by virtue of being a group member). The sender re-encrypts
+ * with a fresh IV using the same group key and POSTs to the relay with
+ * `recipient_user_ids: [recipient_user_id]`.
  */
 export interface PhotoPickupRequest {
   v: 1;
   response_id: string;
+  challenge_id: string;
+  group_id: string;
   recipient_user_id: string;
-  recipient_device_id: string;
-  recipient_x25519_public_key_b64: string;
+  pickup_id: string; // pending_photo_pickups.id — sender includes it back on the relay POST so server can mark it acked
 }
 
 // ── Group-key handshake (Phase 4, Q2=a) ─────────────────────────
