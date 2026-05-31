@@ -4,10 +4,21 @@ import { useAuthStore } from '@/stores/authStore';
 import { connectSocket, disconnectSocket, joinGroups, getSocket } from '@/services/socket';
 import { api } from '@/services/api';
 import { playChallengeRing } from '@/utils/challengeSound';
-import { getOrCreateDeviceKey } from '@/services/groupCrypto';
+import {
+  bytesToB64,
+  b64ToBytes,
+  courierEncryptGroupKey,
+  joinerDecryptGroupKey,
+  loadGroupKey,
+  storeGroupKey,
+  getOrCreateDeviceKey,
+} from '@/services/groupCrypto';
 import { receivePhoto, respondToPickup } from '@/services/photoTransfer';
+import { deliverKeyshare } from '@/services/api';
 import type {
   IncomingPhotoEnvelope,
+  KeyshareEnvelope,
+  KeyshareRequest,
   PhotoPickupRequest,
 } from '@/shared/photoProtocol';
 
@@ -165,6 +176,95 @@ export function useSocket() {
           }
         },
       );
+
+      // ── Group-key courier handshake (Phase 4) ───────────────
+      // Courier path: server asks us to share the group key with a joiner.
+      // Look up our local group key, encrypt to the joiner's public key,
+      // POST the opaque envelope to /api/keyshare/deliver. Server can't
+      // decrypt — it just routes to the joiner's device room.
+      socket.on('group:keyshare_request', async (payload: KeyshareRequest) => {
+        if (__DEV__) console.log('[Socket] group:keyshare_request', payload);
+        try {
+          const groupKey = await loadGroupKey(payload.group_id);
+          if (!groupKey) {
+            // We're a member but somehow have no group key — race with our
+            // own join? Best-effort: ignore. Another courier (or our own
+            // device on next launch) will pick this up.
+            if (__DEV__) {
+              console.warn('[Socket] keyshare_request but no local group key');
+            }
+            return;
+          }
+          const joinerPub = b64ToBytes(payload.joiner_x25519_public_key_b64);
+          const envelope = courierEncryptGroupKey(joinerPub, groupKey);
+          const { device_id: fromDeviceId } = await getOrCreateDeviceKey();
+          await deliverKeyshare({
+            v: 1,
+            pending_join_id: payload.pending_join_id,
+            group_id: payload.group_id,
+            from_user_id: user?.id ?? '',
+            from_device_id: fromDeviceId,
+            ephemeral_public_key_b64: bytesToB64(envelope.ephemeralPublicKey),
+            iv_b64: bytesToB64(envelope.iv),
+            auth_tag_b64: bytesToB64(
+              envelope.ciphertext.slice(envelope.ciphertext.length - 16),
+            ),
+            ciphertext_b64: bytesToB64(envelope.ciphertext),
+            group_key_version: 1,
+          });
+        } catch (err) {
+          if (__DEV__) console.warn('[Socket] keyshare_request failed', err);
+        }
+      });
+
+      // Joiner path: server delivered the encrypted group-key envelope.
+      // ECDH + decrypt with our static device key, store the group key
+      // locally. Idempotent: if we already have the key, validate the new
+      // one matches; otherwise newest wins per the key_version field on
+      // the envelope (Phase 5+ will surface UX when these differ).
+      socket.on(
+        'group:keyshare_envelope',
+        async (envelope: KeyshareEnvelope) => {
+          if (__DEV__) console.log('[Socket] group:keyshare_envelope', envelope.group_id);
+          try {
+            const device = await getOrCreateDeviceKey();
+            const ephemeral = b64ToBytes(envelope.ephemeral_public_key_b64);
+            const iv = b64ToBytes(envelope.iv_b64);
+            const ciphertext = b64ToBytes(envelope.ciphertext_b64);
+            const groupKey = joinerDecryptGroupKey(
+              device.privateScalar,
+              device.publicKey,
+              { ephemeralPublicKey: ephemeral, iv, ciphertext },
+            );
+            const existing = await loadGroupKey(envelope.group_id);
+            if (existing) {
+              // Reinstall race / duplicate envelope: accept only if it's
+              // the SAME key (idempotent). If different, refuse to overwrite
+              // — would silently brick all our existing decrypted photos.
+              const same =
+                existing.length === groupKey.length &&
+                existing.every((b, i) => b === groupKey[i]);
+              if (!same) {
+                if (__DEV__) {
+                  console.warn(
+                    '[Socket] keyshare_envelope conflicts with existing key; ignored',
+                  );
+                }
+                return;
+              }
+            }
+            await storeGroupKey(envelope.group_id, groupKey);
+            queryClient.invalidateQueries({ queryKey: ['groups'] });
+          } catch (err) {
+            if (__DEV__) console.warn('[Socket] keyshare_envelope decrypt failed', err);
+          }
+        },
+      );
+
+      // Loser of the courier race — server picked someone else. No-op.
+      socket.on('group:keyshare_cancelled', () => {
+        if (__DEV__) console.log('[Socket] group:keyshare_cancelled (no-op)');
+      });
     }
 
     // Fetch user's groups and join the corresponding rooms

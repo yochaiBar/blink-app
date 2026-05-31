@@ -8,6 +8,11 @@ import { useOnboardingStore } from '@/stores/onboardingStore';
 import { apiGroupListToGroup } from '@/utils/adapters';
 import { ApiGroupListItem } from '@/types/api';
 import { DEMO_GROUP, isDemoGroup } from '@/constants/demoData';
+import {
+  getOrCreateDeviceKey,
+  newGroupKey,
+  storeGroupKey,
+} from '@/services/groupCrypto';
 import { queryKeys } from '@/utils/queryKeys';
 
 export function useGroups() {
@@ -41,7 +46,7 @@ export function useGroups() {
   // ── Create group ──
   const groupMutation = useMutation({
     mutationFn: async (group: Group) => {
-      const result = await api('/groups', {
+      const result = await api<{ id: string }>('/groups', {
         method: 'POST',
         body: JSON.stringify({
           name: group.name,
@@ -51,6 +56,20 @@ export function useGroups() {
           ai_personality: group.aiPersonality ?? 'funny',
         }),
       });
+      // Group creator becomes the source of truth for the group key. No
+      // handshake needed — we ARE the only member. Subsequent joiners
+      // receive the key via the courier flow from our device.
+      try {
+        const key = newGroupKey();
+        await storeGroupKey(result.id, key);
+      } catch (err) {
+        // Non-blocking: the group exists; if local key storage failed,
+        // photo sending will surface "no group key" until we successfully
+        // re-store on next app launch (the key would be regenerated though
+        // — Phase 5 wiring will need a retry-or-rotate UX). For v1 this
+        // path is extremely unlikely (Keychain failure).
+        if (__DEV__) console.warn('[useGroups] group key store failed', err);
+      }
       return result;
     },
     onSuccess: () => {
@@ -73,9 +92,14 @@ export function useGroups() {
   const joinGroup = useCallback(
     async (code: string): Promise<{ success: boolean; groupId?: string; groupName?: string; message: string }> => {
       try {
+        // Include our device_id so the server can enqueue the courier
+        // handshake routed back to this specific device. Old clients
+        // omit it and the server skips the keyshare flow gracefully
+        // (Phase 5 will flip the v2 photo path on when the key arrives).
+        const { device_id } = await getOrCreateDeviceKey();
         const result = await api<{ id: string; name: string }>('/groups/join', {
           method: 'POST',
-          body: JSON.stringify({ invite_code: code }),
+          body: JSON.stringify({ invite_code: code, device_id }),
         });
         queryClient.invalidateQueries({ queryKey: queryKeys.groups.all });
         completeTourAction();

@@ -331,6 +331,34 @@ export function removeReactionApi(responseId: string, emoji: string): Promise<vo
   });
 }
 
+// ── Keyshare deliver (E2E photo flow, Phase 4) ──
+export interface KeyshareDeliverBody {
+  v: 1;
+  pending_join_id: string;
+  group_id: string;
+  from_user_id: string;
+  from_device_id: string;
+  ephemeral_public_key_b64: string;
+  iv_b64: string;
+  auth_tag_b64: string;
+  ciphertext_b64: string;
+  group_key_version: number;
+}
+
+export interface KeyshareDeliverResult {
+  v: 1;
+  delivered: boolean;
+}
+
+export function deliverKeyshare(
+  body: KeyshareDeliverBody,
+): Promise<KeyshareDeliverResult> {
+  return api<KeyshareDeliverResult>('/keyshare/deliver', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 // ── Photo relay (E2E photo flow, Phase 3) ──
 export interface RelayPhotoBody {
   v: 1;
