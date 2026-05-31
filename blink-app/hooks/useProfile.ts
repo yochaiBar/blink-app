@@ -1,19 +1,23 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { UserProfile } from '@/types';
-import { api, getUserStats, uploadAvatar } from '@/services/api';
+import { api, getUserStats } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { apiUserToProfile } from '@/utils/adapters';
 import { queryKeys } from '@/utils/queryKeys';
 
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
+// Empty avatar; AvatarRing falls back to initials. Avatar uploads removed
+// in Phase 6 alongside the rest of the AWS surface.
+const DEFAULT_AVATAR = '';
 
 export function useProfile(groupCount: number) {
   const authUser = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const queryClient = useQueryClient();
-  const [isUploading, setIsUploading] = useState(false);
+  // Avatar uploads removed in Phase 6 — kept for API compat with callers
+  // that still destructure `isUploading` from this hook. Always false.
+  const isUploading = false;
 
   const statsQuery = useQuery({
     queryKey: queryKeys.user.stats,
@@ -57,31 +61,10 @@ export function useProfile(groupCount: number) {
       if (updates.name !== undefined) payload.display_name = updates.name;
       if (updates.bio !== undefined) payload.bio = updates.bio;
 
-      // Handle avatar: upload to S3 if it is a local file URI, then send the S3 URL
-      if (updates.avatar !== undefined) {
-        let avatarUrl = updates.avatar;
-
-        // If the avatar is a local file URI (not already an http URL), upload it first
-        if (avatarUrl && !avatarUrl.startsWith('http')) {
-          // Optimistically show the local URI as the avatar while uploading
-          authStore.updateAvatar(avatarUrl);
-          setIsUploading(true);
-          try {
-            avatarUrl = await uploadAvatar(avatarUrl);
-          } catch (uploadErr) {
-            // Revert optimistic avatar on upload failure
-            authStore.updateAvatar(authUser?.avatar_url ?? '');
-            setIsUploading(false);
-            throw uploadErr;
-          }
-          setIsUploading(false);
-        }
-
-        // Only send avatar_url if it is a valid http URL (S3 or dev fallback)
-        if (avatarUrl && avatarUrl.startsWith('http')) {
-          payload.avatar_url = avatarUrl;
-        }
-      }
+      // Phase 6: avatar uploads removed. The Edit Profile screen no longer
+      // exposes an avatar picker; AvatarRing falls back to generated
+      // initials. If a caller still passes `updates.avatar` (legacy path),
+      // we silently ignore it rather than upload to a now-deleted endpoint.
 
       if (Object.keys(payload).length > 0) {
         const updatedUser = await api<{

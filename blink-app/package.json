@@ -14,7 +14,8 @@
     "test:watch": "jest --watch",
     "lint": "eslint app/ components/ services/ stores/ hooks/ utils/ --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "prebuild:check": "npm run typecheck && npm test",
+    "check:no-legacy-aws": "! grep -rEn --include='*.ts' --include='*.tsx' --exclude-dir=node_modules --exclude-dir=.expo '(uploadAvatar\\(|uploadPhotoEncrypted|useDecryptedPhoto|cacheDecryptedPhoto)' app/ components/ services/ stores/ hooks/ utils/ __tests__/ || (echo 'Legacy v1 photo / AWS reference detected (see Plans/No server photo storage Phase 6).' && exit 1)",
+    "prebuild:check": "npm run typecheck && npm test && npm run check:no-legacy-aws",
     "build:preview": "npm run prebuild:check && eas build --profile preview --platform all",
     "build:preview:ios": "npm run prebuild:check && eas build --profile preview --platform ios",
     "build:preview:android": "npm run prebuild:check && eas build --profile preview --platform android"

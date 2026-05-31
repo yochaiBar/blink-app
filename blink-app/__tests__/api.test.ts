@@ -30,7 +30,6 @@ import {
   blockUser,
   unblockUser,
   getBlockedUsers,
-  uploadPhoto,
   fetchComments,
   postComment,
   deleteComment,
@@ -503,64 +502,5 @@ describe('Moderation', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────
-// uploadPhoto()
-// ─────────────────────────────────────────────────────────────────
-describe('uploadPhoto()', () => {
-  beforeEach(async () => {
-    await clearTokens();
-  });
-
-  it('should return base64 URI in dev mode (no S3)', async () => {
-    const presignResponse = { uploadUrl: null, dev_mode: true };
-    mockFetch.mockResolvedValueOnce(mockResponse(200, presignResponse));
-
-    const base64Uri = 'data:image/jpeg;base64,/9j/4AAQ';
-    const result = await uploadPhoto(base64Uri, 'group-1', 'challenge-1');
-
-    expect(result).toBe(base64Uri);
-  });
-
-  it('should upload to S3 and return public URL in production mode', async () => {
-    const presignResponse = {
-      uploadUrl: 'https://bucket.s3.amazonaws.com/presigned-url',
-      fileKey: 'groups/g1/c1/p1/original.jpg',
-      publicUrl: 'https://bucket.s3.amazonaws.com/groups/g1/c1/p1/original.jpg',
-    };
-
-    // Presign response
-    mockFetch.mockResolvedValueOnce(mockResponse(200, presignResponse));
-    // S3 PUT upload
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {}, true));
-
-    const base64Uri = 'data:image/jpeg;base64,/9j/4AAQ';
-    const result = await uploadPhoto(base64Uri, 'group-1', 'challenge-1');
-
-    expect(result).toBe(presignResponse.publicUrl);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-
-    // Verify the S3 PUT call
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      2,
-      presignResponse.uploadUrl,
-      expect.objectContaining({
-        method: 'PUT',
-        headers: { 'Content-Type': 'image/jpeg' },
-      })
-    );
-  });
-
-  it('should throw error when S3 upload fails', async () => {
-    const presignResponse = {
-      uploadUrl: 'https://bucket.s3.amazonaws.com/presigned-url',
-      fileKey: 'key',
-      publicUrl: 'https://bucket.s3.amazonaws.com/key',
-    };
-
-    mockFetch.mockResolvedValueOnce(mockResponse(200, presignResponse));
-    mockFetch.mockResolvedValueOnce(mockResponse(403, {}, false));
-
-    const base64Uri = 'data:image/jpeg;base64,/9j/4AAQ';
-    await expect(uploadPhoto(base64Uri, 'g1', 'c1')).rejects.toThrow('S3 upload failed');
-  });
-});
+// (Legacy uploadPhoto() tests removed in Phase 6 alongside the helper.
+// The v2 photo flow is exercised by photoTransfer.test.ts.)

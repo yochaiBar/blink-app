@@ -119,8 +119,6 @@ export default React.memo(function SnapCard({ snap, isLocked, currentUserId, onR
           ) : (
             <EncryptedImage
               uri={snap.imageUrl}
-              encryptionMetadata={snap.encryptionMetadata}
-              groupId={snap.groupId}
               responseId={snap.id}
               style={styles.image}
               contentFit="cover"

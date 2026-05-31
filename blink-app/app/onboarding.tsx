@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
-import { api, uploadAvatar } from '@/services/api';
+import { api } from '@/services/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button } from '@/components/ui';
 
@@ -240,35 +240,18 @@ export default function OnboardingScreen() {
       }
 
       if (step === 'avatar') {
-        // No photo picked → skip cleanly to the app
-        if (!avatarUri) {
-          router.replace('/');
-          return;
-        }
-        setIsSubmitting(true);
-        // Optimistic: show the local URI immediately so the app loads with a face
-        updateAvatar(avatarUri);
-        try {
-          const publicUrl = await uploadAvatar(avatarUri);
-          if (publicUrl?.startsWith('http')) {
-            await api('/auth/profile', {
-              method: 'PATCH',
-              body: JSON.stringify({ avatar_url: publicUrl }),
-            });
-            updateAvatar(publicUrl);
-          }
-        } catch {
-          // Non-blocking — user can re-upload from Edit Profile later. Avatar shows as the
-          // local URI until they do (matches the dev-fallback behavior).
-        } finally {
-          setIsSubmitting(false);
-          router.replace('/');
-        }
+        // Phase 6: avatar uploads removed. Whether the user picked a
+        // photo or skipped, navigate straight to the app — AvatarRing
+        // falls back to generated initials. The step UI is kept for
+        // now to avoid churn in the onboarding flow; a follow-up will
+        // delete the step entirely.
+        router.replace('/');
+        return;
       }
     } finally {
       isProcessing.current = false;
     }
-  }, [step, phone, otp, name, avatarUri, countryCode, ageConfirmed, termsAccepted, animateTransition, requestOtp, verifyOtp, updateName, updateAvatar, router]);
+  }, [step, phone, otp, name, countryCode, ageConfirmed, termsAccepted, animateTransition, requestOtp, verifyOtp, updateName, router]);
 
   const handleOtpChange = useCallback((text: string, index: number) => {
     // Only allow digits

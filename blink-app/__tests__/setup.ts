@@ -44,6 +44,10 @@ jest.mock('expo-secure-store', () => ({
 // duplicate-declare its IIFE-scoped `module` shim and crash. No-op the import.
 jest.mock('react-native-get-random-values', () => ({}));
 
+// (expo-file-system/legacy intentionally NOT mocked here — photoStore +
+// photoTransfer tests provide their own in-memory FS stub. authStore
+// avoids pulling it in by lazy-requiring photoStore inside logout().)
+
 // ── Mock expo-haptics ─────────────────────────────────────────────
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),

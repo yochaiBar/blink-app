@@ -80,8 +80,6 @@ export default function PhotoTimeline({
           >
             <EncryptedImage
               uri={photo.photo_url}
-              encryptionMetadata={photo.encryption_metadata}
-              groupId={groupId}
               responseId={photo.id}
               style={styles.thumbImage}
               contentFit="cover"

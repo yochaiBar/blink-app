@@ -3,7 +3,10 @@ import { Platform } from 'react-native';
 import { api, setTokens, clearTokens, loadToken } from '@/services/api';
 import { sendPushTokenToServer } from '@/utils/notifications';
 import { useOnboardingStore } from '@/stores/onboardingStore';
-import { clearEncryptionData } from '@/services/encryption';
+import { clearDeviceKey } from '@/services/groupCrypto';
+// photoStore is lazy-required inside logout() — it imports
+// expo-file-system/legacy which needs the native module at runtime and
+// would otherwise force every consumer of authStore to mock the FS.
 
 interface User {
   id: string;
@@ -100,7 +103,20 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     await clearTokens();
-    await clearEncryptionData();
+    // E2E photo flow cleanup (Phase 6): nuke the device keypair AND every
+    // cached photo. Old group keys in SecureStore become orphaned (we don't
+    // index group IDs), but they're unreadable on next launch — a fresh
+    // device keypair + fresh server-side handshake produces new keys.
+    // Acceptable bounded leak for v1; can add a key index later if needed.
+    try {
+      // Lazy require so the module-level import doesn't drag
+      // expo-file-system into every test that touches authStore.
+      const { wipeAllPhotos } = await import('@/services/photoStore');
+      await Promise.all([clearDeviceKey(), wipeAllPhotos()]);
+    } catch {
+      // Non-blocking — logout should always succeed locally even if
+      // SecureStore / file deletion partially fails.
+    }
     await useOnboardingStore.getState().reset();
     set({ user: null, featureFlags: DEFAULT_FLAGS, isAuthenticated: false });
   },

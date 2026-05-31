@@ -5,7 +5,7 @@ import {
   readAsStringAsync,
   EncodingType,
 } from 'expo-file-system/legacy';
-import { api, uploadPhoto, uploadPhotoEncrypted } from '@/services/api';
+import { api } from '@/services/api';
 import { isDemoGroup } from '@/constants/demoData';
 import { ApiChallenge } from '@/types/api';
 import { queryKeys } from '@/utils/queryKeys';
@@ -17,23 +17,16 @@ import { putReceivedPhoto } from '@/services/photoStore';
 /**
  * Submit a snap response to the active challenge in `groupId`.
  *
- * Two photo flows live here side-by-side during the v1→v2 migration:
+ * v2-only as of Phase 6: bytes are encrypted on-device with the group
+ * key, POST /respond with { has_photo: true } records the response row,
+ * then sendPhoto fans the ciphertext via /api/photos/relay to other
+ * members. Server never sees plaintext or key material.
  *
- *   v1 (legacy): upload encrypted bytes to S3 via /upload/encrypted,
- *   then POST /respond with the resulting photo_url. Server holds the
- *   ciphertext on disk; server-held master key wraps the per-group key.
- *
- *   v2 (no-server-storage): POST /respond with { has_photo: true } first
- *   to get a response_id, then peer-to-peer encrypt+relay the bytes via
- *   /api/photos/relay using the group key that lives only on member
- *   devices. Server never sees plaintext OR group-key material.
- *
- * Branch is controlled by `feature_flags.photo_v2` returned from /auth/me.
- * Defaults to v1 if the flag is missing (e.g. older server).
+ * The v1 S3 upload path was removed in Phase 6; old v1 clients hitting
+ * /upload/* get HTTP 426 and a forced-upgrade modal.
  */
 export function useSubmitSnap() {
   const queryClient = useQueryClient();
-  const photoV2 = useAuthStore((s) => s.featureFlags.photo_v2);
   const selfUserId = useAuthStore((s) => s.user?.id);
 
   const snapMutation = useMutation({
@@ -55,7 +48,7 @@ export function useSubmitSnap() {
         return;
       }
 
-      if (photoV2 && imageUri) {
+      if (imageUri) {
         return submitV2({
           groupId,
           challengeId,
@@ -64,26 +57,11 @@ export function useSubmitSnap() {
         });
       }
 
-      // ── v1 path (legacy) ──────────────────────────────────────
-      const body: Record<string, unknown> = {};
-      if (imageUri) {
-        try {
-          const encResult = await uploadPhotoEncrypted(imageUri, groupId, challengeId);
-          body.photo_url = encResult.photo_url ?? imageUri;
-          if (encResult.encryption_metadata) {
-            body.encryption_metadata = encResult.encryption_metadata;
-          }
-        } catch {
-          // Fall back to regular upload
-          const photoUrl = await uploadPhoto(imageUri, groupId, challengeId);
-          body.photo_url = photoUrl;
-        }
-      }
-      body.response_time_ms = 5000;
-
+      // No image (shouldn't happen on the snap path, but defensive) —
+      // record an empty response so streak / completion logic fires.
       return api(`/challenges/${challengeId}/respond`, {
         method: 'POST',
-        body: JSON.stringify(body),
+        body: JSON.stringify({ response_time_ms: 5000 }),
       });
     },
     onSuccess: (data) => {

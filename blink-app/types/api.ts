@@ -73,14 +73,16 @@ export interface ApiChallengeResponse {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  /** v1 only; null for v2 responses (Phase 6 cutover). Dropped in migration 015. */
   photo_url: string | null;
+  /** True for both v1 + v2 photo responses. Added in migration 014. */
+  has_photo?: boolean;
   answer_index: number | null;
   answer_text?: string | null;
   response_time_ms: number | null;
   responded_at: string;
   created_at: string;
   reactions?: ApiReaction[];
-  encryption_metadata?: EncryptionMetadata | null;
 }
 
 export interface EncryptionMetadata {

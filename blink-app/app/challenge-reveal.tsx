@@ -599,11 +599,9 @@ export default function ChallengeRevealScreen() {
       >
         <View style={styles.photoContainer}>
           {/* Photo -- render for any non-empty photo_url including file:// and data: URIs */}
-          {response.photo_url ? (
+          {response.photo_url || response.has_photo ? (
             <EncryptedImage
               uri={response.photo_url}
-              encryptionMetadata={response.encryption_metadata}
-              groupId={groupId}
               responseId={response.id}
               style={styles.photo}
               contentFit="cover"

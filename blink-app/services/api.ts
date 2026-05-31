@@ -5,11 +5,6 @@ import type { ApiSpotlight } from '@/types/api';
 
 // ── Response types for API functions ──
 
-interface PresignResponse {
-  uploadUrl?: string;
-  publicUrl: string;
-}
-
 interface UserStatsResponse {
   total_snaps: number;
   longest_streak: number;
@@ -161,126 +156,9 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   return JSON.parse(text) as T;
 }
 
-// ── Upload ──
-export async function uploadPhoto(imageUri: string, groupId: string, challengeId: string): Promise<string> {
-  const presign = await api<PresignResponse>('/upload/presign', {
-    method: 'POST',
-    body: JSON.stringify({ groupId, challengeId }),
-  });
-
-  // Dev mode (no S3) — return as-is
-  if (!presign.uploadUrl) return imageUri;
-
-  // Convert image URI to blob for S3 upload
-  let blob: Blob;
-  try {
-    if (imageUri.startsWith('data:')) {
-      // Base64 data URI — decode to blob
-      const base64Data = imageUri.replace(/^data:image\/\w+;base64,/, '');
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      blob = new Blob([bytes], { type: 'image/jpeg' });
-    } else {
-      // File URI (file://) — fetch as blob (works in React Native)
-      const fileRes = await fetch(imageUri);
-      blob = await fileRes.blob();
-    }
-  } catch (err) {
-    throw new Error(`Failed to read photo: ${err instanceof Error ? err.message : 'unknown error'}`);
-  }
-
-  // Upload directly to S3 via presigned PUT URL
-  const uploadRes = await fetch(presign.uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'image/jpeg' },
-    body: blob,
-  });
-
-  if (!uploadRes.ok) {
-    throw new Error(`S3 upload failed: ${uploadRes.status}`);
-  }
-
-  return presign.publicUrl;
-}
-
-// ── Avatar Upload ──
-export async function uploadAvatar(imageUri: string): Promise<string> {
-  const presign = await api<PresignResponse>('/upload/avatar-presign', {
-    method: 'POST',
-  });
-
-  // Dev mode (no S3) -- return the local URI as-is
-  if (!presign.uploadUrl) return imageUri;
-
-  // Convert image URI to blob for S3 upload
-  let blob: Blob;
-  try {
-    if (imageUri.startsWith('data:')) {
-      const base64Data = imageUri.replace(/^data:image\/\w+;base64,/, '');
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      blob = new Blob([bytes], { type: 'image/jpeg' });
-    } else {
-      const fileRes = await fetch(imageUri);
-      blob = await fileRes.blob();
-    }
-  } catch (err) {
-    throw new Error(`Failed to read avatar photo: ${err instanceof Error ? err.message : 'unknown error'}`);
-  }
-
-  const uploadRes = await fetch(presign.uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'image/jpeg' },
-    body: blob,
-  });
-
-  if (!uploadRes.ok) {
-    throw new Error(`Avatar S3 upload failed: ${uploadRes.status}`);
-  }
-
-  return presign.publicUrl;
-}
-
-// ── Encrypted Upload ──
-interface EncryptedUploadResponse {
-  photo_url: string | null;
-  encryption_metadata: { v: number; alg: string; iv: string; tag: string; key_enc: string } | null;
-  dev_mode: boolean;
-}
-
-export async function uploadPhotoEncrypted(
-  imageUri: string,
-  groupId: string,
-  challengeId: string,
-): Promise<EncryptedUploadResponse> {
-  let base64: string;
-  if (imageUri.startsWith('data:')) {
-    base64 = imageUri.replace(/^data:image\/\w+;base64,/, '');
-  } else {
-    const response = await fetch(imageUri);
-    const blob = await response.blob();
-    base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        resolve(result.replace(/^data:.*?;base64,/, ''));
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  return api<EncryptedUploadResponse>('/upload/encrypted', {
-    method: 'POST',
-    body: JSON.stringify({ image_base64: base64, groupId, challengeId }),
-  });
-}
+// (Legacy v1 upload helpers removed in Phase 6. The v2 photo flow uses
+// relayPhoto() below + photoTransfer. Avatars are no longer uploaded
+// at all — users get generated initials via AvatarRing's fallback.)
 
 // ── User Stats ──
 export async function getUserStats(): Promise<UserStatsResponse> {
