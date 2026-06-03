@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Group } from '@/types';
@@ -10,6 +10,7 @@ import { ApiGroupListItem } from '@/types/api';
 import { DEMO_GROUP, isDemoGroup } from '@/constants/demoData';
 import {
   getOrCreateDeviceKey,
+  loadGroupKey,
   newGroupKey,
   storeGroupKey,
 } from '@/services/groupCrypto';
@@ -35,6 +36,36 @@ export function useGroups() {
   const realGroups = groupsQuery.data ?? [];
   const querySettled = groupsQuery.isFetched || groupsQuery.isError;
   const shouldShowDemoGroup = querySettled && realGroups.length === 0 && !tourComplete;
+
+  // ── Solo-group auto-key-gen (E2E photo flow, Phase 6+) ──────────
+  // When the v2 app first launches against existing groups, the user
+  // has no local group keys — those used to live wrapped on the
+  // server under ENCRYPTION_MASTER_KEY, now dropped. For groups
+  // where the user is the only member we can safely generate a
+  // fresh key locally (no other devices to diverge from). For
+  // multi-member groups we wait for the courier handshake which
+  // fires only when someone new joins; UX surfaces "no photos yet"
+  // until then.
+  useEffect(() => {
+    if (!querySettled) return;
+    void (async () => {
+      for (const g of realGroups) {
+        if (isDemoGroup(g.id)) continue;
+        // memberCount may not be populated by every adapter call;
+        // fall back to members.length. Auto-gen only for solo.
+        const count = g.memberCount ?? g.members?.length ?? 0;
+        if (count !== 1) continue;
+        const existing = await loadGroupKey(g.id);
+        if (existing) continue;
+        const key = newGroupKey();
+        await storeGroupKey(g.id, key);
+        if (__DEV__) {
+          // eslint-disable-next-line no-console
+          console.log('[useGroups] auto-generated key for solo group', g.id);
+        }
+      }
+    })().catch(() => undefined);
+  }, [querySettled, realGroups]);
 
   const groups = useMemo(() => {
     if (shouldShowDemoGroup) {
