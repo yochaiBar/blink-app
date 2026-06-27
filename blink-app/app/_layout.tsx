@@ -102,7 +102,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (!isAuthenticated && !inOnboarding) {
       router.replace("/onboarding" as never);
     } else if (isAuthenticated && inOnboarding) {
-      router.replace("/" as never);
+      // New users who just verified their OTP have display_name=null and still
+      // need to complete the name/avatar setup steps — don't redirect them yet.
+      // Returning users already have a display_name and should go straight to the app.
+      const { user } = useAuthStore.getState();
+      if (user?.display_name) {
+        router.replace("/" as never);
+      }
     }
 
     // After auth is confirmed, check for pending challenges.
