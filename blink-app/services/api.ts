@@ -117,6 +117,9 @@ async function refreshAccessToken(): Promise<boolean> {
     const data = await res.json();
     accessToken = data.accessToken;
     await storage.set('accessToken', data.accessToken);
+    if (data.refreshToken) {
+      await storage.set('refreshToken', data.refreshToken);
+    }
     return true;
   } catch {
     return false;
