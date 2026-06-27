@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { query, withTransaction } from '../../config/database';
+import { withTransaction } from '../../config/database';
 import { AuthRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { validateBody } from '../../middleware/validate';
