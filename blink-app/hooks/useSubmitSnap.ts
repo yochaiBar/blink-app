@@ -79,7 +79,15 @@ export function useSubmitSnap() {
       }
     },
     onError: (error: Error) => {
-      Alert.alert('Snap Failed', error.message || 'Could not submit your snap. Please try again.');
+      if (error.message?.includes('no group key')) {
+        Alert.alert(
+          'Setup Required',
+          'Your group is still setting up secure messaging. Ask another group member to open Blinks, then try again.',
+          [{ text: 'OK' }],
+        );
+      } else {
+        Alert.alert('Snap Failed', 'Could not submit your snap. Please try again.');
+      }
     },
   });
 

@@ -382,7 +382,13 @@ export default function OnboardingScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={[styles.content, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20 }]}>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={[styles.content, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20 }]}
+          keyboardShouldPersistTaps="handled"
+          scrollEnabled={step === 'phone' || step === 'otp' || step === 'name'}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.progressBar}>
             {(['welcome', 'phone', 'otp', 'age', 'terms', 'name', 'avatar'] as const).map((s, i) => (
               <View
@@ -742,7 +748,7 @@ export default function OnboardingScreen() {
             disabled={isNextDisabled}
             fullWidth
           />
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
@@ -757,7 +763,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 24,
     justifyContent: 'space-between',
   },
