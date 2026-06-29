@@ -18,6 +18,8 @@ import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { Globe2 } from 'lucide-react-native';
 import GlassCard from '@/components/ui/GlassCard';
+import WorldwideChallengeCard from '@/components/WorldwideChallengeCard';
+import { WorldwideChallenge } from '@/constants/worldwideExamples';
 import AvatarRing from '@/components/ui/AvatarRing';
 import PhotoCommentsPreview from '@/components/PhotoCommentsPreview';
 import { getReceivedPhotoUri } from '@/services/photoStore';
@@ -32,6 +34,7 @@ export type FeedItemType =
   | 'spotlight'
   | 'active_challenge'
   | 'worldwide_example'
+  | 'worldwide_challenge'
   | 'section_header';
 
 export interface FeedItemData {
@@ -65,6 +68,8 @@ export interface FeedItemData {
   // Worldwide example items (Home screen "Trending around the world")
   location?: string;
   worldwideComments?: Array<{ userName: string; text: string }>;
+  // Worldwide challenge card (grouped by prompt)
+  worldwideChallenge?: WorldwideChallenge;
   // Section header (sticky-ish divider inserted between feed groups)
   sectionTitle?: string;
   sectionSubtitle?: string;
@@ -745,6 +750,10 @@ function FeedItemComponent({ item }: { item: FeedItemData }) {
       return <ActiveChallengeFeedItem item={item} />;
     case 'worldwide_example':
       return <WorldwideFeedItem item={item} />;
+    case 'worldwide_challenge':
+      return item.worldwideChallenge ? (
+        <WorldwideChallengeCard challenge={item.worldwideChallenge} onRespond={item.onRespond} />
+      ) : null;
     case 'section_header':
       return <SectionHeaderFeedItem item={item} />;
     default:

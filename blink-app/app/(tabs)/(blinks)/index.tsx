@@ -32,7 +32,7 @@ import FeedItem, { FeedItemData } from '@/components/FeedItem';
 import DemoChallengeAlert from '@/components/DemoChallengeAlert';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { isDemoGroup } from '@/constants/demoData';
-import { WORLDWIDE_EXAMPLES } from '@/constants/worldwideExamples';
+import { WORLDWIDE_CHALLENGES } from '@/constants/worldwideExamples';
 
 // ── Types ──
 
@@ -411,26 +411,20 @@ export default function BlinksScreen() {
     });
   }, [pendingChallenges]);
 
-  // Static "Trending around the world" section. Built once per session — these
-  // are illustrative examples to teach new users the concept (see
-  // ~/Documents/Obsidian Vault/Blink/Plans/Home screen + Trending Worldwide.md).
+  // Static "Challenges around the world" section. Built once per session —
+  // seeded mock challenges grouped by prompt to teach new users the concept.
+  // When real "Share to world" ships these get replaced by server content.
   const worldwideSection = useMemo<FeedItemData[]>(() => {
     const header: FeedItemData = {
       id: 'ww_section_header',
       type: 'section_header',
-      sectionTitle: '🌍 Trending around the world',
-      sectionSubtitle: 'See what people are sharing',
+      sectionTitle: '🌍 Challenges around the world',
+      sectionSubtitle: 'Respond to unlock all photos',
     };
-    const items: FeedItemData[] = WORLDWIDE_EXAMPLES.map((ex) => ({
-      id: ex.id,
-      type: 'worldwide_example',
-      userName: ex.userName,
-      location: ex.location,
-      photoUrl: ex.photoUrl,
-      challengePrompt: ex.prompt,
-      timeAgo: ex.timeAgo,
-      reactions: ex.reactions,
-      worldwideComments: ex.comments,
+    const items: FeedItemData[] = WORLDWIDE_CHALLENGES.map((ch) => ({
+      id: `ww_challenge_${ch.promptId}`,
+      type: 'worldwide_challenge' as const,
+      worldwideChallenge: ch,
     }));
     return [header, ...items];
   }, []);
