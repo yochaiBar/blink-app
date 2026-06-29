@@ -65,3 +65,31 @@
 - Socket.io events trigger React Query cache invalidation on the client (useSocket hook)
 - AI features have hardcoded fallbacks -- app works without ANTHROPIC_API_KEY
 - S3 uploads have dev fallback -- app works without AWS env vars (uses local URIs)
+
+## Telegram Bug-Bot Protocol
+Active ONLY when an inbound message arrives from the Telegram **"Blinks testers"
+group** (`chat_id -5426625668`). In a normal dev session no such message arrives,
+so this section is dormant. Full design: vault `Reference/Telegram bug-bot pipeline`.
+
+When a message from that group arrives:
+1. **Classify.** Is it a bug report (something broken / unexpected / a crash /
+   "X doesn't work")? If it's chit-chat or a question, just answer normally — do
+   NOT log it.
+2. **Log it.** Append a new `###` block between the `<!-- BUGS-START -->` and
+   `<!-- BUGS-END -->` markers in `~/Documents/Obsidian Vault/Blink/Tasks/Bug Inbox.md`
+   (newest on top), using this exact shape:
+   ```
+   ### BUG-<YYYYMMDD>-<n> — <one-line title>
+   - Status: new
+   - Reported: <ISO ts from the message>
+   - Reporter: <user_id>
+   - Source-msg: <message_id>
+   - Report: <verbatim message text>
+   ```
+   `<n>` = next sequential number for that date. Never delete entries; status only.
+3. **Acknowledge in the group** via the `reply` MCP tool (chat_id `-5426625668`):
+   "✅ Logged — I'll work on it in the next fix run." Optionally `react` with 👀.
+4. Do NOT attempt to fix it inline. Fixing happens in the daily launchd run.
+
+The daily fix run is launched headless (not this session) and invokes the saved
+`daily-bug-fix` workflow. Do not run it manually unless asked.
