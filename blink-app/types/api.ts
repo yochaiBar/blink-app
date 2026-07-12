@@ -19,6 +19,7 @@ export interface ApiGroupListItem {
   skip_penalty_type: string;
   has_active_challenge?: boolean;
   challenge_expires_at?: string;
+  group_key_version?: number;
 }
 
 export interface ApiGroupMember {

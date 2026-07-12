@@ -30,6 +30,10 @@ export interface Group {
   createdAt: string;
   createdBy?: string;
   aiPersonality?: AiPersonality;
+  /** This user's role in the group ('admin' | 'member'). */
+  role?: string;
+  /** Server-tracked group key version (bumped on admin key reset). */
+  groupKeyVersion?: number;
 }
 
 export interface SnapSubmission {

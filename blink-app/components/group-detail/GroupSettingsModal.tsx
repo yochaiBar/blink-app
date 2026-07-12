@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
-import { UserPlus, Share2, Trash2, LogOut, X, Flag } from 'lucide-react-native';
+import { UserPlus, Share2, Trash2, LogOut, X, Flag, KeyRound } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
@@ -16,6 +16,7 @@ export interface GroupSettingsModalProps {
   onDeleteGroup: () => void;
   onLeaveGroup: () => void;
   onReportGroup: () => void;
+  onResetKey?: () => void;
 }
 
 export default function GroupSettingsModal({
@@ -28,6 +29,7 @@ export default function GroupSettingsModal({
   onDeleteGroup,
   onLeaveGroup,
   onReportGroup,
+  onResetKey,
 }: GroupSettingsModalProps) {
   return (
     <Modal visible={visible} transparent animationType="slide">
@@ -50,6 +52,13 @@ export default function GroupSettingsModal({
               <Share2 size={20} color={theme.text} />
               <Text style={styles.menuItemText}>Share Group</Text>
             </TouchableOpacity>
+
+            {isAdmin && onResetKey && (
+              <TouchableOpacity style={styles.menuItem} onPress={onResetKey}>
+                <KeyRound size={20} color={theme.text} />
+                <Text style={styles.menuItemText}>Reset Secure Key</Text>
+              </TouchableOpacity>
+            )}
 
             {isAdmin && (
               <TouchableOpacity style={styles.menuItem} onPress={onDeleteGroup}>

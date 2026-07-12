@@ -8,23 +8,6 @@ import { validateUuidParams } from '../../middleware/validateParams';
 import { CHALLENGE_SELECT, processSkipsForChallenge } from './shared';
 import { GroupMemberRow, ChallengeRow, ChallengeResponseRow, CountRow } from '../../types/db';
 
-/** Pending challenge row from the JOIN query */
-interface PendingChallengeRow {
-  id: string;
-  group_id: string;
-  group_name: string;
-  group_emoji: string;
-  ai_personality: string | null;
-  type: string;
-  prompt: string | null;
-  options: string | null;
-  expires_at: Date;
-  countdown_seconds: number;
-  triggered_by: string | null;
-  is_auto_generated: boolean;
-  total_members: number;
-  responded_count: number;
-}
 
 /** Response row with user info from JOIN */
 interface ResponseWithUserRow {
@@ -56,12 +39,6 @@ interface UserSummaryRow {
   avatar_url: string | null;
 }
 
-/** Challenge with group info from reveal JOIN */
-interface ChallengeWithGroupRow extends ChallengeRow {
-  group_name: string;
-  group_emoji: string;
-  ai_personality: string | null;
-}
 
 const router = Router();
 

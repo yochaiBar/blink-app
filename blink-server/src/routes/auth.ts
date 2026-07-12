@@ -90,13 +90,15 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { phone_number } = req.body;
 
-    if (!isSmsConfigured) {
-      // Dev mode: predictable OTP
+    if (!isSmsConfigured || env.TESTING_MODE === 'true') {
+      // Dev / closed-testing mode: predictable OTP, no SMS sent.
       await storeOtp(phone_number, DEV_OTP);
       logger.info('OTP requested (dev mode)', { phone: maskPhone(phone_number) });
       res.json({
         message: 'OTP sent',
-        ...(env.NODE_ENV !== 'production' && { dev_hint: 'Use 123456' }),
+        ...((env.NODE_ENV !== 'production' || env.TESTING_MODE === 'true') && {
+          dev_hint: 'Use 123456',
+        }),
       });
       return;
     }
@@ -127,6 +129,27 @@ router.post(
   validateBody(verifyOtpSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { phone_number, code } = req.body;
+
+    // ── Closed-testing bypass ────────────────────────────────────
+    // When TESTING_MODE is on, accept the universal dev code for any phone
+    // without a stored OTP so testers can jump straight in. This still
+    // upserts a real user and issues a real session, so identity-dependent
+    // features (groups, challenges, the E2E photo key flow) keep working.
+    // Gated by TESTING_MODE, which is unset for real launches.
+    if (env.TESTING_MODE === 'true' && code === DEV_OTP) {
+      const bypassResult = await query<Pick<UserRow, 'id' | 'phone_number' | 'display_name' | 'avatar_url' | 'bio'>>(
+        `INSERT INTO users (phone_number) VALUES ($1)
+         ON CONFLICT (phone_number) DO UPDATE SET last_active_at = NOW()
+         RETURNING id, phone_number, display_name, avatar_url, bio`,
+        [phone_number]
+      );
+      const bypassUser = bypassResult.rows[0];
+      const bypassAccess = jwt.sign({ userId: bypassUser.id }, env.JWT_SECRET, { expiresIn: JWT_ACCESS_EXPIRY });
+      const bypassRefresh = jwt.sign({ userId: bypassUser.id }, env.JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRY });
+      logger.info('User authenticated (testing bypass)', { userId: bypassUser.id });
+      res.json({ user: bypassUser, accessToken: bypassAccess, refreshToken: bypassRefresh });
+      return;
+    }
 
     const pending = await getOtp(phone_number);
     if (!pending) {

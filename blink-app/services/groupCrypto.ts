@@ -40,6 +40,7 @@ import { randomBytes } from '@noble/ciphers/utils.js';
 const DEVICE_SEED_KEY = 'blink.e2e.deviceSeed.v1';
 const DEVICE_ID_KEY = 'blink.e2e.deviceId.v1';
 const GROUP_KEY_PREFIX = 'blink.e2e.groupKey.v1.'; // suffixed with groupId
+const GROUP_KEY_VERSION_PREFIX = 'blink.e2e.groupKeyVer.v1.'; // suffixed with groupId
 
 export const KEY_BYTES = 32; // both X25519 keys and AES-256 keys
 export const GCM_IV_BYTES = 12;
@@ -144,11 +145,22 @@ export function newGroupKey(): Uint8Array {
   return randomBytes(KEY_BYTES);
 }
 
+/**
+ * Persist a group key together with its version. Version defaults to 1 —
+ * the value the server assigns to keys minted at group create/join time.
+ * Regeneration (admin "reset secure key") bumps the server's version and
+ * the new key is stored under that higher number; the joiner-side receive
+ * path uses "higher version wins" to resolve rotations (see loadGroupKeyVersion).
+ */
 export async function storeGroupKey(
   groupId: string,
   key: Uint8Array,
+  version = 1,
 ): Promise<void> {
-  await SecureStore.setItemAsync(GROUP_KEY_PREFIX + groupId, bytesToB64(key));
+  await Promise.all([
+    SecureStore.setItemAsync(GROUP_KEY_PREFIX + groupId, bytesToB64(key)),
+    SecureStore.setItemAsync(GROUP_KEY_VERSION_PREFIX + groupId, String(version)),
+  ]);
 }
 
 export async function loadGroupKey(groupId: string): Promise<Uint8Array | null> {
@@ -156,8 +168,29 @@ export async function loadGroupKey(groupId: string): Promise<Uint8Array | null> 
   return v ? b64ToBytes(v) : null;
 }
 
+/**
+ * Returns the stored version for a group's key. If a key exists but predates
+ * version tracking (legacy install), it's treated as version 1. Returns 0
+ * when no key is stored at all — callers use that to distinguish "missing"
+ * (needs recovery) from "stale" (needs rotation pull).
+ */
+export async function loadGroupKeyVersion(groupId: string): Promise<number> {
+  const [ver, key] = await Promise.all([
+    SecureStore.getItemAsync(GROUP_KEY_VERSION_PREFIX + groupId),
+    SecureStore.getItemAsync(GROUP_KEY_PREFIX + groupId),
+  ]);
+  if (ver !== null) {
+    const parsed = parseInt(ver, 10);
+    return Number.isFinite(parsed) ? parsed : key ? 1 : 0;
+  }
+  return key ? 1 : 0;
+}
+
 export async function deleteGroupKey(groupId: string): Promise<void> {
-  await SecureStore.deleteItemAsync(GROUP_KEY_PREFIX + groupId);
+  await Promise.all([
+    SecureStore.deleteItemAsync(GROUP_KEY_PREFIX + groupId),
+    SecureStore.deleteItemAsync(GROUP_KEY_VERSION_PREFIX + groupId),
+  ]);
 }
 
 // ── Symmetric encrypt/decrypt for photo bytes ─────────────────────

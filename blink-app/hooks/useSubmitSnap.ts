@@ -5,12 +5,12 @@ import {
   readAsStringAsync,
   EncodingType,
 } from 'expo-file-system/legacy';
-import { api } from '@/services/api';
+import { api, requestKeyshare } from '@/services/api';
 import { isDemoGroup } from '@/constants/demoData';
 import { ApiChallenge } from '@/types/api';
 import { queryKeys } from '@/utils/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
-import { b64ToBytes } from '@/services/groupCrypto';
+import { b64ToBytes, getOrCreateDeviceKey } from '@/services/groupCrypto';
 import { sendPhoto } from '@/services/photoTransfer';
 import { putReceivedPhoto } from '@/services/photoStore';
 
@@ -78,11 +78,23 @@ export function useSubmitSnap() {
         queryClient.invalidateQueries({ queryKey: ['localPhoto', responseId] });
       }
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables: { groupId: string; imageUri?: string }) => {
       if (error.message?.includes('no group key')) {
+        // Self-heal: kick off a recovery request so an online member
+        // re-couriers the key. It won't help THIS attempt, but the next
+        // one (after the envelope arrives) will succeed without the user
+        // having to do anything but retry.
+        void (async () => {
+          try {
+            const { device_id } = await getOrCreateDeviceKey();
+            await requestKeyshare({ group_id: variables.groupId, device_id });
+          } catch {
+            // best-effort — the alert already tells the user what to do
+          }
+        })();
         Alert.alert(
           'Setup Required',
-          'Your group is still setting up secure messaging. Ask another group member to open Blinks, then try again.',
+          'Your group is still setting up secure messaging. Ask another group member to open Blinks, then try again in a moment.',
           [{ text: 'OK' }],
         );
       } else {

@@ -21,6 +21,10 @@ const envSchema = z.object({
   // ── Optional flags ──────────────────────────────────────────────
   ALLOW_DEV_OTP_FALLBACK: z.string().optional(),
   OTP_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().optional(),
+  // Closed-testing "jump right in": accept the universal dev OTP (123456)
+  // for any phone, no SMS. NOT gated on NODE_ENV so it can run on the prod
+  // backend during a test phase. Leave UNSET for real launches.
+  TESTING_MODE: z.string().optional(),
 
   // ── Twilio ──────────────────────────────────────────────────────
   TWILIO_ACCOUNT_SID: z.string().optional(),

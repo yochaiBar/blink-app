@@ -30,6 +30,8 @@ export function apiGroupListToGroup(item: ApiGroupListItem): Group {
     color: categoryColorMap[item.category] ?? theme.coral,
     inviteCode: item.invite_code,
     createdAt: new Date().toISOString(),
+    role: item.role,
+    groupKeyVersion: item.group_key_version ?? 1,
   };
 }
 
