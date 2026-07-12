@@ -39,7 +39,7 @@
  */
 
 import { query } from '../config/database';
-import { emitToUser, onUserConnect } from '../socket';
+import { emitToUser, isUserOnline, onUserConnect } from '../socket';
 import logger from '../utils/logger';
 import type { KeyshareRequest } from '../shared/photoProtocol';
 
@@ -86,6 +86,68 @@ export async function enqueueKeyshare(
     [args.groupId, args.joinerUserId, args.joinerDeviceId],
   );
   return result.rows[0]?.id ?? null;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// requestKeyshareRecovery — client-initiated escape hatch
+// ─────────────────────────────────────────────────────────────────
+
+export interface RequestKeyshareRecoveryArgs {
+  groupId: string;
+  requesterUserId: string;
+  requesterDeviceId: string;
+}
+
+/**
+ * A member who belongs to `groupId` but has no local group key asks for it
+ * to be re-couriered to their device. This is the recovery counterpart to
+ * the join-time `enqueueKeyshare`: the original flow only ever fired on a
+ * NEW join, so a stalled/failed join — or a pre-migration group whose
+ * server-side key was dropped — left the member permanently stuck on
+ * "no group key; handshake required".
+ *
+ * We reuse the pending_joins machinery wholesale: enqueue a `pending` row
+ * for the requester (idempotent), then nudge every ONLINE other member to
+ * run `dispatchPendingKeysharesForUser`, which atomically claims the row
+ * and couriers the key. If no other member is online (or none holds the
+ * key), the row simply waits — the next member to connect picks it up via
+ * the existing `onUserConnect` dispatch, and the TTL cron reaps it if
+ * nothing ever happens.
+ *
+ * Caller (route) is responsible for verifying membership BEFORE calling.
+ */
+export async function requestKeyshareRecovery(
+  args: RequestKeyshareRecoveryArgs,
+): Promise<{ enqueued: boolean; couriersNotified: number }> {
+  const pendingId = await enqueueKeyshare({
+    groupId: args.groupId,
+    joinerUserId: args.requesterUserId,
+    joinerDeviceId: args.requesterDeviceId,
+  });
+
+  // Find the OTHER current members — any of them could hold the key and
+  // act as courier.
+  const others = await query<{ user_id: string }>(
+    `SELECT user_id FROM group_members WHERE group_id = $1 AND user_id <> $2`,
+    [args.groupId, args.requesterUserId],
+  );
+
+  let couriersNotified = 0;
+  for (const m of others.rows) {
+    if (await isUserOnline(m.user_id)) {
+      // Await so the emit has happened before we return (and so the count
+      // is accurate). Group sizes are tiny; sequential is fine.
+      await dispatchPendingKeysharesForUser(m.user_id);
+      couriersNotified++;
+    }
+  }
+
+  logger.info('keyshare recovery requested', {
+    enqueued: pendingId !== null,
+    couriers_notified: couriersNotified,
+  });
+
+  return { enqueued: pendingId !== null, couriersNotified };
 }
 
 // ─────────────────────────────────────────────────────────────────

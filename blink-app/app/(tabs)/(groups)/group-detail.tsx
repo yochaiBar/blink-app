@@ -10,7 +10,8 @@ import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
 import ReportModal from '@/components/ReportModal';
-import { api, blockUser, getSpotlight } from '@/services/api';
+import { api, blockUser, getSpotlight, resetGroupKey } from '@/services/api';
+import { newGroupKey, storeGroupKey } from '@/services/groupCrypto';
 import { Skeleton, SnapCardSkeleton } from '@/components/ui';
 import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
 import { apiGroupDetailToGroup, apiResponseToSnap, apiSpotlightToUI, apiMembersToLeaderboard } from '@/utils/adapters';
@@ -399,6 +400,34 @@ export default function GroupDetailScreen() {
     }, 300);
   }, [id, queryClient, router]);
 
+  const handleResetKey = useCallback(() => {
+    setShowGroupMenu(false);
+    const doReset = async () => {
+      if (!id) return;
+      try {
+        // Server bumps the version (it never sees the key); we mint a fresh
+        // key locally at that version. Members pull it via recovery, driven
+        // by the `group:key_rotated` fan-out the server emits.
+        const { group_key_version } = await resetGroupKey({ group_id: id });
+        await storeGroupKey(id, newGroupKey(), group_key_version);
+        queryClient.invalidateQueries({ queryKey: ['groups'] });
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert(
+          'Secure Key Reset',
+          'A new secure key was generated and is being shared with members who are online. Everyone can send photos again once they reopen Blinks.',
+        );
+      } catch (err: unknown) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to reset the secure key');
+      }
+    };
+    const msg =
+      'This fixes "no group key" errors by generating a brand-new secure key for the group. Photos sent under the old key can no longer be opened. Continue?';
+    setTimeout(() => {
+      if (Platform.OS === 'web') { if (window.confirm(`Reset Secure Key?\n\n${msg}`)) doReset(); }
+      else { Alert.alert('Reset Secure Key', msg, [{ text: 'Cancel', style: 'cancel' }, { text: 'Reset', style: 'destructive', onPress: doReset }]); }
+    }, 300);
+  }, [id, queryClient]);
+
   const handleShareGroup = useCallback(() => {
     setShowGroupMenu(false);
     Share.share({ message: `Join my group "${group?.name}" on Blink! Use invite code: ${group?.inviteCode}` });
@@ -618,6 +647,7 @@ export default function GroupDetailScreen() {
         onShareGroup={handleShareGroup}
         onDeleteGroup={handleDeleteGroup}
         onLeaveGroup={handleLeaveGroup}
+        onResetKey={handleResetKey}
         onReportGroup={() => { setShowGroupMenu(false); setReportTarget({ contentType: 'group', reportedContentId: id }); setShowReportModal(true); }}
       />
 

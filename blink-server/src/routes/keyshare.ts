@@ -2,9 +2,18 @@ import { Router, Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { validateBody } from '../middleware/validate';
-import { keyshareDeliverSchema } from '../utils/schemas';
+import {
+  keyshareDeliverSchema,
+  keyshareRequestSchema,
+  keyshareResetSchema,
+} from '../utils/schemas';
 import { query } from '../config/database';
-import { markKeyshareDelivered } from '../services/keyshareHub';
+import {
+  markKeyshareDelivered,
+  requestKeyshareRecovery,
+} from '../services/keyshareHub';
+import { emitToGroup } from '../socket';
+import logger from '../utils/logger';
 import type { KeyshareEnvelope } from '../shared/photoProtocol';
 
 // ─────────────────────────────────────────────────────────────────
@@ -100,6 +109,98 @@ router.post(
     });
 
     res.status(200).json({ v: 1, delivered: result.deliveredThisCall });
+  }),
+);
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/keyshare/request
+//
+// Recovery entry point: a member who belongs to the group but has no local
+// group key asks online members to re-courier it. Reuses the pending_joins
+// machinery via `requestKeyshareRecovery`. Server stays blind to the key.
+//
+// Authorization: caller must be a CURRENT member of the group.
+// ─────────────────────────────────────────────────────────────────
+router.post(
+  '/request',
+  validateBody(keyshareRequestSchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { group_id, device_id } = req.body as { group_id: string; device_id: string };
+    const callerUserId = req.userId!;
+
+    const membership = await query(
+      `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
+      [group_id, callerUserId],
+    );
+    if (membership.rows.length === 0) {
+      res.status(403).json({ error: 'Not a member of this group' });
+      return;
+    }
+
+    const result = await requestKeyshareRecovery({
+      groupId: group_id,
+      requesterUserId: callerUserId,
+      requesterDeviceId: device_id,
+    });
+
+    res.status(200).json({
+      v: 1,
+      enqueued: result.enqueued,
+      couriers_notified: result.couriersNotified,
+    });
+  }),
+);
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/keyshare/reset
+//
+// Regeneration entry point: for the case where NO member holds the key
+// (e.g. a pre-migration group whose server-side key was dropped), an admin
+// bumps the group's key version. The server only tracks the version — it
+// never sees the key. The admin's device then generates a fresh key at the
+// new version and members pull it via the recovery path. Members already
+// holding an OLDER version overwrite it because version-wins on the client.
+//
+// Authorization: caller must be an ADMIN of the group.
+// ─────────────────────────────────────────────────────────────────
+router.post(
+  '/reset',
+  validateBody(keyshareResetSchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { group_id } = req.body as { group_id: string };
+    const callerUserId = req.userId!;
+
+    const membership = await query<{ role: string }>(
+      `SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2`,
+      [group_id, callerUserId],
+    );
+    if (membership.rows.length === 0 || membership.rows[0].role !== 'admin') {
+      res.status(403).json({ error: 'Only a group admin can reset the secure key' });
+      return;
+    }
+
+    const bump = await query<{ group_key_version: number }>(
+      `UPDATE groups SET group_key_version = group_key_version + 1
+        WHERE id = $1
+    RETURNING group_key_version`,
+      [group_id],
+    );
+    const newVersion = bump.rows[0]?.group_key_version;
+    if (newVersion === undefined) {
+      res.status(404).json({ error: 'Group not found' });
+      return;
+    }
+
+    // Tell every member to re-pull the key at the new version. Members whose
+    // stored version is lower request recovery and overwrite; the admin's
+    // device (which just minted the new key) serves as courier.
+    emitToGroup(group_id, 'group:key_rotated', {
+      group_id,
+      group_key_version: newVersion,
+    });
+
+    logger.info('group key reset', { group_key_version: newVersion });
+    res.status(200).json({ v: 1, group_key_version: newVersion });
   }),
 );
 

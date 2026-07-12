@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
 import { connectSocket, disconnectSocket, joinGroups, getSocket } from '@/services/socket';
-import { api } from '@/services/api';
+import { api, deliverKeyshare, requestKeyshare } from '@/services/api';
 import { playChallengeRing } from '@/utils/challengeSound';
 import {
   bytesToB64,
@@ -10,11 +10,11 @@ import {
   courierEncryptGroupKey,
   joinerDecryptGroupKey,
   loadGroupKey,
+  loadGroupKeyVersion,
   storeGroupKey,
   getOrCreateDeviceKey,
 } from '@/services/groupCrypto';
 import { receivePhoto, respondToPickup } from '@/services/photoTransfer';
-import { deliverKeyshare } from '@/services/api';
 import type {
   IncomingPhotoEnvelope,
   KeyshareEnvelope,
@@ -201,6 +201,10 @@ export function useSocket() {
           const joinerPub = b64ToBytes(payload.joiner_x25519_public_key_b64);
           const envelope = courierEncryptGroupKey(joinerPub, groupKey);
           const { device_id: fromDeviceId } = await getOrCreateDeviceKey();
+          // Send the key's ACTUAL version so the joiner can resolve rotations
+          // (higher version wins). Hardcoding 1 here would make every
+          // regenerated key look stale to a recipient holding version 1.
+          const groupKeyVersion = await loadGroupKeyVersion(payload.group_id);
           await deliverKeyshare({
             v: 1,
             pending_join_id: payload.pending_join_id,
@@ -213,7 +217,7 @@ export function useSocket() {
               envelope.ciphertext.slice(envelope.ciphertext.length - 16),
             ),
             ciphertext_b64: bytesToB64(envelope.ciphertext),
-            group_key_version: 1,
+            group_key_version: groupKeyVersion > 0 ? groupKeyVersion : 1,
           });
         } catch (err) {
           if (__DEV__) console.warn('[Socket] keyshare_request failed', err);
@@ -239,24 +243,41 @@ export function useSocket() {
               device.publicKey,
               { ephemeralPublicKey: ephemeral, iv, ciphertext },
             );
+            const incomingVersion = envelope.group_key_version ?? 1;
             const existing = await loadGroupKey(envelope.group_id);
             if (existing) {
-              // Reinstall race / duplicate envelope: accept only if it's
-              // the SAME key (idempotent). If different, refuse to overwrite
-              // — would silently brick all our existing decrypted photos.
               const same =
                 existing.length === groupKey.length &&
                 existing.every((b, i) => b === groupKey[i]);
-              if (!same) {
+              if (same) {
+                // Idempotent duplicate — just make sure we've recorded the
+                // (possibly newer) version number and move on.
+                await storeGroupKey(envelope.group_id, groupKey, incomingVersion);
+                return;
+              }
+              // Different key. This is a rotation (admin regenerated) iff the
+              // incoming version is strictly higher — then it MUST win or the
+              // group would split-brain. A same-or-lower version with
+              // different bytes is a conflict we refuse (would silently brick
+              // photos encrypted under our current key).
+              const existingVersion = await loadGroupKeyVersion(envelope.group_id);
+              if (incomingVersion <= existingVersion) {
                 if (__DEV__) {
                   console.warn(
-                    '[Socket] keyshare_envelope conflicts with existing key; ignored',
+                    '[Socket] keyshare_envelope conflicts with existing key at same/older version; ignored',
                   );
                 }
                 return;
               }
+              if (__DEV__) {
+                console.log(
+                  '[Socket] keyshare_envelope rotates group key',
+                  envelope.group_id,
+                  `v${existingVersion}→v${incomingVersion}`,
+                );
+              }
             }
-            await storeGroupKey(envelope.group_id, groupKey);
+            await storeGroupKey(envelope.group_id, groupKey, incomingVersion);
             queryClient.invalidateQueries({ queryKey: ['groups'] });
           } catch (err) {
             if (__DEV__) console.warn('[Socket] keyshare_envelope decrypt failed', err);
@@ -268,6 +289,26 @@ export function useSocket() {
       socket.on('group:keyshare_cancelled', () => {
         if (__DEV__) console.log('[Socket] group:keyshare_cancelled (no-op)');
       });
+
+      // An admin regenerated the group key. If ours is older (or missing),
+      // pull the new one via the recovery handshake. The admin's device
+      // (which just minted the key) will courier it back and our
+      // keyshare_envelope handler overwrites on higher version.
+      socket.on(
+        'group:key_rotated',
+        async (payload: { group_id: string; group_key_version: number }) => {
+          if (__DEV__) console.log('[Socket] group:key_rotated', payload);
+          try {
+            const localVersion = await loadGroupKeyVersion(payload.group_id);
+            if (payload.group_key_version > localVersion) {
+              const { device_id } = await getOrCreateDeviceKey();
+              await requestKeyshare({ group_id: payload.group_id, device_id });
+            }
+          } catch (err) {
+            if (__DEV__) console.warn('[Socket] key_rotated handling failed', err);
+          }
+        },
+      );
     }
 
     // Fetch user's groups and join the corresponding rooms

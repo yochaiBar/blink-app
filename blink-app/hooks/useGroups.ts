@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Group } from '@/types';
-import { api } from '@/services/api';
+import { api, requestKeyshare } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { apiGroupListToGroup } from '@/utils/adapters';
@@ -11,6 +11,7 @@ import { DEMO_GROUP, isDemoGroup } from '@/constants/demoData';
 import {
   getOrCreateDeviceKey,
   loadGroupKey,
+  loadGroupKeyVersion,
   newGroupKey,
   storeGroupKey,
 } from '@/services/groupCrypto';
@@ -37,31 +38,63 @@ export function useGroups() {
   const querySettled = groupsQuery.isFetched || groupsQuery.isError;
   const shouldShowDemoGroup = querySettled && realGroups.length === 0 && !tourComplete;
 
-  // ── Solo-group auto-key-gen (E2E photo flow, Phase 6+) ──────────
-  // When the v2 app first launches against existing groups, the user
-  // has no local group keys — those used to live wrapped on the
-  // server under ENCRYPTION_MASTER_KEY, now dropped. For groups
-  // where the user is the only member we can safely generate a
-  // fresh key locally (no other devices to diverge from). For
-  // multi-member groups we wait for the courier handshake which
-  // fires only when someone new joins; UX surfaces "no photos yet"
-  // until then.
+  // ── Group-key bootstrap + recovery (E2E photo flow) ─────────────
+  // On launch we reconcile every group's local key against reality:
+  //
+  //   • Solo group, no key → generate locally (no one to diverge from).
+  //   • Multi-member group, no key → REQUEST recovery. The original flow
+  //     only couriered a key at join time, so a stalled join or a
+  //     pre-migration group whose server key was dropped left the member
+  //     permanently stuck on "no group key; handshake required". This asks
+  //     online members to re-courier it.
+  //   • Key present but STALE (local version < server version) → an admin
+  //     regenerated the key; pull the new one via recovery too.
   useEffect(() => {
     if (!querySettled) return;
     void (async () => {
+      let deviceId: string | null = null;
+      const ensureDeviceId = async () => {
+        if (!deviceId) deviceId = (await getOrCreateDeviceKey()).device_id;
+        return deviceId;
+      };
       for (const g of realGroups) {
         if (isDemoGroup(g.id)) continue;
         // memberCount may not be populated by every adapter call;
-        // fall back to members.length. Auto-gen only for solo.
+        // fall back to members.length.
         const count = g.memberCount ?? g.members?.length ?? 0;
-        if (count !== 1) continue;
+        const serverVersion = g.groupKeyVersion ?? 1;
         const existing = await loadGroupKey(g.id);
-        if (existing) continue;
-        const key = newGroupKey();
-        await storeGroupKey(g.id, key);
-        if (__DEV__) {
-          // eslint-disable-next-line no-console
-          console.log('[useGroups] auto-generated key for solo group', g.id);
+
+        if (!existing) {
+          if (count <= 1) {
+            // Solo — safe to mint locally at the server's version.
+            const key = newGroupKey();
+            await storeGroupKey(g.id, key, serverVersion);
+            if (__DEV__) console.log('[useGroups] auto-generated key for solo group', g.id);
+          } else {
+            // Multi-member and we have nothing — ask for a re-courier.
+            try {
+              await requestKeyshare({ group_id: g.id, device_id: await ensureDeviceId() });
+              if (__DEV__) console.log('[useGroups] requested key recovery for group', g.id);
+            } catch (err) {
+              if (__DEV__) console.warn('[useGroups] key recovery request failed', g.id, err);
+            }
+          }
+          continue;
+        }
+
+        // We hold a key — pull a newer one if the server's version moved
+        // ahead of ours (admin reset).
+        const localVersion = await loadGroupKeyVersion(g.id);
+        if (serverVersion > localVersion) {
+          try {
+            await requestKeyshare({ group_id: g.id, device_id: await ensureDeviceId() });
+            if (__DEV__) {
+              console.log('[useGroups] requested rotated key for group', g.id, `v${localVersion}→v${serverVersion}`);
+            }
+          } catch (err) {
+            if (__DEV__) console.warn('[useGroups] rotated key request failed', g.id, err);
+          }
         }
       }
     })().catch(() => undefined);

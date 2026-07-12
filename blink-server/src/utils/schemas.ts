@@ -200,6 +200,21 @@ export const keyshareDeliverSchema = z.object({
   group_key_version: z.number().int().nonnegative(),
 });
 
+// Recovery: a member missing a group's key asks online members to re-courier
+// it to their device. Reuses the pending_joins machinery.
+export const keyshareRequestSchema = z.object({
+  v: z.literal(1),
+  group_id: z.string().uuid(),
+  device_id: z.string().uuid(),
+});
+
+// Regeneration: an admin bumps the group key version (server tracks version
+// only, never the key). Members then pull the new key via recovery.
+export const keyshareResetSchema = z.object({
+  v: z.literal(1),
+  group_id: z.string().uuid(),
+});
+
 // ── Moderation schemas ──────────────────────────────────────
 
 const contentTypeEnum = z.enum(['photo', 'user', 'group', 'challenge_response']);

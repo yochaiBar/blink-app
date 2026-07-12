@@ -237,6 +237,48 @@ export function deliverKeyshare(
   });
 }
 
+// ── Keyshare recovery (missing/stale group key) ──
+export interface KeyshareRequestResult {
+  v: 1;
+  enqueued: boolean;
+  couriers_notified: number;
+}
+
+/**
+ * Ask online group members to (re-)courier the group key to this device.
+ * Used when a member belongs to a group but has no local key (stalled join
+ * / pre-migration group) or holds a stale key after a rotation.
+ */
+export function requestKeyshare(body: {
+  group_id: string;
+  device_id: string;
+}): Promise<KeyshareRequestResult> {
+  return api<KeyshareRequestResult>('/keyshare/request', {
+    method: 'POST',
+    body: JSON.stringify({ v: 1, ...body }),
+  });
+}
+
+// ── Keyshare reset / regeneration (admin) ──
+export interface KeyshareResetResult {
+  v: 1;
+  group_key_version: number;
+}
+
+/**
+ * Admin-only: bump the group's key version on the server (which never sees
+ * the key). Caller then mints a fresh key locally at the returned version
+ * and members pull it via requestKeyshare.
+ */
+export function resetGroupKey(body: {
+  group_id: string;
+}): Promise<KeyshareResetResult> {
+  return api<KeyshareResetResult>('/keyshare/reset', {
+    method: 'POST',
+    body: JSON.stringify({ v: 1, ...body }),
+  });
+}
+
 // ── Photo relay (E2E photo flow, Phase 3) ──
 export interface RelayPhotoBody {
   v: 1;
