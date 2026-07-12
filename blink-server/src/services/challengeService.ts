@@ -98,20 +98,20 @@ export async function checkChallengeCompletion(
   groupId: string
 ): Promise<boolean> {
   const completed = await withTransaction(async (client) => {
-    // Fetch the challenge's created_at to only count members who were in the group at that time
-    const challengeResult = await client.query<{ created_at: Date; status: string }>(
-      `SELECT created_at, status FROM challenges WHERE id = $1 FOR UPDATE`,
+    // Fetch the challenge's triggered_at to only count members who were in the group at that time
+    const challengeResult = await client.query<{ triggered_at: Date; status: string }>(
+      `SELECT triggered_at, status FROM challenges WHERE id = $1 FOR UPDATE`,
       [challengeId]
     );
     if (challengeResult.rows.length === 0 || challengeResult.rows[0].status !== 'active') {
       return false;
     }
-    const challengeCreatedAt = challengeResult.rows[0].created_at;
+    const challengeTriggeredAt = challengeResult.rows[0].triggered_at;
 
-    // Only count members who joined before the challenge was created
+    // Only count members who joined before the challenge was triggered
     const totalMembers = await client.query<CountRow>(
       `SELECT COUNT(*) FROM group_members WHERE group_id = $1 AND joined_at <= $2`,
-      [groupId, challengeCreatedAt]
+      [groupId, challengeTriggeredAt]
     );
     const totalResponses = await client.query<CountRow>(
       `SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = $1`,
