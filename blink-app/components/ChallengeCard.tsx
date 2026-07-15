@@ -1,11 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
+import { Image } from 'expo-image';
+import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { ChevronRight, Camera } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { FeedItemData } from '@/components/FeedItem';
+import { getReceivedPhotoUri } from '@/services/photoStore';
+
+const MAX_THUMBS = 4;
 
 // ── Helpers ──
 
@@ -76,6 +81,41 @@ function LivePill({ expiresAt }: { expiresAt?: string }) {
   );
 }
 
+// ── Response thumbnail (E2E local photo first, S3 fallback) ──
+
+function ResponseThumb({
+  responseId,
+  photoUrl,
+  overlay,
+}: {
+  responseId: string;
+  photoUrl?: string;
+  overlay?: string;
+}) {
+  const localPhoto = useQuery({
+    queryKey: ['localPhoto', responseId],
+    queryFn: () => getReceivedPhotoUri(responseId),
+    enabled: !!responseId,
+    staleTime: 30_000,
+  });
+  const uri = localPhoto.data ?? photoUrl;
+
+  return (
+    <View style={styles.thumb}>
+      {uri ? (
+        <Image source={{ uri }} style={styles.thumbImg} contentFit="cover" transition={150} />
+      ) : (
+        <View style={[styles.thumbImg, styles.thumbPending]} />
+      )}
+      {overlay ? (
+        <View style={styles.thumbOverlay}>
+          <Text style={styles.thumbOverlayText}>{overlay}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 // ── Challenge Card ──
 
 export default function ChallengeCard({ item }: { item: FeedItemData }) {
@@ -130,6 +170,24 @@ export default function ChallengeCard({ item }: { item: FeedItemData }) {
           <Text style={styles.prompt} numberOfLines={3}>
             {item.challengePrompt}
           </Text>
+        ) : null}
+
+        {/* Response thumbnails (closed challenges) */}
+        {!item.isLive && item.challengeResponses && item.challengeResponses.length > 0 ? (
+          <View style={styles.thumbRow}>
+            {item.challengeResponses.slice(0, MAX_THUMBS).map((r, i) => {
+              const isLast = i === MAX_THUMBS - 1;
+              const extra = (item.challengeResponses?.length ?? 0) - MAX_THUMBS;
+              return (
+                <ResponseThumb
+                  key={r.responseId}
+                  responseId={r.responseId}
+                  photoUrl={r.photoUrl}
+                  overlay={isLast && extra > 0 ? `+${extra}` : undefined}
+                />
+              );
+            })}
+          </View>
         ) : null}
 
         {/* Footer: participation + action */}
@@ -252,6 +310,35 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.3,
     lineHeight: 26,
+  },
+  thumbRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  thumb: {
+    flex: 1,
+    aspectRatio: 3 / 4,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    backgroundColor: theme.surface,
+  },
+  thumbImg: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbPending: {
+    backgroundColor: theme.surface,
+  },
+  thumbOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(12, 11, 16, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbOverlayText: {
+    ...typography.labelLarge,
+    color: theme.white,
+    fontWeight: '800',
   },
   footer: {
     flexDirection: 'row',

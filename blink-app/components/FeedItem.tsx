@@ -70,6 +70,7 @@ export interface FeedItemData {
   // Challenge card (challenge-grouped feed header)
   isLive?: boolean;
   expiresAt?: string;
+  challengeResponses?: Array<{ responseId: string; userName?: string; photoUrl?: string }>;
   // Lane empty state
   emptyTitle?: string;
   emptySubtitle?: string;

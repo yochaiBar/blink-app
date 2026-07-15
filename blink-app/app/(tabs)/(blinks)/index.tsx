@@ -379,7 +379,15 @@ export default function BlinksScreen() {
     for (const cid of orderKeys) {
       const grp = byChallenge.get(cid)!;
       const first = grp[0];
-      const photoCount = grp.filter((g) => g.type === 'photo').length;
+      const photoItems = grp.filter((g) => g.type === 'photo');
+      const quizItems = grp.filter((g) => g.type === 'quiz_result');
+      // Snap responses become inline thumbnails inside the card; quiz results
+      // still render as their own card beneath (different visualization).
+      const challengeResponses = photoItems.map((p) => ({
+        responseId: p.id.startsWith('photo_') ? p.id.slice('photo_'.length) : p.id,
+        userName: p.userName,
+        photoUrl: p.photoUrl,
+      }));
       out.push({
         id: `cc_${cid}`,
         type: 'challenge_card',
@@ -390,10 +398,12 @@ export default function BlinksScreen() {
         challengePrompt: first.challengePrompt || first.quizQuestion,
         challengeType: first.challengeType || (first.type === 'quiz_result' ? 'quiz' : 'snap'),
         isLive: false,
-        responseCount: photoCount || grp.length,
+        responseCount: photoItems.length || grp.length,
+        challengeResponses: challengeResponses.length > 0 ? challengeResponses : undefined,
         timestamp: first.timestamp,
       });
-      out.push(...grp);
+      // Keep quiz result bars beneath the card header.
+      out.push(...quizItems);
     }
 
     return out;
