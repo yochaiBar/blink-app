@@ -33,9 +33,11 @@ export type FeedItemType =
   | 'ai_commentary'
   | 'spotlight'
   | 'active_challenge'
+  | 'challenge_card'
   | 'worldwide_example'
   | 'worldwide_challenge'
-  | 'section_header';
+  | 'section_header'
+  | 'lane_empty';
 
 export interface FeedItemData {
   id: string;
@@ -65,6 +67,12 @@ export interface FeedItemData {
   responseCount?: number;
   memberCount?: number;
   challengeType?: string;
+  // Challenge card (challenge-grouped feed header)
+  isLive?: boolean;
+  expiresAt?: string;
+  // Lane empty state
+  emptyTitle?: string;
+  emptySubtitle?: string;
   // Worldwide example items (Home screen "Trending around the world")
   location?: string;
   worldwideComments?: Array<{ userName: string; text: string }>;

@@ -8,7 +8,6 @@ import {
   RefreshControl,
   Animated,
   Platform,
-  ScrollView,
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -29,6 +28,8 @@ import { Group } from '@/types';
 import { ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
 import AvatarRing from '@/components/ui/AvatarRing';
 import FeedItem, { FeedItemData } from '@/components/FeedItem';
+import ChallengeCard from '@/components/ChallengeCard';
+import LaneTabs, { Lane } from '@/components/LaneTabs';
 import DemoChallengeAlert from '@/components/DemoChallengeAlert';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { isDemoGroup } from '@/constants/demoData';
@@ -58,77 +59,6 @@ interface PendingChallenge {
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// ── Active Challenge Pills ──
-
-function ActiveChallengePills({
-  pendingChallenges,
-  onPress,
-}: {
-  pendingChallenges: PendingChallenge[];
-  onPress: (pc: PendingChallenge) => void;
-}) {
-  const glowAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const glow = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 1,
-          duration: 1600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 0,
-          duration: 1600,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    glow.start();
-    return () => glow.stop();
-  }, [glowAnim]);
-
-  const pillOpacity = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.8, 1],
-  });
-
-  return (
-    <View style={styles.pillsContainer}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pillsContent}
-      >
-        {pendingChallenges.map((pc) => (
-          <Animated.View key={pc.group.id} style={{ opacity: pillOpacity }}>
-            <TouchableOpacity
-              style={styles.pill}
-              activeOpacity={0.8}
-              onPress={() => {
-                if (Platform.OS !== 'web') {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                }
-                onPress(pc);
-              }}
-            >
-              <LinearGradient
-                colors={[theme.coral, theme.coralDark]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.pillGradient}
-              >
-                <Text style={styles.pillEmoji}>{pc.group.emoji}</Text>
-                <Text style={styles.pillText}>Respond</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
 
 // ── Feed Skeleton ──
 
@@ -201,6 +131,17 @@ const AnimatedFeedItem = React.memo(function AnimatedFeedItem({
   );
 });
 
+// ── Lane empty state (e.g. For You placeholder) ──
+
+function LaneEmpty({ item }: { item: FeedItemData }) {
+  return (
+    <View style={styles.laneEmpty}>
+      <Text style={styles.emptyTitle}>{item.emptyTitle}</Text>
+      <Text style={styles.emptySubtitle}>{item.emptySubtitle}</Text>
+    </View>
+  );
+}
+
 // ── Main Screen ──
 
 export default function BlinksScreen() {
@@ -221,6 +162,9 @@ export default function BlinksScreen() {
   const demoChallengeCompleted = useOnboardingStore((s) => s.demoChallengeCompleted);
   const [demoDismissed, setDemoDismissed] = useState(false);
   const showDemoAlert = shouldShowDemoGroup && !demoChallengeCompleted && !demoDismissed;
+
+  // Which Home lane is showing: 🔒 Groups (private), 🌍 World, ✨ For You.
+  const [activeLane, setActiveLane] = useState<Lane>('groups');
 
   const flatListRef = useRef<FlatList>(null);
   useScrollToTop(flatListRef);
@@ -269,7 +213,6 @@ export default function BlinksScreen() {
       if (groups.length === 0) return [];
 
       const allItems: FeedItemData[] = [];
-      const groupMap = new Map(groups.map((g) => [g.id, g]));
 
       // Fetch history + responses for each group in parallel (skip demo groups)
       const realGroups = groups.filter((g) => !isDemoGroup(g.id));
@@ -386,78 +329,106 @@ export default function BlinksScreen() {
     staleTime: 30_000,
   });
 
-  // Build active challenge feed cards from pending challenges
-  const activeChallengeCards = useMemo((): FeedItemData[] => {
-    return pendingChallenges.map((pc) => {
-      // Find the first response with a photo for blurred preview
-      const firstPhotoResponse = pc.responses?.find((r) => r.photo_url);
-      const responseCount = pc.responses?.length ?? 0;
-      const memberCount = pc.group.memberCount ?? pc.group.members?.length ?? 0;
+  // ── 🔒 GROUPS lane: challenge-grouped feed ──
+  // The atomic unit is a CHALLENGE, not a photo. Live (unanswered) challenges
+  // become cards with an "Add yours" CTA; answered/closed challenges become a
+  // card header with their response photos rendered underneath.
+  const groupsLaneData = useMemo<FeedItemData[]>(() => {
+    const out: FeedItemData[] = [];
 
-      return {
-        id: `active_${pc.challenge.id}`,
-        type: 'active_challenge' as const,
+    // Live challenges first — one card each, sorted soonest-to-expire.
+    const liveSorted = [...pendingChallenges].sort((a, b) => {
+      const ea = a.challenge.expires_at ? new Date(a.challenge.expires_at).getTime() : Infinity;
+      const eb = b.challenge.expires_at ? new Date(b.challenge.expires_at).getTime() : Infinity;
+      return ea - eb;
+    });
+    for (const pc of liveSorted) {
+      out.push({
+        id: `cc_live_${pc.challenge.id}`,
+        type: 'challenge_card',
+        groupId: pc.group.id,
         groupName: pc.group.name,
         groupEmoji: pc.group.emoji,
-        groupId: pc.group.id,
         challengeId: pc.challenge.id,
         challengePrompt: pc.challenge.prompt_text || pc.challenge.prompt || undefined,
         challengeType: pc.challenge.type,
-        blurredPhotoUrl: firstPhotoResponse?.photo_url || undefined,
-        responseCount,
-        memberCount,
+        isLive: true,
+        expiresAt: pc.challenge.expires_at,
+        responseCount: pc.responses?.length ?? 0,
+        memberCount: pc.group.memberCount ?? pc.group.members?.length ?? 0,
         timestamp: pc.challenge.triggered_at || new Date().toISOString(),
-      };
-    });
-  }, [pendingChallenges]);
-
-  // Static "Challenges around the world" section. Built once per session —
-  // seeded mock challenges grouped by prompt to teach new users the concept.
-  // When real "Share to world" ships these get replaced by server content.
-  const worldwideSection = useMemo<FeedItemData[]>(() => {
-    const header: FeedItemData = {
-      id: 'ww_section_header',
-      type: 'section_header',
-      sectionTitle: '🌍 Challenges around the world',
-      sectionSubtitle: 'Respond to unlock all photos',
-    };
-    const items: FeedItemData[] = WORLDWIDE_CHALLENGES.map((ch) => ({
-      id: `ww_challenge_${ch.promptId}`,
-      type: 'worldwide_challenge' as const,
-      worldwideChallenge: ch,
-    }));
-    return [header, ...items];
-  }, []);
-
-  // Post-process: sort, deduplicate, inject AI commentary, then append the
-  // worldwide section so it always sits at the bottom of Home.
-  const feedItems = useMemo(() => {
-    const items = feedQuery.data ?? [];
-
-    // Deduplicate by id
-    const seen = new Set<string>();
-    const unique: FeedItemData[] = [];
-    for (const item of items) {
-      if (!seen.has(item.id)) {
-        seen.add(item.id);
-        unique.push(item);
-      }
+      });
     }
 
-    // Sort all items by timestamp descending (newest first)
-    unique.sort((a, b) => {
-      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-      return tb - ta; // newest first
-    });
+    // Answered/closed challenges from the feed, grouped by challengeId.
+    const items = feedQuery.data ?? [];
+    const byChallenge = new Map<string, FeedItemData[]>();
+    const orderKeys: string[] = [];
+    for (const it of items) {
+      if (!it.challengeId) continue; // spotlight / ai commentary — omit from Groups
+      if (!byChallenge.has(it.challengeId)) {
+        byChallenge.set(it.challengeId, []);
+        orderKeys.push(it.challengeId);
+      }
+      byChallenge.get(it.challengeId)!.push(it);
+    }
+    const newest = (arr: FeedItemData[]) =>
+      Math.max(...arr.map((a) => (a.timestamp ? new Date(a.timestamp).getTime() : 0)), 0);
+    orderKeys.sort((a, b) => newest(byChallenge.get(b)!) - newest(byChallenge.get(a)!));
 
-    // Inject AI commentary every ~6 items if we have enough content
-    const withCommentary = injectAICommentary(unique);
+    for (const cid of orderKeys) {
+      const grp = byChallenge.get(cid)!;
+      const first = grp[0];
+      const photoCount = grp.filter((g) => g.type === 'photo').length;
+      out.push({
+        id: `cc_${cid}`,
+        type: 'challenge_card',
+        groupId: first.groupId,
+        groupName: first.groupName,
+        groupEmoji: first.groupEmoji,
+        challengeId: cid,
+        challengePrompt: first.challengePrompt || first.quizQuestion,
+        challengeType: first.challengeType || (first.type === 'quiz_result' ? 'quiz' : 'snap'),
+        isLive: false,
+        responseCount: photoCount || grp.length,
+        timestamp: first.timestamp,
+      });
+      out.push(...grp);
+    }
 
-    // Compose: active challenge cards at top, then user feed, then worldwide.
-    const head = activeChallengeCards.length > 0 ? activeChallengeCards : [];
-    return [...head, ...withCommentary, ...worldwideSection];
-  }, [feedQuery.data, activeChallengeCards, worldwideSection]);
+    return out;
+  }, [pendingChallenges, feedQuery.data]);
+
+  // ── 🌍 WORLD lane: global challenges (seeded until "Share to world" ships) ──
+  const worldLaneData = useMemo<FeedItemData[]>(
+    () =>
+      WORLDWIDE_CHALLENGES.map((ch) => ({
+        id: `ww_challenge_${ch.promptId}`,
+        type: 'worldwide_challenge' as const,
+        worldwideChallenge: ch,
+      })),
+    [],
+  );
+
+  // ── ✨ FOR YOU lane: personalized public discovery (Phase 3) ──
+  const forYouLaneData = useMemo<FeedItemData[]>(
+    () => [
+      {
+        id: 'foryou_empty',
+        type: 'lane_empty',
+        emptyTitle: '✨ For You is coming soon',
+        emptySubtitle:
+          'Once the World fills up with public challenges, this lane will surface the ones you’ll love — picked just for you.',
+      },
+    ],
+    [],
+  );
+
+  const laneRawData = useMemo<FeedItemData[]>(() => {
+    if (activeLane === 'world') return worldLaneData;
+    if (activeLane === 'foryou') return forYouLaneData;
+    return groupsLaneData;
+  }, [activeLane, groupsLaneData, worldLaneData, forYouLaneData]);
 
   // ── Socket listeners ──
   useEffect(() => {
@@ -523,13 +494,6 @@ export default function BlinksScreen() {
     [router],
   );
 
-  const handlePillPress = useCallback(
-    (pc: PendingChallenge) => {
-      navigateToChallenge(pc.group, pc.challenge);
-    },
-    [navigateToChallenge],
-  );
-
   const handleFeedItemPress = useCallback(
     (item: FeedItemData) => {
       if (item.groupId) {
@@ -589,20 +553,32 @@ export default function BlinksScreen() {
     ]);
   }, [refreshGroups, queryClient]);
 
-  // ── Wire up callbacks into feed items ──
-  const feedItemsWithCallbacks = useMemo(() => {
-    return feedItems.map((item) => ({
+  // ── Wire up callbacks into the active lane's items ──
+  const laneData = useMemo(() => {
+    return laneRawData.map((item) => ({
       ...item,
       onPress: () => handleFeedItemPress(item),
       onRespond: () => handleFeedItemRespond(item),
       onReact: (emoji: string) => handleReact(item, emoji),
     }));
-  }, [feedItems, handleFeedItemPress, handleFeedItemRespond, handleReact]);
+  }, [laneRawData, handleFeedItemPress, handleFeedItemRespond, handleReact]);
 
   // ── Render ──
 
   const renderItem = useCallback(
-    ({ item }: { item: FeedItemData }) => <AnimatedFeedItem item={item} />,
+    ({ item }: { item: FeedItemData }) => {
+      if (item.type === 'challenge_card') {
+        return (
+          <Animated.View>
+            <ChallengeCard item={item} />
+          </Animated.View>
+        );
+      }
+      if (item.type === 'lane_empty') {
+        return <LaneEmpty item={item} />;
+      }
+      return <AnimatedFeedItem item={item} />;
+    },
     [],
   );
 
@@ -619,62 +595,53 @@ export default function BlinksScreen() {
     (hasNoGroups || (groups.length > 0 && feedQuery.isFetched && (feedQuery.data ?? []).length === 0));
 
   // ── List Header ──
-  // Stacks (in order): active challenge pills (when any), no-groups CTA
-  // (when applicable). Worldwide section is appended to feedItems so it
-  // renders below user content via the FlatList itself.
+  // Groups lane only: the no-content / no-groups CTA. Other lanes carry their
+  // own content (World cards, For You placeholder).
   const ListHeader = useMemo(() => {
-    const hasPills = pendingChallenges.length > 0;
+    if (activeLane !== 'groups' || !hasNoUserContent) return null;
     return (
-      <View>
-        {hasPills ? (
-          <ActiveChallengePills
-            pendingChallenges={pendingChallenges}
-            onPress={handlePillPress}
-          />
-        ) : null}
-        {hasNoUserContent ? (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconContainer}>
-              <Zap size={48} color={theme.coral} fill={theme.coral} />
-            </View>
-            <Text style={styles.emptyTitle}>
-              {hasNoGroups ? 'Welcome to Blink' : 'Your feed is empty'}
+      <View style={styles.emptyState}>
+        <View style={styles.emptyIconContainer}>
+          <Zap size={48} color={theme.coral} fill={theme.coral} />
+        </View>
+        <Text style={styles.emptyTitle}>
+          {hasNoGroups ? 'Welcome to Blink' : 'No challenges yet'}
+        </Text>
+        <Text style={styles.emptySubtitle}>
+          {hasNoGroups
+            ? 'Capture moments with your closest crew via daily snap challenges. Join a group to start, or swipe to World to see what people are sharing.'
+            : 'When your groups run challenges, they show up here. Swipe to World to see what people are sharing around the globe.'}
+        </Text>
+        <TouchableOpacity
+          style={styles.emptyAction}
+          onPress={() => {
+            if (Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+            router.push('/(tabs)/(groups)' as never);
+          }}
+        >
+          <LinearGradient
+            colors={[theme.coral, theme.coralDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.emptyActionGradient}
+          >
+            <Text style={styles.emptyActionText}>
+              {hasNoGroups ? 'Create or Join a Group' : 'Go to Groups'}
             </Text>
-            <Text style={styles.emptySubtitle}>
-              {hasNoGroups
-                ? 'Capture moments with your closest crew via daily snap challenges. Join a group to start, or scroll down to see what people are sharing around the world.'
-                : 'When friends respond to challenges, their photos show up here. Scroll down to see what people are sharing around the world.'}
-            </Text>
-            <TouchableOpacity
-              style={styles.emptyAction}
-              onPress={() => {
-                if (Platform.OS !== 'web') {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }
-                router.push('/(tabs)/(groups)' as never);
-              }}
-            >
-              <LinearGradient
-                colors={[theme.coral, theme.coralDark]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.emptyActionGradient}
-              >
-                <Text style={styles.emptyActionText}>
-                  {hasNoGroups ? 'Create or Join a Group' : 'Go to Groups'}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        ) : null}
+          </LinearGradient>
+        </TouchableOpacity>
       </View>
     );
-  }, [pendingChallenges, handlePillPress, hasNoUserContent, hasNoGroups, router]);
+  }, [activeLane, hasNoUserContent, hasNoGroups, router]);
 
   // ── List Empty ──
-  // Worldwide items are always appended to feedItems, so this only fires
-  // during the very first load before any data resolves.
-  const ListEmpty = useMemo(() => (isLoading ? <FeedSkeleton /> : null), [isLoading]);
+  // Only the Groups lane has an async first load; other lanes are always ready.
+  const ListEmpty = useMemo(
+    () => (activeLane === 'groups' && isLoading ? <FeedSkeleton /> : null),
+    [activeLane, isLoading],
+  );
 
   // ── List Footer ──
   // Trailing spacer so the last worldwide card isn't flush with the tab bar.
@@ -731,10 +698,13 @@ export default function BlinksScreen() {
         </View>
       </View>
 
+      {/* Lane switcher: 🔒 Groups · 🌍 World · ✨ For You */}
+      <LaneTabs active={activeLane} onChange={setActiveLane} />
+
       {/* Feed */}
       <FlatList
         ref={flatListRef}
-        data={feedItemsWithCallbacks}
+        data={laneData}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         contentContainerStyle={styles.feedContent}
@@ -830,76 +800,6 @@ function createFallbackItem(
   });
 }
 
-function interleaveByGroup(items: FeedItemData[]): FeedItemData[] {
-  if (items.length <= 1) return items;
-
-  // Group items by groupId
-  const byGroup = new Map<string, FeedItemData[]>();
-  const noGroup: FeedItemData[] = [];
-  for (const item of items) {
-    const gid = item.groupId || '__none__';
-    if (gid === '__none__') {
-      noGroup.push(item);
-    } else {
-      if (!byGroup.has(gid)) byGroup.set(gid, []);
-      byGroup.get(gid)!.push(item);
-    }
-  }
-
-  // Round-robin interleave
-  const queues = Array.from(byGroup.values());
-  const result: FeedItemData[] = [];
-  let idx = 0;
-  let maxLen = Math.max(...queues.map((q) => q.length), 0);
-  for (let round = 0; round < maxLen; round++) {
-    for (const queue of queues) {
-      if (round < queue.length) {
-        result.push(queue[round]);
-      }
-    }
-  }
-
-  // Append no-group items
-  result.push(...noGroup);
-  return result;
-}
-
-function injectAICommentary(items: FeedItemData[]): FeedItemData[] {
-  if (items.length < 5) return items;
-
-  const result: FeedItemData[] = [];
-  const aiCommentaries = [
-    'Your group is on fire today. 3 people already responded.',
-    'Looks like everyone chose the same answer. Basic.',
-    'This might be the best photo round yet.',
-    'Someone took that challenge way too seriously.',
-    'The vibes in this group are unmatched today.',
-  ];
-
-  // Collect unique group names for commentary context
-  const groupNames = Array.from(
-    new Set(items.filter((i) => i.groupName).map((i) => i.groupName!)),
-  );
-
-  let commentaryIdx = 0;
-  for (let i = 0; i < items.length; i++) {
-    result.push(items[i]);
-    // Insert AI commentary every 6 items
-    if ((i + 1) % 6 === 0 && commentaryIdx < aiCommentaries.length) {
-      const targetGroup =
-        groupNames[commentaryIdx % groupNames.length] || 'your group';
-      result.push({
-        id: `ai_commentary_${i}`,
-        type: 'ai_commentary',
-        groupName: targetGroup,
-        commentary: aiCommentaries[commentaryIdx],
-      });
-      commentaryIdx++;
-    }
-  }
-  return result;
-}
-
 // ── Styles ──
 
 const styles = StyleSheet.create({
@@ -964,35 +864,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  // Pills
-  pillsContainer: {
-    marginBottom: spacing.lg,
-  },
-  pillsContent: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-  },
-  pill: {
-    borderRadius: borderRadius.full,
-    overflow: 'hidden',
-  },
-  pillGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: borderRadius.full,
-  },
-  pillEmoji: {
-    fontSize: 16,
-  },
-  pillText: {
-    ...typography.labelLarge,
-    color: theme.white,
-    fontWeight: '700',
-  },
-
   // Skeleton
   skeletonContainer: {
     gap: spacing.xxl,
@@ -1037,6 +908,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 80,
     paddingHorizontal: spacing.xl,
+  },
+  laneEmpty: {
+    alignItems: 'center',
+    paddingTop: 100,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
   },
   emptyIconContainer: {
     width: 96,
