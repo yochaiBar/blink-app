@@ -9,6 +9,9 @@ import {
   Animated,
   Platform,
   Dimensions,
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useScrollToTop } from '@react-navigation/native';
@@ -59,6 +62,7 @@ interface PendingChallenge {
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const LANE_ORDER: Lane[] = ['groups', 'world', 'foryou'];
 
 // ── Feed Skeleton ──
 
@@ -165,6 +169,9 @@ export default function BlinksScreen() {
 
   // Which Home lane is showing: 🔒 Groups (private), 🌍 World, ✨ For You.
   const [activeLane, setActiveLane] = useState<Lane>('groups');
+  // Measured height of the pager viewport so each lane page can bound its
+  // FlatList (required for vertical scroll inside a horizontal pager).
+  const [pagerHeight, setPagerHeight] = useState(0);
 
   const flatListRef = useRef<FlatList>(null);
   useScrollToTop(flatListRef);
@@ -434,11 +441,6 @@ export default function BlinksScreen() {
     [],
   );
 
-  const laneRawData = useMemo<FeedItemData[]>(() => {
-    if (activeLane === 'world') return worldLaneData;
-    if (activeLane === 'foryou') return forYouLaneData;
-    return groupsLaneData;
-  }, [activeLane, groupsLaneData, worldLaneData, forYouLaneData]);
 
   // ── Socket listeners ──
   useEffect(() => {
@@ -563,15 +565,36 @@ export default function BlinksScreen() {
     ]);
   }, [refreshGroups, queryClient]);
 
-  // ── Wire up callbacks into the active lane's items ──
-  const laneData = useMemo(() => {
-    return laneRawData.map((item) => ({
-      ...item,
-      onPress: () => handleFeedItemPress(item),
-      onRespond: () => handleFeedItemRespond(item),
-      onReact: (emoji: string) => handleReact(item, emoji),
-    }));
-  }, [laneRawData, handleFeedItemPress, handleFeedItemRespond, handleReact]);
+  // ── Wire callbacks into each lane's items ──
+  const wire = useCallback(
+    (items: FeedItemData[]) =>
+      items.map((item) => ({
+        ...item,
+        onPress: () => handleFeedItemPress(item),
+        onRespond: () => handleFeedItemRespond(item),
+        onReact: (emoji: string) => handleReact(item, emoji),
+      })),
+    [handleFeedItemPress, handleFeedItemRespond, handleReact],
+  );
+  const groupsData = useMemo(() => wire(groupsLaneData), [wire, groupsLaneData]);
+  const worldData = useMemo(() => wire(worldLaneData), [wire, worldLaneData]);
+  const forYouData = useMemo(() => wire(forYouLaneData), [wire, forYouLaneData]);
+
+  // ── Horizontal lane paging ──
+  const pagerRef = useRef<ScrollView>(null);
+  const goToLane = useCallback((lane: Lane) => {
+    setActiveLane(lane);
+    const idx = LANE_ORDER.indexOf(lane);
+    pagerRef.current?.scrollTo({ x: idx * SCREEN_WIDTH, animated: true });
+  }, []);
+  const onPagerScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+      const lane = LANE_ORDER[idx];
+      if (lane && lane !== activeLane) setActiveLane(lane);
+    },
+    [activeLane],
+  );
 
   // ── Render ──
 
@@ -608,7 +631,7 @@ export default function BlinksScreen() {
   // Groups lane only: the no-content / no-groups CTA. Other lanes carry their
   // own content (World cards, For You placeholder).
   const ListHeader = useMemo(() => {
-    if (activeLane !== 'groups' || !hasNoUserContent) return null;
+    if (!hasNoUserContent) return null;
     return (
       <View style={styles.emptyState}>
         <View style={styles.emptyIconContainer}>
@@ -644,14 +667,10 @@ export default function BlinksScreen() {
         </TouchableOpacity>
       </View>
     );
-  }, [activeLane, hasNoUserContent, hasNoGroups, router]);
+  }, [hasNoUserContent, hasNoGroups, router]);
 
-  // ── List Empty ──
-  // Only the Groups lane has an async first load; other lanes are always ready.
-  const ListEmpty = useMemo(
-    () => (activeLane === 'groups' && isLoading ? <FeedSkeleton /> : null),
-    [activeLane, isLoading],
-  );
+  // ── List Empty (Groups lane first-load skeleton) ──
+  const ListEmpty = useMemo(() => (isLoading ? <FeedSkeleton /> : null), [isLoading]);
 
   // ── List Footer ──
   // Trailing spacer so the last worldwide card isn't flush with the tab bar.
@@ -709,32 +728,75 @@ export default function BlinksScreen() {
       </View>
 
       {/* Lane switcher: 🔒 Groups · 🌍 World · ✨ For You */}
-      <LaneTabs active={activeLane} onChange={setActiveLane} />
+      <LaneTabs active={activeLane} onChange={goToLane} />
 
-      {/* Feed */}
-      <FlatList
-        ref={flatListRef}
-        data={laneData}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={styles.feedContent}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={ListEmpty}
-        ListFooterComponent={ListFooter}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={theme.coral}
-          />
-        }
-        // Performance
-        removeClippedSubviews={Platform.OS !== 'web'}
-        maxToRenderPerBatch={5}
-        windowSize={7}
-        initialNumToRender={4}
-      />
+      {/* Horizontally-paged lanes — swipe L/R to switch, ↑/↓ within a lane */}
+      <View
+        style={styles.pager}
+        onLayout={(e) => setPagerHeight(e.nativeEvent.layout.height)}
+      >
+        <ScrollView
+          ref={pagerRef}
+          horizontal
+          pagingEnabled
+          directionalLockEnabled
+          disableIntervalMomentum
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={onPagerScrollEnd}
+          scrollEventThrottle={16}
+        >
+          {/* 🔒 Groups */}
+          <View style={[styles.page, { height: pagerHeight }]}>
+            <FlatList
+              ref={flatListRef}
+              data={groupsData}
+              renderItem={renderItem}
+              keyExtractor={keyExtractor}
+              contentContainerStyle={styles.feedContent}
+              showsVerticalScrollIndicator={false}
+              ListHeaderComponent={ListHeader}
+              ListEmptyComponent={ListEmpty}
+              ListFooterComponent={ListFooter}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={theme.coral}
+                />
+              }
+              removeClippedSubviews={Platform.OS !== 'web'}
+              maxToRenderPerBatch={5}
+              windowSize={7}
+              initialNumToRender={4}
+            />
+          </View>
+
+          {/* 🌍 World */}
+          <View style={[styles.page, { height: pagerHeight }]}>
+            <FlatList
+              data={worldData}
+              renderItem={renderItem}
+              keyExtractor={keyExtractor}
+              contentContainerStyle={styles.feedContent}
+              showsVerticalScrollIndicator={false}
+              ListFooterComponent={ListFooter}
+              removeClippedSubviews={Platform.OS !== 'web'}
+            />
+          </View>
+
+          {/* ✨ For You */}
+          <View style={[styles.page, { height: pagerHeight }]}>
+            <FlatList
+              data={forYouData}
+              renderItem={renderItem}
+              keyExtractor={keyExtractor}
+              contentContainerStyle={styles.feedContent}
+              showsVerticalScrollIndicator={false}
+              ListFooterComponent={ListFooter}
+            />
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -866,6 +928,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800' as const,
     color: theme.white,
+  },
+
+  // Lane pager
+  pager: {
+    flex: 1,
+  },
+  page: {
+    width: SCREEN_WIDTH,
   },
 
   // Feed
