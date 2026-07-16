@@ -58,7 +58,9 @@ Sentry.init({
   sendDefaultPii: false,
 });
 
-SplashScreen.preventAutoHideAsync();
+// In Expo Go the native splash screen may not be registered — guard so the
+// call doesn't surface an uncaught "No native splash screen registered" error.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
 
@@ -95,7 +97,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isLoading) return;
-    SplashScreen.hideAsync();
+    SplashScreen.hideAsync().catch(() => {});
 
     const inOnboarding = (segments[0] as string) === "onboarding";
 

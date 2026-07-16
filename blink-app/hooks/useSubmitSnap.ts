@@ -79,6 +79,7 @@ export function useSubmitSnap() {
       }
     },
     onError: (error: Error, variables: { groupId: string; imageUri?: string }) => {
+      console.warn('[snap] submit failed:', error?.message, error);
       if (error.message?.includes('no group key')) {
         // Self-heal: kick off a recovery request so an online member
         // re-couriers the key. It won't help THIS attempt, but the next
