@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Image, ImageProps } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
-import { getReceivedPhotoUri } from '@/services/photoStore';
+import { getLocalPhotoUri } from '@/services/photoStore';
 
 export interface EncryptedImageProps extends Omit<ImageProps, 'source'> {
   /** v1 photo_url (S3) — fallback while v1 rows still exist. Null for v2 responses. */
@@ -35,7 +35,7 @@ export default function EncryptedImage({
 }: EncryptedImageProps) {
   const localPhotoQuery = useQuery({
     queryKey: ['localPhoto', responseId],
-    queryFn: () => (responseId ? getReceivedPhotoUri(responseId) : null),
+    queryFn: () => (responseId ? getLocalPhotoUri(responseId) : null),
     enabled: !!responseId,
     staleTime: 30_000,
   });

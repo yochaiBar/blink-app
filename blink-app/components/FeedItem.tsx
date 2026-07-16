@@ -22,7 +22,7 @@ import WorldwideChallengeCard from '@/components/WorldwideChallengeCard';
 import { WorldwideChallenge } from '@/constants/worldwideExamples';
 import AvatarRing from '@/components/ui/AvatarRing';
 import PhotoCommentsPreview from '@/components/PhotoCommentsPreview';
-import { getReceivedPhotoUri } from '@/services/photoStore';
+import { getLocalPhotoUri } from '@/services/photoStore';
 
 // ── Types ──
 
@@ -70,6 +70,7 @@ export interface FeedItemData {
   // Challenge card (challenge-grouped feed header)
   isLive?: boolean;
   expiresAt?: string;
+  challengeResponses?: Array<{ responseId: string; userName?: string; photoUrl?: string }>;
   // Lane empty state
   emptyTitle?: string;
   emptySubtitle?: string;
@@ -109,7 +110,7 @@ function PhotoFeedItem({ item }: { item: FeedItemData }) {
   // lands; this query re-runs and the Image swaps the source.
   const localPhotoQuery = useQuery({
     queryKey: ['localPhoto', responseId],
-    queryFn: () => (responseId ? getReceivedPhotoUri(responseId) : null),
+    queryFn: () => (responseId ? getLocalPhotoUri(responseId) : null),
     enabled: !!responseId,
     staleTime: 30_000,
   });

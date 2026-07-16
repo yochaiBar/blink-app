@@ -316,10 +316,15 @@ function SnapChallengeScreen() {
         });
         if (photo?.uri) {
           setCapturedUri(photo.uri);
+        } else {
+          console.warn('[snap] takePictureAsync returned no uri', photo);
         }
-      } catch {
-        // Non-critical: camera capture can fail on some devices; user sees placeholder preview
+      } catch (e) {
+        // Camera capture can fail on some devices; surface it so we can debug.
+        console.warn('[snap] takePictureAsync failed', e);
       }
+    } else if (__DEV__) {
+      console.warn('[snap] capture skipped', { hasCamera, cameraReady, hasRef: !!cameraRef.current });
     }
 
     setPhase('preview');

@@ -207,10 +207,6 @@ export default function GroupDetailScreen() {
   const longestGroupStreak = group
     ? Math.max(...group.members.map((m) => m.streak), 0) : 0;
 
-  if (__DEV__ && group) {
-    console.log('[GroupDetail] isAdmin:', isAdmin, '| user.id:', user.id, '| createdBy:', group.createdBy);
-  }
-
   // ── Side effects: fetch progress, preview, socket listeners ──
   useEffect(() => {
     if (!activeChallenge?.id || isDemo) return;
