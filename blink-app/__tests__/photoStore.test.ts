@@ -73,6 +73,8 @@ import {
   getReceivedPhotoUri,
   putSenderPlaintext,
   getSenderPlaintext,
+  getSenderPhotoUri,
+  getLocalPhotoUri,
   sweepExpiredSenderPlaintexts,
   wipeAllPhotos,
   _TEST_INTERNALS,
@@ -124,6 +126,35 @@ describe('photoStore — received store', () => {
     await putReceivedPhoto(RESPONSE_A, new Uint8Array([1, 2, 3]));
     await putReceivedPhoto(RESPONSE_A, new Uint8Array([4, 5, 6]));
     expect(await getReceivedPhoto(RESPONSE_A)).toEqual(new Uint8Array([4, 5, 6]));
+  });
+});
+
+describe('photoStore — local photo URI resolution (own vs received)', () => {
+  it('getSenderPhotoUri returns the sender path for our own sent photo', async () => {
+    await putSenderPlaintext(RESPONSE_A, new Uint8Array([1, 2, 3]));
+    expect(await getSenderPhotoUri(RESPONSE_A)).toBe(_TEST_INTERNALS.senderPath(RESPONSE_A));
+  });
+
+  it('getSenderPhotoUri returns null past TTL', async () => {
+    await putSenderPlaintext(RESPONSE_A, new Uint8Array([1, 2, 3]));
+    jest.advanceTimersByTime(_TEST_INTERNALS.SENDER_TTL_MS + 1000);
+    fsNow.value = Date.now();
+    expect(await getSenderPhotoUri(RESPONSE_A)).toBeNull();
+  });
+
+  it('getLocalPhotoUri prefers the received copy', async () => {
+    await putReceivedPhoto(RESPONSE_A, new Uint8Array([9]));
+    await putSenderPlaintext(RESPONSE_A, new Uint8Array([1]));
+    expect(await getLocalPhotoUri(RESPONSE_A)).toBe(_TEST_INTERNALS.receivedPath(RESPONSE_A));
+  });
+
+  it('getLocalPhotoUri falls back to the sender copy (own photo) when not received', async () => {
+    await putSenderPlaintext(RESPONSE_A, new Uint8Array([1]));
+    expect(await getLocalPhotoUri(RESPONSE_A)).toBe(_TEST_INTERNALS.senderPath(RESPONSE_A));
+  });
+
+  it('getLocalPhotoUri returns null when neither store has it', async () => {
+    expect(await getLocalPhotoUri(RESPONSE_B)).toBeNull();
   });
 });
 

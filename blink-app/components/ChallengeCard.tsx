@@ -8,7 +8,7 @@ import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { FeedItemData } from '@/components/FeedItem';
-import { getReceivedPhotoUri } from '@/services/photoStore';
+import { getLocalPhotoUri } from '@/services/photoStore';
 
 const MAX_THUMBS = 4;
 
@@ -94,7 +94,7 @@ function ResponseThumb({
 }) {
   const localPhoto = useQuery({
     queryKey: ['localPhoto', responseId],
-    queryFn: () => getReceivedPhotoUri(responseId),
+    queryFn: () => getLocalPhotoUri(responseId),
     enabled: !!responseId,
     staleTime: 30_000,
   });

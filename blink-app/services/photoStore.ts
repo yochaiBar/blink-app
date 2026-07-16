@@ -107,6 +107,40 @@ export async function getReceivedPhotoUri(
   return info.exists ? path : null;
 }
 
+/**
+ * Returns a file:// URI for OUR OWN sent photo, if still cached and within
+ * TTL. The sender never receives their own relay frame, so this is the only
+ * on-device source for showing a user their own snap.
+ */
+export async function getSenderPhotoUri(
+  responseId: string,
+): Promise<string | null> {
+  const path = senderPath(responseId);
+  const info = await getInfoAsync(path);
+  if (!info.exists) return null;
+  const modMs = info.modificationTime * 1000;
+  if (modMs > 0 && Date.now() - modMs > SENDER_TTL_MS) {
+    await deleteAsync(path, { idempotent: true });
+    return null;
+  }
+  return path;
+}
+
+/**
+ * Resolve a renderable local photo URI for a response: the RECEIVED copy
+ * (photos other members sent us) or, for our OWN sent photos, the SENDER
+ * copy. This is what every photo surface (feed, reveal, thumbnails) should
+ * use so a user always sees their own snap, not just others'.
+ */
+export async function getLocalPhotoUri(
+  responseId: string,
+): Promise<string | null> {
+  return (
+    (await getReceivedPhotoUri(responseId)) ??
+    (await getSenderPhotoUri(responseId))
+  );
+}
+
 // ── Sender plaintext cache ────────────────────────────────────────
 
 /**
