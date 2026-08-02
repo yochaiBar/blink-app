@@ -8,6 +8,7 @@ import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button } from '@/components/ui';
+import { extractInviteCode, looksLikeInviteLink } from '@/utils/inviteCode';
 
 export default function JoinGroupScreen() {
   const insets = useSafeAreaInsets();
@@ -15,12 +16,13 @@ export default function JoinGroupScreen() {
   const { joinGroup } = useApp();
   const params = useLocalSearchParams<{ code?: string }>();
 
-  const [code, setCode] = useState<string>(params.code?.toUpperCase() || '');
+  const [code, setCode] = useState<string>(params.code ? extractInviteCode(params.code) : '');
   const [isJoining, setIsJoining] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
   const handleJoin = useCallback(async () => {
-    if (!code.trim()) {
+    const cleanCode = extractInviteCode(code);
+    if (!cleanCode) {
       setError('Please enter an invite code');
       return;
     }
@@ -29,7 +31,7 @@ export default function JoinGroupScreen() {
     setError('');
 
     try {
-      const result = await joinGroup(code.trim().toUpperCase());
+      const result = await joinGroup(cleanCode);
       if (result.success) {
         if (Platform.OS !== 'web') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -82,13 +84,18 @@ export default function JoinGroupScreen() {
               style={styles.input}
               value={code}
               onChangeText={(text) => {
-                setCode(text.toUpperCase());
+                // If they paste a full invite link, collapse it to the code so
+                // the field shows what will actually be submitted.
+                setCode(looksLikeInviteLink(text) ? extractInviteCode(text) : text.toUpperCase());
                 setError('');
               }}
               placeholder="e.g. CREW25"
               placeholderTextColor={theme.textMuted}
               autoCapitalize="characters"
-              maxLength={10}
+              // High enough that a pasted invite link isn't natively truncated
+              // before onChangeText fires; extractInviteCode collapses it to the
+              // short code, so the field still ends up showing just the code.
+              maxLength={128}
               autoFocus
               returnKeyType="go"
               onSubmitEditing={handleJoin}

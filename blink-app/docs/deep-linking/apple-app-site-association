@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["REPLACE_WITH_APPLE_TEAM_ID.com.yochaibar.blinks"],
+        "components": [
+          {
+            "/": "/join/*",
+            "comment": "Group invite links open the Join screen with the code prefilled"
+          }
+        ]
+      }
+    ]
+  }
+}
