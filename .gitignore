@@ -43,3 +43,9 @@ docs/adrs/004-s3-presigned-uploads.md
 docs/adrs/005-zustand-over-redux.md
 docs/adrs/006-postgresql-otp-storage.md
 .claude/scheduled_tasks.lock
+
+# Local tooling artifacts (machine-generated, not shared)
+.mcp.json
+.agentsroom/
+graphify-out/
+.claude/settings.json.graphify-bak
