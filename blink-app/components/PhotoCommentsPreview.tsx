@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { Send } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
 import { spacing } from '@/constants/spacing';
@@ -18,22 +19,20 @@ interface Props {
 /**
  * Inline Instagram-style comment preview below a photo response.
  *
- * Phase 2 scope: shows up to PREVIEW_LIMIT top-level comments + composer.
- * Phase 3 will add the "View all X comments" bottom sheet + reply threading
- * display + long-press menu (report/delete). See:
- *   ~/Documents/Obsidian Vault/Blink/Plans/Photo comments.md
+ * Shows up to PREVIEW_LIMIT top-level comments + a composer; "View all"
+ * opens the full thread (replies, replying, deleting) at
+ * app/comments/[responseId].tsx.
  */
 export default function PhotoCommentsPreview({ responseId }: Props) {
   const { comments, isLoading, post, isPosting } = useComments(responseId);
+  const router = useRouter();
   const [draft, setDraft] = useState('');
 
-  // Phase 2 displays top-level comments only. Replies live behind the future
-  // sheet — counting them here would mislead the user about the "View all"
-  // total. Once Phase 3 lands, swap the count to `comments.length`.
+  // The preview shows top-level comments; replies live in the full thread.
   const topLevel = useMemo(() => comments.filter((c) => c.parent_comment_id === null), [comments]);
 
   const visible = topLevel.slice(0, PREVIEW_LIMIT);
-  const hiddenCount = Math.max(0, topLevel.length - PREVIEW_LIMIT);
+  const hiddenCount = comments.length - visible.length;
 
   const trimmed = draft.trim();
   const charsLeft = MAX_LENGTH - draft.length;
@@ -70,7 +69,14 @@ export default function PhotoCommentsPreview({ responseId }: Props) {
               </Text>
             </View>
           ))}
-          {hiddenCount > 0 ? <Text style={styles.viewAll}>View all {topLevel.length} comments</Text> : null}
+          {hiddenCount > 0 ? (
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/comments/[responseId]', params: { responseId } })}
+              testID="comments-view-all"
+            >
+              <Text style={styles.viewAll}>View all {comments.length} comments</Text>
+            </TouchableOpacity>
+          ) : null}
         </>
       )}
 

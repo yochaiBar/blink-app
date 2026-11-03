@@ -251,6 +251,40 @@ describe('logout', () => {
   });
 });
 
+describe('setPushEnabled', () => {
+  async function signedIn() {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(200, {
+        user: { id: 'u1', phone_number: '+1', display_name: 'T', bio: null, push_enabled: true },
+        access_token: 'at',
+        refresh_token: 'rt',
+      }),
+    );
+    await useAuthStore.getState().verifyOtp('+15551234567', '123456');
+  }
+
+  it('saves the choice on the server', async () => {
+    await signedIn();
+    mockFetch.mockResolvedValueOnce(mockResponse(200, { id: 'u1', push_enabled: false }));
+
+    await useAuthStore.getState().setPushEnabled(false);
+
+    expect(useAuthStore.getState().user.push_enabled).toBe(false);
+    const [url, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
+    expect(String(url)).toMatch(/\/auth\/profile$/);
+    expect(init).toMatchObject({ method: 'PATCH', body: JSON.stringify({ push_enabled: false }) });
+  });
+
+  it('reverts and throws when the server refuses', async () => {
+    await signedIn();
+    mockFetch.mockResolvedValueOnce(mockResponse(500, { error: 'nope' }, false));
+
+    await expect(useAuthStore.getState().setPushEnabled(false)).rejects.toThrow('nope');
+
+    expect(useAuthStore.getState().user.push_enabled).toBe(true);
+  });
+});
+
 describe('deleteAccount', () => {
   async function signedIn() {
     mockFetch.mockResolvedValueOnce(

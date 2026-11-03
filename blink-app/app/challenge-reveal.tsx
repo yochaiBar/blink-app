@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, Share2, ArrowLeft, Users } from 'lucide-react-native';
+import { Check, Share2, ArrowLeft, Users, MessageCircle } from 'lucide-react-native';
 
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
@@ -413,15 +413,13 @@ export default function ChallengeRevealScreen() {
 
   // ── Navigation ──────────────────────────────────────────────────
   const handleShare = useCallback(async () => {
-    // Find the user's own response to share
-    const ownResponse = sortedResponses.find((r) => r.user_id === user.id);
-    const responseToShare = ownResponse ?? sortedResponses[0];
-    const photoUri = responseToShare
-      ? ((await resolvePhotoUri(responseToShare.id)) ?? (responseToShare === ownResponse ? localPhotoUri : null))
-      : null;
+    // Only your own photo leaves the app: others' photos were sent to the
+    // group end-to-end, not to be re-shared elsewhere.
+    const responseToShare = sortedResponses.find((r) => r.user_id === user.id);
+    const photoUri = responseToShare ? ((await resolvePhotoUri(responseToShare.id)) ?? localPhotoUri) : null;
 
     if (!responseToShare || !photoUri) {
-      Alert.alert('No Photo', 'There is no photo to share for this challenge.');
+      Alert.alert('No Photo', 'You can share your own photo once you have answered this challenge.');
       return;
     }
 
@@ -544,6 +542,18 @@ export default function ChallengeRevealScreen() {
                   onPress={() => handleReact(response.id, emoji)}
                 />
               ))}
+              {!isSample ? (
+                <TouchableOpacity
+                  style={styles.quickReactBtn}
+                  onPress={() =>
+                    router.push({ pathname: '/comments/[responseId]', params: { responseId: response.id } })
+                  }
+                  testID={`reveal-comments-${response.id}`}
+                >
+                  <MessageCircle size={18} color={theme.white} />
+                  {response.comment_count ? <Text style={styles.commentCount}>{response.comment_count}</Text> : null}
+                </TouchableOpacity>
+              ) : null}
             </View>
           </LinearGradient>
         </View>
@@ -967,6 +977,20 @@ const styles = StyleSheet.create({
   quickReactions: {
     flexDirection: 'row',
     gap: 8,
+  },
+  commentCount: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: theme.coral,
+    color: theme.white,
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   quickReactBtn: {
     width: 40,
