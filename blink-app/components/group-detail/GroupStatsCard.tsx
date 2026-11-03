@@ -80,7 +80,7 @@ export default function GroupStatsCard({ groupId }: GroupStatsCardProps) {
           name: fastest_responder.display_name,
         }
       : null,
-  ].filter(Boolean) as Array<{ emoji: string; label: string; value: string; name: string }>;
+  ].filter(Boolean) as { emoji: string; label: string; value: string; name: string }[];
 
   if (stats.length === 0) return null;
 

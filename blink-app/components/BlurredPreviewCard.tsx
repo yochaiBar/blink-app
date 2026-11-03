@@ -1,15 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
+import AvatarRing from '@/components/ui/AvatarRing';
 import ActivityPulse, { ActivityPulseProps } from '@/components/ActivityPulse';
 
 export interface BlurredPreviewCardProps {
   respondedCount: number;
-  totalMembers: number;
   totalReactions: number;
   topReactionEmoji?: string;
-  respondedUsers: Array<{ displayName: string; avatarUrl?: string }>;
+  respondedUsers: { displayName: string }[];
   challengeJustStarted?: boolean;
   onRespond: () => void;
   activityPulseProps?: ActivityPulseProps;
@@ -19,7 +18,6 @@ const PLACEHOLDER_COLORS = [`${theme.coral}30`, `${theme.purple}25`, `${theme.bl
 
 export default function BlurredPreviewCard({
   respondedCount,
-  totalMembers,
   totalReactions,
   topReactionEmoji,
   respondedUsers,
@@ -65,11 +63,6 @@ export default function BlurredPreviewCard({
     outputRange: [1, 1.01],
   });
 
-  const respondedNames = respondedUsers
-    .slice(0, 3)
-    .map((u) => u.displayName)
-    .join(', ');
-
   return (
     <Animated.View style={[styles.wrapper, { opacity: fadeInAnim }]}>
       {activityPulseProps && <ActivityPulse {...activityPulseProps} />}
@@ -110,15 +103,9 @@ export default function BlurredPreviewCard({
         {respondedUsers.length > 0 && (
           <View style={styles.respondedAvatars}>
             {respondedUsers.slice(0, 4).map((u, i) => (
-              <Image
-                key={i}
-                source={{
-                  uri:
-                    u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
-                }}
-                style={[styles.respondedAvatar, { marginLeft: i > 0 ? -6 : 0, zIndex: 4 - i }]}
-                contentFit="cover"
-              />
+              <View key={i} style={[styles.respondedAvatar, { marginLeft: i > 0 ? -6 : 0, zIndex: 4 - i }]}>
+                <AvatarRing name={u.displayName} size={22} />
+              </View>
             ))}
             {respondedUsers.length > 4 && <Text style={styles.moreText}>+{respondedUsers.length - 4}</Text>}
           </View>
@@ -208,6 +195,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     borderWidth: 2,
     borderColor: theme.bg,
+    overflow: 'hidden',
   },
   moreText: {
     fontSize: 11,

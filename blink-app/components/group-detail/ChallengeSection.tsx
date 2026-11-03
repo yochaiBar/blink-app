@@ -1,33 +1,26 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { Camera, Zap, Clock } from 'lucide-react-native';
+import { Camera, Clock } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import GlassCard from '@/components/ui/GlassCard';
-import BlinkAiAvatar from '@/components/BlinkAiAvatar';
 import ActivityPulse from '@/components/ActivityPulse';
 import { ApiChallenge } from '@/types/api';
 
-export interface ChallengeTriggerInfo {
-  isAi: boolean;
-  name: string;
-}
-
 export interface ProgressData {
-  responded: Array<{ userId: string; displayName: string; avatarUrl?: string }>;
+  responded: { userId: string; displayName: string }[];
   totalMembers: number;
 }
 
 export interface ChallengeSectionProps {
   activeChallenge: ApiChallenge;
-  challengeTriggerInfo: ChallengeTriggerInfo | null;
-  isQuizChallenge: boolean;
+  /** Display name of the member who started the challenge; null for scheduled challenges. */
+  challengeStarterName: string | null;
   hasSubmittedToday: boolean;
   countdown: string;
   pulseAnim: Animated.Value;
   progressData: ProgressData | null;
-  currentUserId: string;
   onRespond: () => void;
   challengeBarRef: React.RefObject<View | null>;
   challengeJustTriggered?: boolean;
@@ -35,13 +28,11 @@ export interface ChallengeSectionProps {
 
 export default function ChallengeSection({
   activeChallenge,
-  challengeTriggerInfo,
-  isQuizChallenge,
+  challengeStarterName,
   hasSubmittedToday,
   countdown,
   pulseAnim,
   progressData,
-  currentUserId,
   onRespond,
   challengeBarRef,
   challengeJustTriggered,
@@ -49,23 +40,10 @@ export default function ChallengeSection({
   return (
     <View ref={challengeBarRef} collapsable={false}>
       <GlassCard style={styles.challengeCard} padding={spacing.lg}>
-        {/* AI trigger label */}
-        {challengeTriggerInfo?.isAi && (
-          <View style={styles.aiTriggerRow}>
-            <BlinkAiAvatar size={18} />
-            <Text style={styles.aiTriggerText}>Blink AI</Text>
-          </View>
-        )}
-        {!challengeTriggerInfo?.isAi && challengeTriggerInfo && (
-          <Text style={styles.humanTriggerText}>{challengeTriggerInfo.name} started this</Text>
-        )}
+        {challengeStarterName && <Text style={styles.humanTriggerText}>{challengeStarterName} started this</Text>}
 
         {/* Challenge prompt */}
-        <Text style={styles.challengePrompt}>
-          {activeChallenge.prompt_text ??
-            activeChallenge.prompt ??
-            (isQuizChallenge ? 'Quiz time!' : 'Snap Challenge!')}
-        </Text>
+        <Text style={styles.challengePrompt}>{activeChallenge.prompt ?? 'Snap Challenge!'}</Text>
 
         {/* Timer row */}
         {countdown ? (
@@ -91,7 +69,7 @@ export default function ChallengeSection({
             activeOpacity={0.85}
             testID="snap-challenge-btn"
           >
-            {isQuizChallenge ? <Zap size={18} color={theme.white} /> : <Camera size={18} color={theme.white} />}
+            <Camera size={18} color={theme.white} />
             <Text style={styles.respondBtnText}>Respond</Text>
           </TouchableOpacity>
         ) : (
@@ -100,7 +78,6 @@ export default function ChallengeSection({
               <ActivityPulse
                 respondedUsers={progressData.responded}
                 totalMembers={progressData.totalMembers}
-                currentUserId={currentUserId}
                 hasResponded={hasSubmittedToday}
               />
             )}
@@ -123,16 +100,6 @@ export default function ChallengeSection({
 const styles = StyleSheet.create({
   challengeCard: {
     marginBottom: spacing.lg,
-  },
-  aiTriggerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginBottom: spacing.sm,
-  },
-  aiTriggerText: {
-    ...typography.labelSmall,
-    color: theme.purple,
   },
   humanTriggerText: {
     ...typography.bodySmall,

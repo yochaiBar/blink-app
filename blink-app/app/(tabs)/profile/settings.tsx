@@ -1,43 +1,21 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  ArrowLeft,
-  Bell,
-  Shield,
-  Moon,
-  LogOut,
-  ChevronRight,
-  Globe,
-  Lock,
-  Eye,
-  Trash2,
-  FileText,
-  Mail,
-  UserX,
-  X,
-} from 'lucide-react-native';
+import { ArrowLeft, Shield, LogOut, ChevronRight, Trash2, FileText, Mail, UserX, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import { api, API_URL, getBlockedUsers, unblockUser } from '@/services/api';
-import { Button } from '@/components/ui';
-import { Image } from 'expo-image';
+import { AvatarRing, Button } from '@/components/ui';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, updateProfile, logout } = useApp();
+  const { logout } = useApp();
 
-  // Local-only toggle states until server support is added
-  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
-  const [quietHoursEnabled, setQuietHoursEnabled] = useState<boolean>(false);
-  const [privacyMode, setPrivacyMode] = useState<'everyone' | 'friends' | 'groups_only'>('everyone');
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
-  const [blockedUsers, setBlockedUsers] = useState<
-    Array<{ blocked_id: string; display_name: string | null; avatar_url: string | null }>
-  >([]);
+  const [blockedUsers, setBlockedUsers] = useState<{ blocked_id: string; display_name: string | null }[]>([]);
 
   useEffect(() => {
     getBlockedUsers()
@@ -66,16 +44,6 @@ export default function SettingsScreen() {
         { text: 'Unblock', onPress: doUnblock },
       ]);
     }
-  }, []);
-
-  const handleToggleNotifications = useCallback((value: boolean) => {
-    setNotificationsEnabled(value);
-    if (Platform.OS !== 'web') Haptics.selectionAsync();
-  }, []);
-
-  const handleToggleQuietHours = useCallback((value: boolean) => {
-    setQuietHoursEnabled(value);
-    if (Platform.OS !== 'web') Haptics.selectionAsync();
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -130,12 +98,6 @@ export default function SettingsScreen() {
     }
   }, [logout, router]);
 
-  const privacyOptions: { key: 'everyone' | 'friends' | 'groups_only'; label: string; icon: typeof Globe }[] = [
-    { key: 'everyone', label: 'Everyone', icon: Globe },
-    { key: 'friends', label: 'Friends Only', icon: Eye },
-    { key: 'groups_only', label: 'Groups Only', icon: Lock },
-  ];
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -147,67 +109,6 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notifications</Text>
-          <View style={styles.card}>
-            <View style={styles.settingRow}>
-              <View style={[styles.iconBg, { backgroundColor: theme.coralMuted }]}>
-                <Bell size={18} color={theme.coral} />
-              </View>
-              <Text style={styles.settingLabel}>Push Notifications</Text>
-              <Switch
-                value={notificationsEnabled}
-                onValueChange={handleToggleNotifications}
-                trackColor={{ false: theme.surface, true: theme.coral }}
-                thumbColor={theme.white}
-              />
-            </View>
-
-            <View style={styles.rowDivider} />
-
-            <View style={styles.settingRow}>
-              <View style={[styles.iconBg, { backgroundColor: theme.blueMuted }]}>
-                <Moon size={18} color={theme.blue} />
-              </View>
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Quiet Hours</Text>
-                {quietHoursEnabled && <Text style={styles.settingDesc}>10:00 PM - 8:00 AM</Text>}
-              </View>
-              <Switch
-                value={quietHoursEnabled}
-                onValueChange={handleToggleQuietHours}
-                trackColor={{ false: theme.surface, true: theme.blue }}
-                thumbColor={theme.white}
-              />
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Privacy</Text>
-          <View style={styles.card}>
-            <Text style={styles.privacyLabel}>Who can see your snaps</Text>
-            {privacyOptions.map((opt) => {
-              const IconComp = opt.icon;
-              const isSelected = privacyMode === opt.key;
-              return (
-                <TouchableOpacity
-                  key={opt.key}
-                  style={[styles.privacyOption, isSelected && styles.privacyOptionSelected]}
-                  onPress={() => {
-                    setPrivacyMode(opt.key);
-                    if (Platform.OS !== 'web') Haptics.selectionAsync();
-                  }}
-                >
-                  <IconComp size={18} color={isSelected ? theme.coral : theme.textMuted} />
-                  <Text style={[styles.privacyOptionText, isSelected && { color: theme.coral }]}>{opt.label}</Text>
-                  {isSelected && <View style={styles.selectedDot} />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
           <View style={styles.card}>
@@ -236,11 +137,7 @@ export default function SettingsScreen() {
                 <React.Fragment key={u.blocked_id}>
                   {i > 0 && <View style={styles.rowDivider} />}
                   <View style={styles.settingRow}>
-                    <Image
-                      source={{ uri: u.avatar_url || undefined }}
-                      style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: theme.surface }}
-                      contentFit="cover"
-                    />
+                    <AvatarRing name={u.display_name || undefined} size={36} />
                     <Text style={styles.settingLabel}>{u.display_name || 'Unknown'}</Text>
                     <TouchableOpacity
                       style={[styles.iconBg, { backgroundColor: theme.redMuted }]}
@@ -372,9 +269,6 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
   },
-  settingInfo: {
-    flex: 1,
-  },
   rowDivider: {
     height: 0.5,
     backgroundColor: theme.border,
@@ -392,42 +286,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600' as const,
     color: theme.text,
-  },
-  settingDesc: {
-    fontSize: 12,
-    color: theme.textMuted,
-    marginTop: 2,
-  },
-  privacyLabel: {
-    fontSize: 13,
-    color: theme.textSecondary,
-    padding: 14,
-    paddingBottom: 8,
-  },
-  privacyOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginHorizontal: 4,
-    marginBottom: 4,
-    borderRadius: 12,
-  },
-  privacyOptionSelected: {
-    backgroundColor: theme.coralMuted,
-  },
-  privacyOptionText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: theme.textSecondary,
-  },
-  selectedDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.coral,
   },
   footer: {
     alignItems: 'center',

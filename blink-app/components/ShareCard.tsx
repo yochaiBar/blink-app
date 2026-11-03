@@ -4,14 +4,11 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { theme } from '@/constants/colors';
-import { typography } from '@/constants/typography';
-import { spacing, borderRadius } from '@/constants/spacing';
 
 export interface ShareCardProps {
   photoUri: string;
   prompt: string;
   userName: string;
-  userAvatar: string;
   groupName: string;
   groupEmoji?: string;
   responseTimeSec?: number;
@@ -33,7 +30,6 @@ export default function ShareCard({
   photoUri,
   prompt,
   userName,
-  userAvatar,
   groupName,
   groupEmoji,
   responseTimeSec,
@@ -69,13 +65,9 @@ export default function ShareCard({
       <View style={styles.footer}>
         <View style={styles.footerRow}>
           <View style={styles.avatarContainer}>
-            {userAvatar ? (
-              <Image source={{ uri: userAvatar }} style={styles.avatar} contentFit="cover" />
-            ) : (
-              <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitial}>{userName ? userName.charAt(0).toUpperCase() : '?'}</Text>
-              </View>
-            )}
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarInitial}>{userName ? userName.charAt(0).toUpperCase() : '?'}</Text>
+            </View>
           </View>
 
           <View style={styles.footerInfo}>
@@ -187,10 +179,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 3,
     borderColor: theme.coral,
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
   },
   avatarFallback: {
     width: '100%',

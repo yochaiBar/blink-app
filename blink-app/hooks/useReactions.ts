@@ -1,13 +1,15 @@
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { addReactionApi, removeReactionApi } from '@/services/api';
-import { queryKeys } from '@/utils/queryKeys';
+import { isDemoResponse } from '@/services/demoSource';
 
 export function useReactions() {
   const queryClient = useQueryClient();
 
   const addReaction = useCallback(
     async (responseId: string, emoji: string) => {
+      // Demo responses only exist on this device; the reveal shows the tap locally.
+      if (isDemoResponse(responseId)) return;
       try {
         await addReactionApi(responseId, emoji);
       } catch {

@@ -3,27 +3,6 @@
 // it those libs silently fall back to an insecure RNG on React Native
 // (Plan §"Polyfill" / QA-finding).
 import 'react-native-get-random-values';
-// Startup self-test: confirm the polyfill is wired and the RNG returns
-// non-zero entropy. If this throws, the app fails fast at launch — far
-// preferable to a silent crypto downgrade in production.
-(function assertCsprngWired() {
-  const probe = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(probe);
-  let allZero = true;
-  for (let i = 0; i < probe.length; i++) {
-    if (probe[i] !== 0) {
-      allZero = false;
-      break;
-    }
-  }
-  if (allZero) {
-    throw new Error(
-      'CSPRNG self-test failed: crypto.getRandomValues returned all zeros. ' +
-        "Check that 'react-native-get-random-values' is the first import in the bundle.",
-    );
-  }
-})();
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -43,12 +22,33 @@ import {
   getNotificationRoute,
   setBadgeCount,
 } from '@/utils/notifications';
-import { OfflineBanner } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import * as Linking from 'expo-linking';
 import { useSocket } from '@/hooks/useSocket';
 import { useDeviceKeyRegistration } from '@/hooks/useDeviceKeyRegistration';
-import { api as apiCall } from '@/services/api';
+
+// Startup self-test: confirm the polyfill is wired and the RNG returns
+// non-zero entropy. If this throws, the app fails fast at launch — far
+// preferable to a silent crypto downgrade in production. (Imports are
+// hoisted, so this runs after all of them wherever it sits; what matters is
+// that the polyfill import above stays first.)
+(function assertCsprngWired() {
+  const probe = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(probe);
+  let allZero = true;
+  for (let i = 0; i < probe.length; i++) {
+    if (probe[i] !== 0) {
+      allZero = false;
+      break;
+    }
+  }
+  if (allZero) {
+    throw new Error(
+      'CSPRNG self-test failed: crypto.getRandomValues returned all zeros. ' +
+        "Check that 'react-native-get-random-values' is the first import in the bundle.",
+    );
+  }
+})();
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || '',
@@ -105,23 +105,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       router.replace('/onboarding' as never);
     } else if (isAuthenticated && inOnboarding) {
       // New users who just verified their OTP have display_name=null and still
-      // need to complete the name/avatar setup steps — don't redirect them yet.
+      // need to complete the name step — don't redirect them yet.
       // Returning users already have a display_name and should go straight to the app.
       const { user } = useAuthStore.getState();
       if (user?.display_name) {
         router.replace('/' as never);
       }
-    }
-
-    // After auth is confirmed, check for pending challenges.
-    if (isAuthenticated) {
-      apiCall('/challenges/pending')
-        .then(() => {
-          // Pending challenges are handled by the feed UI pills.
-        })
-        .catch(() => {
-          // Non-critical: pending challenges check is supplementary; feed handles this
-        });
     }
   }, [isAuthenticated, isLoading, segments]);
 
@@ -236,13 +225,6 @@ function RootLayoutNav() {
           }}
         />
         <Stack.Screen
-          name="quiz-challenge"
-          options={{
-            presentation: 'fullScreenModal',
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
           name="challenge-reveal"
           options={{
             presentation: 'fullScreenModal',
@@ -282,7 +264,6 @@ function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <AppProvider>
           <StatusBar style="light" />
-          <OfflineBanner visible={false} />
           <ErrorBoundary>
             <RootLayoutNav />
           </ErrorBoundary>

@@ -1,10 +1,10 @@
 import React, { useRef, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform, Modal } from 'react-native';
-import { Image } from 'expo-image';
 import { Lock, MoreHorizontal } from 'lucide-react-native';
 import { SnapSubmission } from '@/types';
 import { theme } from '@/constants/colors';
 import EncryptedImage from '@/components/EncryptedImage';
+import AvatarRing from '@/components/ui/AvatarRing';
 import { getRelativeTime } from '@/utils/time';
 import * as Haptics from 'expo-haptics';
 
@@ -116,7 +116,7 @@ export default React.memo(function SnapCard({
         testID={`snap-card-${snap.id}`}
       >
         <View style={styles.header}>
-          <Image source={{ uri: snap.userAvatar }} style={styles.avatar} contentFit="cover" />
+          <AvatarRing name={snap.userName} size={36} />
           <View style={styles.headerInfo}>
             <Text style={styles.userName}>{snap.userName}</Text>
             <Text style={styles.timestamp}>{getRelativeTime(snap.timestamp)}</Text>
@@ -139,13 +139,7 @@ export default React.memo(function SnapCard({
               <Text style={styles.lockedText}>Submit your snap to unlock</Text>
             </View>
           ) : (
-            <EncryptedImage
-              uri={snap.imageUrl}
-              responseId={snap.id}
-              style={styles.image}
-              contentFit="cover"
-              transition={300}
-            />
+            <EncryptedImage responseId={snap.id} style={styles.image} contentFit="cover" transition={300} />
           )}
         </View>
 
@@ -237,11 +231,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
   },
   userName: {
     fontSize: 15,

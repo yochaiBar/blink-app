@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import type { ActivityItem, NotificationItem } from '@/types';
-import type { ApiSpotlight } from '@/types/api';
+import type { NotificationItem } from '@/types';
 
 // ── Response types for API functions ──
 
@@ -30,7 +29,6 @@ interface BlockResponse {
 interface BlockedUserItem {
   blocked_id: string;
   display_name: string | null;
-  avatar_url: string | null;
   blocked_at: string;
 }
 
@@ -156,29 +154,12 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   return JSON.parse(text) as T;
 }
 
-// (Legacy v1 upload helpers removed in Phase 6. The v2 photo flow uses
-// relayPhoto() below + photoTransfer. Avatars are no longer uploaded
-// at all — users get generated initials via AvatarRing's fallback.)
+// Photos never go through the API: the E2E flow uses relayPhoto() below +
+// photoTransfer. There are no avatars; members show initials (AvatarRing).
 
 // ── User Stats ──
 export async function getUserStats(): Promise<UserStatsResponse> {
   return api<UserStatsResponse>('/auth/stats');
-}
-
-// ── Activity ──
-export async function getActivity(): Promise<ActivityItem[]> {
-  const data = await api<ActivityItem[]>('/activity');
-  if (!Array.isArray(data)) return [];
-  // Map any server-only types to UI types.
-  // 'challenge_triggered' is kept as-is since the ActivityItem type now includes it.
-  const typeMap: Record<string, ActivityItem['type']> = {
-    challenge_triggered: 'challenge_triggered',
-  };
-  return data.map((item: ActivityItem) => ({
-    ...item,
-    type: typeMap[item.type] || item.type,
-    timestamp: item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString(),
-  }));
 }
 
 // ── Notifications ──
@@ -331,7 +312,6 @@ export interface CommentItem {
   created_at: string;
   updated_at: string;
   display_name: string | null;
-  avatar_url: string | null;
 }
 
 export function fetchComments(responseId: string): Promise<CommentItem[]> {
@@ -347,11 +327,6 @@ export function postComment(responseId: string, text: string, parentCommentId?: 
 
 export function deleteComment(commentId: string): Promise<void> {
   return api<void>(`/challenges/comments/${commentId}`, { method: 'DELETE' });
-}
-
-// ── Spotlight ──
-export async function getSpotlight(groupId: string): Promise<ApiSpotlight | null> {
-  return api<ApiSpotlight | null>(`/spotlight/${groupId}`);
 }
 
 // ── Moderation ──

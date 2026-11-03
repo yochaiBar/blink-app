@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { readAsStringAsync, EncodingType } from 'expo-file-system/legacy';
 import { api, requestKeyshare } from '@/services/api';
-import { isDemoGroup } from '@/constants/demoData';
+import { demoSource, isDemoGroup } from '@/services/demoSource';
 import { ApiChallenge } from '@/types/api';
 import { queryKeys } from '@/utils/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
@@ -14,13 +14,10 @@ import { putReceivedPhoto } from '@/services/photoStore';
 /**
  * Submit a snap response to the active challenge in `groupId`.
  *
- * v2-only as of Phase 6: bytes are encrypted on-device with the group
- * key, POST /respond with { has_photo: true } records the response row,
- * then sendPhoto fans the ciphertext via /api/photos/relay to other
- * members. Server never sees plaintext or key material.
- *
- * The v1 S3 upload path was removed in Phase 6; old v1 clients hitting
- * /upload/* get HTTP 426 and a forced-upgrade modal.
+ * Bytes are encrypted on-device with the group key, POST /respond with
+ * { has_photo: true } records the response row, then sendPhoto fans the
+ * ciphertext via /api/photos/relay to other members. Server never sees
+ * plaintext or key material.
  */
 export function useSubmitSnap() {
   const queryClient = useQueryClient();
@@ -28,8 +25,11 @@ export function useSubmitSnap() {
 
   const snapMutation = useMutation({
     mutationFn: async ({ groupId, imageUri }: { groupId: string; imageUri?: string }) => {
-      // Skip API calls for demo group
-      if (isDemoGroup(groupId)) return;
+      // The demo group never reaches the server: keep the photo for its reveal.
+      if (isDemoGroup(groupId)) {
+        demoSource.recordSnap(imageUri);
+        return;
+      }
 
       // Find active challenge for this group
       let challengeId: string | null = null;
@@ -121,7 +121,7 @@ interface V2Args {
 }
 
 interface MemberListResponse {
-  members?: Array<{ user_id?: string; id?: string }>;
+  members?: { user_id?: string; id?: string }[];
 }
 
 interface RespondResponse {

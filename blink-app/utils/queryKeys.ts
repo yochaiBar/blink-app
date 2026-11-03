@@ -13,17 +13,12 @@ export const queryKeys = {
     active: (groupId: string) => ['challenge', groupId] as const,
     activeForSnap: (groupId: string, challengeId?: string) => ['active-challenge', groupId, challengeId] as const,
     responses: (challengeId: string | undefined) => ['responses', challengeId] as const,
-    history: (groupId: string) => ['challenge-history', groupId] as const,
     progress: (challengeId: string | undefined) => ['challenge-progress', challengeId] as const,
     reveal: (challengeId: string) => ['challenge-reveal', challengeId] as const,
-    quizResults: (challengeId: string) => ['quiz-results', challengeId] as const,
   },
   feed: {
     activeChallenges: (groupIds: string) => ['feed-active-challenges', groupIds] as const,
     blinks: (groupIds: string) => ['blinks-feed-v2', groupIds] as const,
-  },
-  activity: {
-    all: ['activity'] as const,
   },
   notifications: {
     all: ['notifications'] as const,
@@ -31,9 +26,6 @@ export const queryKeys = {
   user: {
     stats: ['userStats'] as const,
     profile: ['userProfile'] as const,
-  },
-  spotlight: {
-    detail: (groupId: string) => ['spotlight', groupId] as const,
   },
   photos: {
     group: (groupId: string) => ['group-photos', groupId] as const,

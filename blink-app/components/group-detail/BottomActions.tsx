@@ -7,38 +7,41 @@ import { spacing, borderRadius } from '@/constants/spacing';
 import GroupStreakBanner from '@/components/GroupStreakBanner';
 
 export interface BottomActionsProps {
-  isDemo: boolean;
   hasActiveChallenge: boolean;
   groupStreak: number;
   longestGroupStreak: number;
   leaderboardCount: number;
+  isStartingChallenge?: boolean;
   onChallengeNow: () => void;
   onViewLeaderboard: () => void;
 }
 
 export default function BottomActions({
-  isDemo,
   hasActiveChallenge,
   groupStreak,
   longestGroupStreak,
   leaderboardCount,
+  isStartingChallenge = false,
   onChallengeNow,
   onViewLeaderboard,
 }: BottomActionsProps) {
   return (
     <View style={styles.bottomActions}>
-      {!isDemo && groupStreak > 0 && (
-        <GroupStreakBanner groupStreak={groupStreak} longestGroupStreak={longestGroupStreak} />
-      )}
+      {groupStreak > 0 && <GroupStreakBanner groupStreak={groupStreak} longestGroupStreak={longestGroupStreak} />}
 
-      {!isDemo && !hasActiveChallenge && (
-        <TouchableOpacity style={styles.challengeNowBtn} onPress={onChallengeNow} activeOpacity={0.85}>
+      {!hasActiveChallenge && (
+        <TouchableOpacity
+          style={[styles.challengeNowBtn, isStartingChallenge && styles.challengeNowBtnBusy]}
+          onPress={onChallengeNow}
+          disabled={isStartingChallenge}
+          activeOpacity={0.85}
+        >
           <Zap size={20} color={theme.white} />
           <Text style={styles.challengeNowText}>Challenge Now</Text>
         </TouchableOpacity>
       )}
 
-      {!isDemo && leaderboardCount > 0 && (
+      {leaderboardCount > 0 && (
         <TouchableOpacity style={styles.leaderboardLink} onPress={onViewLeaderboard} activeOpacity={0.7}>
           <Trophy size={16} color={theme.yellow} />
           <Text style={styles.leaderboardLinkText}>View Leaderboard</Text>
@@ -62,6 +65,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.coral,
     paddingVertical: 14,
     borderRadius: borderRadius.lg,
+  },
+  challengeNowBtnBusy: {
+    opacity: 0.6,
   },
   challengeNowText: {
     ...typography.labelLarge,

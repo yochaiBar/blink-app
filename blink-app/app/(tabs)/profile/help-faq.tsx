@@ -14,7 +14,7 @@ const faqData: FAQItem[] = [
   {
     question: 'What is Blink?',
     answer:
-      'Blink is a social photo-sharing app where you and your friends participate in timed snap challenges, answer daily prompts, maintain streaks, and compete on leaderboards. Think of it as spontaneous moments with your favorite people!',
+      'Blink is a social photo-sharing app where you and your friends participate in timed snap challenges, maintain streaks, and compete on leaderboards. Think of it as spontaneous moments with your favorite people!',
   },
   {
     question: 'How do Snap Challenges work?',
@@ -37,11 +37,6 @@ const faqData: FAQItem[] = [
       'Open your group, tap the invite button, and share the invite code or link with friends. They can enter the code in the app or tap the link to join directly.',
   },
   {
-    question: 'What are Daily Prompts?',
-    answer:
-      'Daily prompts are fun questions, polls, or quizzes posted in your groups. They can be open-ended questions, multiple choice polls, or trivia quizzes. Respond and see what your friends think!',
-  },
-  {
     question: 'How does the leaderboard work?',
     answer:
       'Each group has its own leaderboard ranking members by their total snaps submitted and streak length. The top 3 members are featured on the podium. Stay active to climb the ranks!',
@@ -50,16 +45,6 @@ const faqData: FAQItem[] = [
     question: 'Can others see my snaps before I submit?',
     answer:
       'No! Snaps are locked until you submit your own. This ensures everyone captures their authentic moment without being influenced by others.',
-  },
-  {
-    question: 'How do I change my privacy settings?',
-    answer:
-      'Go to Profile → Settings → Privacy. You can control who sees your snaps: Everyone, Friends Only, or Groups Only.',
-  },
-  {
-    question: 'What are Quiet Hours?',
-    answer:
-      'Quiet Hours let you mute notifications during certain times (e.g., 10 PM to 8 AM). You can enable this in Settings → Notifications → Quiet Hours.',
   },
 ];
 
@@ -117,7 +102,7 @@ export default function HelpFAQScreen() {
             <Text style={styles.emailLink} onPress={() => Linking.openURL('mailto:support@blink.app')}>
               support@blink.app
             </Text>{' '}
-            and we'll get back to you within 24 hours.
+            and we&apos;ll get back to you within 24 hours.
           </Text>
         </View>
 

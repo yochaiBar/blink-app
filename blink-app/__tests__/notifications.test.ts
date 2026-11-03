@@ -70,58 +70,6 @@ describe('getNotificationRoute', () => {
       });
     });
 
-    it('should route to quiz-challenge for quiz challengeType', () => {
-      const result = getNotificationRoute({
-        type: 'challenge_started',
-        groupId: 'g1',
-        challengeId: 'c1',
-        challengeType: 'quiz',
-      });
-      expect(result).toEqual({
-        pathname: '/quiz-challenge',
-        params: { groupId: 'g1', challengeId: 'c1' },
-      });
-    });
-
-    it('should route to quiz-challenge for quiz_food type', () => {
-      const result = getNotificationRoute({
-        type: 'challenge_started',
-        groupId: 'g1',
-        challengeId: 'c1',
-        challengeType: 'quiz_food',
-      });
-      expect(result).toEqual({
-        pathname: '/quiz-challenge',
-        params: { groupId: 'g1', challengeId: 'c1' },
-      });
-    });
-
-    it('should route to quiz-challenge for quiz_most_likely type', () => {
-      const result = getNotificationRoute({
-        type: 'challenge_started',
-        groupId: 'g1',
-        challengeId: 'c1',
-        challengeType: 'quiz_most_likely',
-      });
-      expect(result).toEqual({
-        pathname: '/quiz-challenge',
-        params: { groupId: 'g1', challengeId: 'c1' },
-      });
-    });
-
-    it('should route to quiz-challenge for quiz_rate_day type', () => {
-      const result = getNotificationRoute({
-        type: 'challenge_started',
-        groupId: 'g1',
-        challengeId: 'c1',
-        challengeType: 'quiz_rate_day',
-      });
-      expect(result).toEqual({
-        pathname: '/quiz-challenge',
-        params: { groupId: 'g1', challengeId: 'c1' },
-      });
-    });
-
     it('should fallback to group-detail with only groupId', () => {
       const result = getNotificationRoute({
         type: 'challenge_started',
@@ -153,19 +101,6 @@ describe('getNotificationRoute', () => {
       });
     });
 
-    it('should route to quiz-challenge for quiz type', () => {
-      const result = getNotificationRoute({
-        type: 'challenge',
-        groupId: 'g1',
-        challengeId: 'c1',
-        challengeType: 'quiz',
-      });
-      expect(result).toEqual({
-        pathname: '/quiz-challenge',
-        params: { groupId: 'g1', challengeId: 'c1' },
-      });
-    });
-
     it('should fallback to group-detail with only groupId', () => {
       const result = getNotificationRoute({
         type: 'challenge',
@@ -189,20 +124,6 @@ describe('getNotificationRoute', () => {
       });
       expect(result).toEqual({
         pathname: '/snap-challenge',
-        params: { groupId: 'g1', challengeId: 'c1' },
-      });
-    });
-
-    it('should route to quiz-challenge for screen=challenge with quiz type', () => {
-      const result = getNotificationRoute({
-        type: 'some_other_type',
-        screen: 'challenge',
-        groupId: 'g1',
-        challengeId: 'c1',
-        challengeType: 'quiz_most_likely',
-      });
-      expect(result).toEqual({
-        pathname: '/quiz-challenge',
         params: { groupId: 'g1', challengeId: 'c1' },
       });
     });

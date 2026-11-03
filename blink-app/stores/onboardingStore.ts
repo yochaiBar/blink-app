@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
 
-type TourStep = 'home' | 'group_detail' | 'fab' | null;
+type TourStep = 'home' | 'group_detail' | null;
 
 interface OnboardingState {
   tourComplete: boolean;
@@ -21,7 +21,6 @@ interface OnboardingState {
 export const tourMessages: Record<Exclude<TourStep, null>, string> = {
   home: 'Meet your demo crew! Tap to see their latest snaps',
   group_detail: 'This is a challenge! Everyone snaps their view right now',
-  fab: 'Ready for real? Create your first group!',
 };
 
 const STORAGE_KEY = 'onboarding_tour_complete';

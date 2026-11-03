@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { apiGroupListToGroup } from '@/utils/adapters';
 import { ApiGroupListItem } from '@/types/api';
-import { DEMO_GROUP, isDemoGroup } from '@/constants/demoData';
+import { demoSource } from '@/services/demoSource';
 import {
   getOrCreateDeviceKey,
   loadGroupKey,
@@ -34,7 +34,7 @@ export function useGroups() {
     staleTime: 30_000,
   });
 
-  const realGroups = groupsQuery.data ?? [];
+  const realGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
   const querySettled = groupsQuery.isFetched || groupsQuery.isError;
   const shouldShowDemoGroup = querySettled && realGroups.length === 0 && !tourComplete;
 
@@ -58,7 +58,6 @@ export function useGroups() {
         return deviceId;
       };
       for (const g of realGroups) {
-        if (isDemoGroup(g.id)) continue;
         // memberCount may not be populated by every adapter call;
         // fall back to members.length.
         const count = g.memberCount ?? g.members?.length ?? 0;
@@ -100,25 +99,19 @@ export function useGroups() {
     })().catch(() => undefined);
   }, [querySettled, realGroups]);
 
-  const groups = useMemo(() => {
-    if (shouldShowDemoGroup) {
-      return [{ ...DEMO_GROUP, challengeEndTime: Date.now() + 30 * 60 * 1000 }];
-    }
-    return realGroups;
-  }, [realGroups, shouldShowDemoGroup]);
+  // Until the user has a real group (and hasn't finished the tour), the list
+  // shows the demo group from demoSource.
+  const groups = useMemo(
+    () => (shouldShowDemoGroup ? [demoSource.listItem()] : realGroups),
+    [realGroups, shouldShowDemoGroup],
+  );
 
   // ── Create group ──
   const groupMutation = useMutation({
     mutationFn: async (group: Group) => {
       const result = await api<{ id: string }>('/groups', {
         method: 'POST',
-        body: JSON.stringify({
-          name: group.name,
-          icon: group.emoji,
-          category: group.category === 'close_friends' ? 'friends' : group.category,
-          skip_penalty_type: 'none',
-          ai_personality: group.aiPersonality ?? 'funny',
-        }),
+        body: JSON.stringify({ name: group.name, icon: group.emoji }),
       });
       // Group creator becomes the source of truth for the group key. No
       // handshake needed — we ARE the only member. Subsequent joiners
@@ -183,14 +176,16 @@ export function useGroups() {
 
   return {
     groups,
+    /** Groups from the server only (never the demo group): use for anything that calls the API per group. */
+    serverGroups: realGroups,
     shouldShowDemoGroup,
+    /** Id of the demo group while it is shown, else null. */
+    demoGroupId: shouldShowDemoGroup ? demoSource.groupId : null,
     isLoadingGroups: groupsQuery.isLoading && isAuthenticated,
     isDataLoaded: !groupsQuery.isLoading,
     isRefreshing: groupsQuery.isRefetching,
     createGroup,
     joinGroup,
     refreshGroups,
-    /** @internal used by useSubmitSnap to check demo group status */
-    isDemoGroup,
   };
 }

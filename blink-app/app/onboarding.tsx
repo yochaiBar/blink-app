@@ -14,14 +14,12 @@ import {
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Camera,
   Users,
-  Zap,
   Sparkles,
   Phone,
   Check,
@@ -30,11 +28,8 @@ import {
   ChevronRight,
   ChevronDown,
   ArrowLeft,
-  ImagePlus,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
-import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/services/api';
@@ -43,15 +38,14 @@ import { Button } from '@/components/ui';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Sample lifestyle photos for the animated collage
-const COLLAGE_PHOTOS = [
-  'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1516302752625-fcc3c50ae61f?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1543807535-eceef0bc6599?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1506869640319-fe1a24fd76cb?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1522543558187-768b6df7c25c?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1523301343968-6a6ebf63c672?w=200&h=200&fit=crop',
-];
+// Welcome screen copy (decided with the user, 2026-11-03).
+const WELCOME_COPY = {
+  headline: 'Your friends. One snap challenge a day.',
+  subline: 'End-to-end encrypted — we never store your photos.',
+};
+
+// Emoji ring around the logo (no stock photos).
+const COLLAGE_EMOJIS = ['📸', '🔥', '😂', '🙌', '🌅', '🍕'];
 
 const COUNTRY_CODES = [
   { code: '+972', flag: 'IL', label: 'Israel (+972)' },
@@ -69,7 +63,8 @@ const COUNTRY_CODES = [
 const RESEND_COOLDOWN_SECONDS = 30;
 const OTP_LENGTH = 6;
 
-type OnboardingStep = 'welcome' | 'phone' | 'otp' | 'age' | 'terms' | 'name' | 'avatar';
+type OnboardingStep = 'welcome' | 'phone' | 'otp' | 'age' | 'terms' | 'name';
+const STEPS: readonly OnboardingStep[] = ['welcome', 'phone', 'otp', 'age', 'terms', 'name'];
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -77,7 +72,6 @@ export default function OnboardingScreen() {
   const requestOtp = useAuthStore((s) => s.requestOtp);
   const verifyOtp = useAuthStore((s) => s.verifyOtp);
   const updateName = useAuthStore((s) => s.updateName);
-  const updateAvatar = useAuthStore((s) => s.updateAvatar);
 
   const [step, setStep] = useState<OnboardingStep>('welcome');
   const [phone, setPhone] = useState('');
@@ -85,7 +79,6 @@ export default function OnboardingScreen() {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [otpDigits, setOtpDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [name, setName] = useState('');
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -93,7 +86,7 @@ export default function OnboardingScreen() {
   const isProcessing = useRef(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const otpInputRefs = useRef<Array<TextInput | null>>(Array(OTP_LENGTH).fill(null));
+  const otpInputRefs = useRef<(TextInput | null)[]>(Array(OTP_LENGTH).fill(null));
   const phoneInputRef = useRef<TextInput | null>(null);
 
   // Welcome screen animations
@@ -101,7 +94,7 @@ export default function OnboardingScreen() {
   const collageScale = useRef(new Animated.Value(0.9)).current;
   const collageSpin = useRef(new Animated.Value(0)).current;
   const featureAnims = useRef(
-    [0, 1, 2].map(() => ({
+    [0, 1].map(() => ({
       opacity: new Animated.Value(0),
       translateY: new Animated.Value(24),
     })),
@@ -265,16 +258,7 @@ export default function OnboardingScreen() {
         } catch {
           // Non-blocking — name is saved locally, server sync can happen later
         }
-        animateTransition('avatar');
-        return;
-      }
-
-      if (step === 'avatar') {
-        // Phase 6: avatar uploads removed. Whether the user picked a
-        // photo or skipped, navigate straight to the app — AvatarRing
-        // falls back to generated initials. The step UI is kept for
-        // now to avoid churn in the onboarding flow; a follow-up will
-        // delete the step entirely.
+        // Last step: members are shown by their initials, there is no profile photo.
         router.replace('/');
         return;
       }
@@ -355,32 +339,6 @@ export default function OnboardingScreen() {
     }
   }, [resendCountdown, isSubmitting, phone, countryCode, requestOtp]);
 
-  const handlePickAvatar = useCallback(async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      if (!result.canceled && result.assets[0]) {
-        setAvatarUri(result.assets[0].uri);
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-      }
-    } catch {
-      Alert.alert('Error', 'Could not open photo library');
-    }
-  }, []);
-
-  const handleSkipAvatar = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.replace('/');
-  }, [router]);
-
   const previousStep: Record<string, OnboardingStep | null> = {
     welcome: null,
     phone: 'welcome',
@@ -388,9 +346,6 @@ export default function OnboardingScreen() {
     age: 'otp',
     terms: 'age',
     name: 'terms',
-    // Intentionally no back from `avatar` — name has already been persisted to the
-    // server, and going back would cause a duplicate PATCH on advance.
-    avatar: null,
   };
 
   const isNextDisabled =
@@ -404,7 +359,6 @@ export default function OnboardingScreen() {
   const features = [
     { icon: Camera, label: 'Snap Challenges', desc: 'Drop everything. Capture the chaos.', color: theme.coral },
     { icon: Users, label: 'Friend Groups', desc: 'Your inner circle, zero randoms.', color: theme.purple },
-    { icon: Zap, label: 'Daily Prompts', desc: 'Unhinged questions. Real answers.', color: theme.blue },
   ];
 
   const getButtonText = () => {
@@ -421,9 +375,7 @@ export default function OnboardingScreen() {
       case 'terms':
         return 'I Agree';
       case 'name':
-        return 'Continue';
-      case 'avatar':
-        return avatarUri ? 'Start Blinking' : 'Skip for now';
+        return 'Start Blinking';
     }
   };
 
@@ -440,16 +392,13 @@ export default function OnboardingScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.progressBar}>
-            {(['welcome', 'phone', 'otp', 'age', 'terms', 'name', 'avatar'] as const).map((s, i) => (
+            {STEPS.map((s, i) => (
               <View
                 key={s}
                 style={[
                   styles.progressDot,
                   {
-                    backgroundColor:
-                      (['welcome', 'phone', 'otp', 'age', 'terms', 'name', 'avatar'] as const).indexOf(step) >= i
-                        ? theme.coral
-                        : theme.surface,
+                    backgroundColor: STEPS.indexOf(step) >= i ? theme.coral : theme.surface,
                   },
                 ]}
               />
@@ -479,7 +428,7 @@ export default function OnboardingScreen() {
           <Animated.View style={[styles.stepContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
             {step === 'welcome' && (
               <View style={styles.centerContent}>
-                {/* Animated photo collage */}
+                {/* Animated emoji ring */}
                 <Animated.View
                   style={[
                     styles.collageContainer,
@@ -489,23 +438,24 @@ export default function OnboardingScreen() {
                     },
                   ]}
                 >
-                  {COLLAGE_PHOTOS.map((uri, i) => {
+                  {COLLAGE_EMOJIS.map((emoji, i) => {
                     const angle = i * 60 * (Math.PI / 180);
                     const radius = 52;
                     const offsetX = Math.cos(angle) * radius;
                     const offsetY = Math.sin(angle) * radius;
                     const rotation = `${i * 15 - 30}deg`;
                     return (
-                      <Animated.Image
-                        key={i}
-                        source={{ uri }}
+                      <View
+                        key={emoji}
                         style={[
                           styles.collagePhoto,
                           {
                             transform: [{ translateX: offsetX }, { translateY: offsetY }, { rotate: rotation }],
                           },
                         ]}
-                      />
+                      >
+                        <Text style={styles.collageEmoji}>{emoji}</Text>
+                      </View>
                     );
                   })}
                   <LinearGradient colors={[theme.coral, theme.pink]} style={styles.collageCenter}>
@@ -522,10 +472,10 @@ export default function OnboardingScreen() {
                     },
                   ]}
                 >
-                  Welcome to Blink
+                  {WELCOME_COPY.headline}
                 </Animated.Text>
                 <Animated.Text style={[styles.welcomeSubtitle, { opacity: subtitleOpacity }]}>
-                  Be real. Be random.{'\n'}Your friends are waiting.
+                  {WELCOME_COPY.subline}
                 </Animated.Text>
 
                 <View style={styles.featureList}>
@@ -566,8 +516,8 @@ export default function OnboardingScreen() {
                 <View style={styles.stepIconContainer}>
                   <Phone size={32} color={theme.coral} />
                 </View>
-                <Text style={styles.stepTitle}>What's your number?</Text>
-                <Text style={styles.stepSubtitle}>We'll text you a code to verify</Text>
+                <Text style={styles.stepTitle}>What&apos;s your number?</Text>
+                <Text style={styles.stepSubtitle}>We&apos;ll text you a code to verify</Text>
 
                 <View style={styles.phoneRow}>
                   <TouchableOpacity
@@ -712,7 +662,7 @@ export default function OnboardingScreen() {
             {step === 'name' && (
               <View style={styles.inputStep}>
                 <Text style={styles.stepEmoji}>👋</Text>
-                <Text style={styles.stepTitle}>What's your name?</Text>
+                <Text style={styles.stepTitle}>What&apos;s your name?</Text>
                 <Text style={styles.stepSubtitle}>This is how friends will see you</Text>
                 <TextInput
                   style={styles.input}
@@ -726,46 +676,6 @@ export default function OnboardingScreen() {
                   onSubmitEditing={handleNext}
                   testID="onboarding-name-input"
                 />
-              </View>
-            )}
-
-            {step === 'avatar' && (
-              <View style={styles.inputStep}>
-                <Text style={styles.stepEmoji}>📸</Text>
-                <Text style={styles.stepTitle}>Add a profile photo</Text>
-                <Text style={styles.stepSubtitle}>So your friends recognize you. You can change it later.</Text>
-                <TouchableOpacity
-                  style={styles.avatarPicker}
-                  onPress={handlePickAvatar}
-                  activeOpacity={0.85}
-                  disabled={isSubmitting}
-                  testID="onboarding-avatar-picker"
-                >
-                  {avatarUri ? (
-                    <Image source={{ uri: avatarUri }} style={styles.avatarPreview} contentFit="cover" />
-                  ) : (
-                    <View style={styles.avatarPlaceholder}>
-                      <ImagePlus size={36} color={theme.coral} />
-                    </View>
-                  )}
-                  {isSubmitting && (
-                    <View style={styles.avatarUploadOverlay}>
-                      <ActivityIndicator size="small" color={theme.white} />
-                    </View>
-                  )}
-                  <View style={styles.avatarEditBadge}>
-                    <Camera size={16} color={theme.white} />
-                  </View>
-                </TouchableOpacity>
-                {avatarUri && (
-                  <TouchableOpacity
-                    onPress={() => setAvatarUri(null)}
-                    disabled={isSubmitting}
-                    style={styles.avatarSkipLink}
-                  >
-                    <Text style={styles.avatarSkipText}>Remove photo</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             )}
           </Animated.View>
@@ -887,6 +797,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#1a1a2e',
     backgroundColor: '#2a1a3e',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  collageEmoji: {
+    fontSize: 28,
   },
   collageCenter: {
     width: 52,
@@ -948,60 +863,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: theme.border,
     textAlign: 'center',
-  },
-  avatarPicker: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    marginTop: 24,
-    position: 'relative',
-  },
-  avatarPlaceholder: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: theme.bgCard,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: theme.coral,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarPreview: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 3,
-    borderColor: theme.coral,
-  },
-  avatarUploadOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 70,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarEditBadge: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: theme.coral,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: theme.bg,
-  },
-  avatarSkipLink: {
-    marginTop: 18,
-    padding: 8,
-  },
-  avatarSkipText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: theme.textMuted,
   },
   phoneRow: {
     flexDirection: 'row',

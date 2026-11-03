@@ -2,8 +2,7 @@ import React, { useEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, Camera, Heart, MessageCircle, Flame, UserPlus, Star, Mail } from 'lucide-react-native';
-import { Image } from 'expo-image';
+import { ArrowLeft, Bell, Camera, Heart, Flame, UserPlus, Mail } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
 import { useNotifications } from '@/hooks/useNotifications';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
@@ -13,10 +12,8 @@ import { getRelativeTime } from '@/utils/time';
 const notifIcons: Record<string, { icon: typeof Bell; color: string }> = {
   challenge: { icon: Camera, color: theme.coral },
   reaction: { icon: Heart, color: theme.pink },
-  prompt: { icon: MessageCircle, color: theme.blue },
   streak: { icon: Flame, color: theme.yellow },
   join: { icon: UserPlus, color: theme.green },
-  spotlight: { icon: Star, color: theme.yellow },
   invite: { icon: Mail, color: theme.purple },
 };
 
@@ -74,18 +71,9 @@ export default function NotificationsScreen() {
           testID={`notif-${item.id}`}
         >
           <View style={styles.notifLeft}>
-            {item.fromUserAvatar ? (
-              <View style={styles.avatarWithBadge}>
-                <Image source={{ uri: item.fromUserAvatar }} style={styles.avatar} contentFit="cover" />
-                <View style={[styles.typeBadge, { backgroundColor: config.color }]}>
-                  <IconComp size={10} color={theme.white} />
-                </View>
-              </View>
-            ) : (
-              <View style={[styles.iconCircle, { backgroundColor: `${config.color}18` }]}>
-                <IconComp size={20} color={config.color} />
-              </View>
-            )}
+            <View style={[styles.iconCircle, { backgroundColor: `${config.color}18` }]}>
+              <IconComp size={20} color={config.color} />
+            </View>
           </View>
 
           <View style={styles.notifContent}>
@@ -210,26 +198,6 @@ const styles = StyleSheet.create({
     backgroundColor: `${theme.coral}08`,
   },
   notifLeft: {},
-  avatarWithBadge: {
-    position: 'relative',
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  typeBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: theme.bg,
-  },
   iconCircle: {
     width: 44,
     height: 44,

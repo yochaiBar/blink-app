@@ -1,44 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback, ErrorInfo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Platform,
-  Dimensions,
-  Alert,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform, Alert, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Check, RotateCcw, SwitchCamera, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useQuery } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { useApp } from '@/providers/AppProvider';
-import { api } from '@/services/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { ApiChallenge } from '@/types/api';
-import { isDemoGroup, DEMO_CHALLENGE, DEMO_RESPONSES } from '@/constants/demoData';
-import { useOnboardingStore } from '@/stores/onboardingStore';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { useActiveChallenge, useChallengeProgress } from '@/hooks/useChallenge';
+import AvatarRing from '@/components/ui/AvatarRing';
 
 type ChallengePhase = 'countdown' | 'capture' | 'preview';
-
-interface ProgressData {
-  total_members: number;
-  responded_count: number;
-  respondents: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-  }>;
-}
 
 function SnapChallengeScreen() {
   const { groupId, challengeId } = useLocalSearchParams<{
@@ -71,54 +46,22 @@ function SnapChallengeScreen() {
   const isWeb = Platform.OS === 'web';
   const hasCamera = permission?.granted && !isWeb;
 
-  const isDemo = isDemoGroup(groupId);
-
   // Fetch active challenge details (prompt text, etc.)
-  const challengeQuery = useQuery({
-    queryKey: ['active-challenge', groupId, challengeId],
-    queryFn: async (): Promise<ApiChallenge> => {
-      if (isDemo) return DEMO_CHALLENGE;
-      if (challengeId) {
-        return api(`/challenges/${challengeId}`);
-      }
-      return api(`/challenges/groups/${groupId}/challenges/active`);
-    },
-    enabled: !!groupId,
-    staleTime: 60_000,
-  });
+  const challengeQuery = useActiveChallenge(groupId, challengeId);
 
   const challengeData = challengeQuery.data;
-  const promptText = challengeData?.prompt_text ?? challengeData?.prompt ?? null;
+  const promptText = challengeData?.prompt ?? null;
   const resolvedChallengeId = challengeId ?? challengeData?.id;
 
-  // Check if the challenge has expired (skip for demo mode)
+  // Check if the challenge has expired
   const isExpired =
-    !isDemo &&
     challengeData != null &&
     (challengeData.status === 'completed' ||
       challengeData.status === 'expired' ||
       (challengeData.expires_at != null && new Date(challengeData.expires_at).getTime() <= Date.now()));
 
   // Fetch progress (who has responded)
-  const progressQuery = useQuery({
-    queryKey: ['challenge-progress', resolvedChallengeId],
-    queryFn: async (): Promise<ProgressData> => {
-      if (isDemo) {
-        return {
-          total_members: 6,
-          responded_count: DEMO_RESPONSES.length,
-          respondents: DEMO_RESPONSES.map((r) => ({
-            user_id: r.user_id,
-            display_name: r.display_name,
-            avatar_url: r.avatar_url,
-          })),
-        };
-      }
-      return api(`/challenges/${resolvedChallengeId}/progress`);
-    },
-    enabled: !!resolvedChallengeId && phase !== 'preview',
-    refetchInterval: isDemo ? false : 5000,
-  });
+  const progressQuery = useChallengeProgress(resolvedChallengeId, phase !== 'preview');
 
   const progress = progressQuery.data;
 
@@ -330,21 +273,6 @@ function SnapChallengeScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
 
-    if (isDemo) {
-      if (capturedUri) {
-        useOnboardingStore.getState().setDemoPhotoUri(capturedUri);
-      }
-      router.replace({
-        pathname: '/challenge-reveal' as never,
-        params: {
-          challengeId: 'demo_challenge_1',
-          groupId: 'demo_welcome_crew',
-          isDemo: '1',
-        },
-      });
-      return;
-    }
-
     try {
       await submitSnap(groupId ?? '', capturedUri ?? undefined);
       // Navigate to challenge reveal instead of going back
@@ -360,10 +288,10 @@ function SnapChallengeScreen() {
       } else {
         router.back();
       }
-    } catch (err) {
+    } catch {
       Alert.alert('Upload Failed', 'Could not submit your snap. Please try again.');
     }
-  }, [submitSnap, groupId, router, capturedUri, resolvedChallengeId, isDemo]);
+  }, [submitSnap, groupId, router, capturedUri, resolvedChallengeId]);
 
   const handleRetake = useCallback(() => {
     setPhase('countdown');
@@ -423,24 +351,18 @@ function SnapChallengeScreen() {
   // Render the progress indicator (who has responded)
   const renderProgressIndicator = () => {
     if (!progress) return null;
-    const { total_members, responded_count, respondents = [] } = progress;
+    const { totalMembers, respondedCount, respondedUsers = [] } = progress;
     return (
       <View style={styles.progressIndicator}>
         <View style={styles.progressAvatars}>
-          {respondents.slice(0, 4).map((r, i) => (
-            <Image
-              key={r.user_id}
-              source={{
-                uri:
-                  r.avatar_url ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
-              }}
-              style={[styles.progressAvatar, { marginLeft: i > 0 ? -8 : 0, zIndex: 10 - i }]}
-              contentFit="cover"
-            />
+          {respondedUsers.slice(0, 4).map((r, i) => (
+            <View key={r.userId} style={[styles.progressAvatar, { marginLeft: i > 0 ? -8 : 0, zIndex: 10 - i }]}>
+              <AvatarRing name={r.displayName} size={20} />
+            </View>
           ))}
         </View>
         <Text style={styles.progressText}>
-          {responded_count}/{total_members} responded
+          {respondedCount}/{totalMembers} responded
         </Text>
       </View>
     );
@@ -469,7 +391,7 @@ function SnapChallengeScreen() {
             </View>
             <Text style={styles.expiredTitle}>This challenge has expired</Text>
             <Text style={styles.expiredSubtitle}>
-              You can no longer submit a snap for this challenge. Head back to the group to see what's next.
+              You can no longer submit a snap for this challenge. Head back to the group to see what&apos;s next.
             </Text>
           </View>
           <TouchableOpacity
@@ -899,6 +821,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderColor: theme.bg,
+    overflow: 'hidden',
   },
   progressText: {
     ...typography.caption,

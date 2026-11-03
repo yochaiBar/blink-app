@@ -1,47 +1,15 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Platform,
-  Alert,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
-import { GroupCategory, Group, AiPersonality } from '@/types';
-import { categoryLabels } from '@/constants/categories';
+import { Group } from '@/types';
 import { Button } from '@/components/ui';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const categoryOptions: { key: GroupCategory; emoji: string; color: string }[] = [
-  { key: 'close_friends', emoji: '💜', color: theme.coral },
-  { key: 'family', emoji: '🏠', color: theme.yellow },
-  { key: 'students', emoji: '📚', color: theme.blue },
-  { key: 'work', emoji: '💼', color: theme.green },
-  { key: 'custom', emoji: '✨', color: theme.purple },
-];
-
 const emojiOptions = ['🔥', '💫', '🎯', '🌊', '⚡', '🎮', '🎵', '🏀', '🍕', '💎', '🦋', '🌸'];
-
-const personalityOptions: { key: AiPersonality; emoji: string; label: string; desc: string; color: string }[] = [
-  { key: 'family_friendly', emoji: '🏠', label: 'Family', desc: 'Clean & wholesome', color: theme.green },
-  { key: 'funny', emoji: '😂', label: 'Funny', desc: 'Jokes & humor', color: theme.yellow },
-  { key: 'spicy', emoji: '🌶️', label: 'Spicy', desc: 'Bold & daring', color: theme.coral },
-  { key: 'sarcastic', emoji: '😏', label: 'Sarcastic', desc: 'Witty & dry', color: theme.purple },
-  { key: 'motivational', emoji: '💪', label: 'Hype', desc: 'Pump you up', color: theme.blue },
-  { key: 'extreme', emoji: '🤯', label: 'Extreme', desc: 'Wild & crazy', color: theme.pink },
-  { key: 'sexy', emoji: '🔥', label: 'Sexy', desc: 'Flirty vibes', color: '#FF69B4' },
-  { key: 'no_filter', emoji: '💀', label: 'No Filter', desc: 'Roasts & chaos', color: theme.red },
-];
 
 export default function CreateGroupScreen() {
   const insets = useSafeAreaInsets();
@@ -49,12 +17,8 @@ export default function CreateGroupScreen() {
   const { addGroup } = useApp();
 
   const [name, setName] = useState<string>('');
-  const [category, setCategory] = useState<GroupCategory>('close_friends');
   const [selectedEmoji, setSelectedEmoji] = useState<string>('🔥');
   const [isCreating, setIsCreating] = useState<boolean>(false);
-  const [personality, setPersonality] = useState<AiPersonality>('funny');
-
-  const selectedCategoryOption = categoryOptions.find((c) => c.key === category);
 
   const handleCreate = useCallback(async () => {
     if (!name.trim()) {
@@ -71,15 +35,13 @@ export default function CreateGroupScreen() {
       const newGroup: Group = {
         id: '',
         name: name.trim(),
-        category,
         emoji: selectedEmoji,
         members: [],
         lastActive: new Date().toISOString(),
         hasActiveChallenge: false,
-        color: selectedCategoryOption?.color ?? theme.coral,
+        color: theme.coral,
         inviteCode: '',
         createdAt: new Date().toISOString(),
-        aiPersonality: personality,
       };
 
       await addGroup(newGroup);
@@ -89,7 +51,7 @@ export default function CreateGroupScreen() {
     } finally {
       setIsCreating(false);
     }
-  }, [name, category, selectedEmoji, personality, addGroup, router, selectedCategoryOption]);
+  }, [name, selectedEmoji, addGroup, router]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
@@ -110,15 +72,7 @@ export default function CreateGroupScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.emojiPickerSection}>
-          <View
-            style={[
-              styles.selectedEmojiCircle,
-              {
-                backgroundColor: `${selectedCategoryOption?.color ?? theme.coral}20`,
-                borderColor: `${selectedCategoryOption?.color ?? theme.coral}40`,
-              },
-            ]}
-          >
+          <View style={styles.selectedEmojiCircle}>
             <Text style={styles.selectedEmoji}>{selectedEmoji}</Text>
           </View>
         </View>
@@ -139,32 +93,6 @@ export default function CreateGroupScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Category</Text>
-          <View style={styles.categoryGrid}>
-            {categoryOptions.map((opt) => (
-              <TouchableOpacity
-                key={opt.key}
-                style={[
-                  styles.categoryOption,
-                  category === opt.key && { backgroundColor: `${opt.color}20`, borderColor: `${opt.color}60` },
-                ]}
-                onPress={() => {
-                  setCategory(opt.key);
-                  if (Platform.OS !== 'web') {
-                    Haptics.selectionAsync();
-                  }
-                }}
-              >
-                <Text style={styles.categoryEmoji}>{opt.emoji}</Text>
-                <Text style={[styles.categoryLabel, category === opt.key && { color: opt.color }]}>
-                  {categoryLabels[opt.key]}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.field}>
           <Text style={styles.label}>Group Emoji</Text>
           <View style={styles.emojiGrid}>
             {emojiOptions.map((emoji) => (
@@ -179,32 +107,6 @@ export default function CreateGroupScreen() {
                 }}
               >
                 <Text style={styles.emojiText}>{emoji}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>AI Vibe</Text>
-          <Text style={styles.fieldDesc}>Choose how your group's AI will talk</Text>
-          <View style={styles.personalityGrid}>
-            {personalityOptions.map((opt) => (
-              <TouchableOpacity
-                key={opt.key}
-                style={[
-                  styles.personalityOption,
-                  personality === opt.key && { backgroundColor: `${opt.color}20`, borderColor: `${opt.color}60` },
-                ]}
-                onPress={() => {
-                  setPersonality(opt.key);
-                  if (Platform.OS !== 'web') Haptics.selectionAsync();
-                }}
-              >
-                <Text style={styles.personalityEmoji}>{opt.emoji}</Text>
-                <Text style={[styles.personalityLabel, personality === opt.key && { color: opt.color }]}>
-                  {opt.label}
-                </Text>
-                <Text style={styles.personalityDesc}>{opt.desc}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -274,6 +176,8 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     borderWidth: 2,
+    backgroundColor: `${theme.coral}20`,
+    borderColor: `${theme.coral}40`,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -307,30 +211,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 6,
   },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: theme.bgCard,
-    borderWidth: 1.5,
-    borderColor: theme.border,
-  },
-  categoryEmoji: {
-    fontSize: 16,
-  },
-  categoryLabel: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: theme.textSecondary,
-  },
   emojiGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -352,40 +232,6 @@ const styles = StyleSheet.create({
   },
   emojiText: {
     fontSize: 22,
-  },
-  fieldDesc: {
-    fontSize: 13,
-    color: theme.textMuted,
-    marginBottom: 12,
-    marginTop: -4,
-  },
-  personalityGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  personalityOption: {
-    flexBasis: (SCREEN_WIDTH - 40 - 8) / 2,
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderRadius: 14,
-    backgroundColor: theme.bgCard,
-    borderWidth: 1.5,
-    borderColor: theme.border,
-    gap: 4,
-  },
-  personalityEmoji: {
-    fontSize: 24,
-  },
-  personalityLabel: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    color: theme.text,
-  },
-  personalityDesc: {
-    fontSize: 11,
-    color: theme.textMuted,
   },
   // bigCreateBtn styles replaced by shared Button component
 });

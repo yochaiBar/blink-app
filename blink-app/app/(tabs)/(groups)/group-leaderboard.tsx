@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } fr
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Trophy, Flame } from 'lucide-react-native';
-import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
@@ -12,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
 import { ApiGroupDetail } from '@/types/api';
 import { apiMembersToLeaderboard } from '@/utils/adapters';
+import AvatarRing from '@/components/ui/AvatarRing';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui';
 
 const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
@@ -49,7 +49,7 @@ export default function GroupLeaderboardScreen() {
           <Text style={styles.podiumRankEmoji}>{rankEmojis[position]}</Text>
         </View>
         <View style={[styles.podiumAvatarRing, { borderColor: rankColors[position] }]}>
-          <Image source={{ uri: entry.userAvatar }} style={styles.podiumAvatar} contentFit="cover" />
+          <AvatarRing name={entry.userName} size={50} />
         </View>
         <Text style={styles.podiumName} numberOfLines={1}>
           {entry.userName}
@@ -69,7 +69,7 @@ export default function GroupLeaderboardScreen() {
       return (
         <View style={[styles.listItem, isMe && styles.listItemMe]}>
           <Text style={styles.listRank}>#{item.rank}</Text>
-          <Image source={{ uri: item.userAvatar }} style={styles.listAvatar} contentFit="cover" />
+          <AvatarRing name={item.userName} size={40} />
           <View style={styles.listInfo}>
             <Text style={[styles.listName, isMe && { color: theme.coral }]}>
               {item.userName} {isMe ? '(you)' : ''}
@@ -301,11 +301,6 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     padding: 2,
   },
-  podiumAvatar: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 28,
-  },
   podiumName: {
     fontSize: 13,
     fontWeight: '700' as const,
@@ -350,11 +345,6 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     color: theme.textMuted,
     width: 28,
-  },
-  listAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
   },
   listInfo: {
     flex: 1,

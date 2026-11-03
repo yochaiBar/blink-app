@@ -5,7 +5,6 @@
  * - Button: renders with title, handles variants, shows loading state
  * - EmptyState: renders emoji, title, subtitle, optional action
  * - ErrorState: renders error message, optional retry
- * - StatusDot: renders with default and custom props
  *
  * These tests verify components mount and render key elements without crashing.
  */
@@ -18,7 +17,6 @@ import renderer, { act, ReactTestRenderer } from 'react-test-renderer';
 import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorState from '@/components/ui/ErrorState';
-import StatusDot from '@/components/ui/StatusDot';
 
 // Suppress React's act() environment warning and deprecation notices
 const originalConsoleError = console.error;
@@ -200,25 +198,5 @@ describe('ErrorState', () => {
     const tree = createWithAct(React.createElement(ErrorState, { compact: true }));
     const output = JSON.stringify(tree.toJSON());
     expect(output).not.toContain('Oops!');
-  });
-});
-
-// ── StatusDot Tests ──────────────────────────────────────────────
-
-describe('StatusDot', () => {
-  it('renders without crashing with default props', () => {
-    const tree = createWithAct(React.createElement(StatusDot));
-    expect(tree.toJSON()).toBeTruthy();
-  });
-
-  it('renders with custom color and size', () => {
-    const tree = createWithAct(React.createElement(StatusDot, { color: '#FF0000', size: 12 }));
-    const json = tree.toJSON() as any;
-    expect(json).toBeTruthy();
-  });
-
-  it('renders with pulse prop without crashing', () => {
-    const tree = createWithAct(React.createElement(StatusDot, { pulse: true }));
-    expect(tree.toJSON()).toBeTruthy();
   });
 });

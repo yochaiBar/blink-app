@@ -1,36 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
 import { Image } from 'expo-image';
-import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { ChevronRight, Camera } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { FeedItemData } from '@/components/FeedItem';
-import { getLocalPhotoUri } from '@/services/photoStore';
+import { usePhotoUri } from '@/hooks/usePhotoUri';
 
 const MAX_THUMBS = 4;
 
 // ── Helpers ──
-
-function typeBadge(t?: string): string {
-  switch (t) {
-    case 'snap':
-      return '📸 Snap';
-    case 'quiz':
-    case 'quiz_food':
-      return '❓ Quiz';
-    case 'quiz_most_likely':
-      return '🔥 Most likely';
-    case 'quiz_rate_day':
-      return '⭐ Rate the day';
-    case 'prompt':
-      return '💬 Prompt';
-    default:
-      return '📸 Snap';
-  }
-}
 
 function formatRemaining(ms: number): string {
   if (ms <= 0) return '0:00';
@@ -79,16 +60,10 @@ function LivePill({ expiresAt }: { expiresAt?: string }) {
   );
 }
 
-// ── Response thumbnail (E2E local photo first, S3 fallback) ──
+// ── Response thumbnail (E2E local photo) ──
 
-function ResponseThumb({ responseId, photoUrl, overlay }: { responseId: string; photoUrl?: string; overlay?: string }) {
-  const localPhoto = useQuery({
-    queryKey: ['localPhoto', responseId],
-    queryFn: () => getLocalPhotoUri(responseId),
-    enabled: !!responseId,
-    staleTime: 30_000,
-  });
-  const uri = localPhoto.data ?? photoUrl;
+function ResponseThumb({ responseId, overlay }: { responseId: string; overlay?: string }) {
+  const uri = usePhotoUri(responseId);
 
   return (
     <View style={styles.thumb}>
@@ -152,7 +127,7 @@ export default function ChallengeCard({ item }: { item: FeedItemData }) {
 
         {/* Type badge */}
         <View style={styles.typeBadge}>
-          <Text style={styles.typeBadgeText}>{typeBadge(item.challengeType)}</Text>
+          <Text style={styles.typeBadgeText}>📸 Snap</Text>
         </View>
 
         {/* Prompt */}
@@ -172,7 +147,6 @@ export default function ChallengeCard({ item }: { item: FeedItemData }) {
                 <ResponseThumb
                   key={r.responseId}
                   responseId={r.responseId}
-                  photoUrl={r.photoUrl}
                   overlay={isLast && extra > 0 ? `+${extra}` : undefined}
                 />
               );
