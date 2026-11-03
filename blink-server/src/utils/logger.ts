@@ -1,3 +1,5 @@
+import { env } from '../config/env';
+
 type LogMeta = Record<string, unknown>;
 
 const logger = {
@@ -11,7 +13,7 @@ const logger = {
     console.warn(JSON.stringify({ level: 'warn', message, ...meta, timestamp: new Date().toISOString() }));
   },
   debug: (message: string, meta?: LogMeta) => {
-    if (process.env.NODE_ENV === 'development') {
+    if (env.NODE_ENV === 'development') {
       console.debug(JSON.stringify({ level: 'debug', message, ...meta, timestamp: new Date().toISOString() }));
     }
   },

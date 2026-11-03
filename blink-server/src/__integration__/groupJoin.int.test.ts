@@ -37,10 +37,9 @@ describe('POST /api/groups/join — capacity', () => {
     expect(await memberCount(group.id)).toBe(2);
   });
 
-  // KNOWN BUG (recovery plan Phase 2b): the capacity check is a separate
-  // SELECT COUNT(*) before the INSERT, so concurrent joins all pass it.
-  // Fix: INSERT ... SELECT WHERE count < max under a lock on the group row.
-  it.failing('never exceeds max_members under concurrent joins', async () => {
+  // Was KNOWN BUG (d) until Stage 2b locked the group row around the
+  // capacity check + insert.
+  it('never exceeds max_members under concurrent joins', async () => {
     const alice = await createUser();
     const group = await createGroup({ createdBy: alice, maxMembers: 3 });
     const joiners = await Promise.all(Array.from({ length: 6 }, () => createUser()));

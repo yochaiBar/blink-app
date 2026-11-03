@@ -5,9 +5,11 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { validateBody } from '../middleware/validate';
 import { createReportSchema, blockUserSchema } from '../utils/schemas';
 import logger from '../utils/logger';
+import { uuidParams } from '../middleware/params';
 
 const router = Router();
 router.use(authenticate);
+uuidParams(router, 'userId');
 
 // POST /api/moderation/report - Report content or user
 router.post(
@@ -74,7 +76,7 @@ router.get(
     const result = await query(
       `SELECT ub.id, ub.blocked_id, u.display_name, ub.created_at
      FROM user_blocks ub
-     JOIN users u ON u.id = ub.blocked_id
+     JOIN public_users u ON u.id = ub.blocked_id
      WHERE ub.blocker_id = $1
      ORDER BY ub.created_at DESC`,
       [req.userId],

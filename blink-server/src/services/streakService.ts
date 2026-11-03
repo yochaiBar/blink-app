@@ -14,9 +14,7 @@ const MILESTONES = [3, 7, 14, 30, 50, 100];
 export async function checkMilestone(userId: string, groupId: string, upcomingStreak: number): Promise<void> {
   if (!MILESTONES.includes(upcomingStreak)) return;
 
-  const userName = await query(`SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`, [
-    userId,
-  ]);
+  const userName = await query(`SELECT display_name FROM public_users WHERE id = $1`, [userId]);
   const displayName = userName.rows[0]?.display_name || 'Someone';
 
   sendPushToUser(userId, 'Streak Milestone!', `Amazing! You hit a ${upcomingStreak}-day streak!`, {
@@ -132,10 +130,9 @@ export async function processSkipsForChallenge(challengeId: string, groupId: str
     emitToGroup(groupId, 'group:streak_update', { groupId, groupStreak: 0, brokenBy: firstSkipperId });
 
     if (brokenStreak > 0 && firstSkipperId) {
-      const skipperName = await query<UserDisplayNameRow>(
-        `SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`,
-        [firstSkipperId],
-      );
+      const skipperName = await query<UserDisplayNameRow>(`SELECT display_name FROM public_users WHERE id = $1`, [
+        firstSkipperId,
+      ]);
       const name = skipperName.rows[0]?.display_name || 'Someone';
       sendPushToGroup(
         groupId,

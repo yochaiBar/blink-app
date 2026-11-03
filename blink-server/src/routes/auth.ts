@@ -17,6 +17,7 @@ import { UserRow } from '../types/db';
 import { DEV_OTP, generateOtp, storeOtp, verifyOtp } from '../services/otp';
 import { createSession, revokeSession, rotateRefreshToken } from '../services/authSessions';
 import { disconnectUser } from '../socket';
+import { handleAdminLeave } from '../services/groupService';
 
 const router = Router();
 
@@ -240,8 +241,16 @@ router.delete(
   authenticate,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     // Sessions go with the user (ON DELETE CASCADE), so every access token
-    // and refresh token stops working at once.
+    // and refresh token stops working at once. Groups the user administers
+    // are handed over first (or deleted, if the user was the last member).
     const deleted = await withTransaction(async (client) => {
+      const adminOf = await client.query<{ group_id: string }>(
+        `SELECT group_id FROM group_members WHERE user_id = $1 AND role = 'admin'`,
+        [req.userId],
+      );
+      for (const { group_id } of adminOf.rows) {
+        await handleAdminLeave(client, group_id, req.userId as string);
+      }
       await client.query(`DELETE FROM group_members WHERE user_id = $1`, [req.userId]);
       const result = await client.query(`DELETE FROM users WHERE id = $1 RETURNING id`, [req.userId]);
       return result.rows.length > 0;

@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+// ── Shared query schemas ──────────────────────────────────────
+
+// Cursor pagination: newest first, `before` = created_at of the last item seen.
+export const paginationQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  before: z.string().datetime({ offset: true }).optional(),
+});
+export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
+
 // ── Auth schemas ──────────────────────────────────────────────
 
 const phoneNumberSchema = z

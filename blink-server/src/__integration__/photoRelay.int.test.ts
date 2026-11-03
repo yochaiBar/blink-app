@@ -7,6 +7,7 @@ import { useTestServer } from './support/server';
 import {
   TestUser,
   bearer,
+  block,
   countRows,
   createChallenge,
   createGroup,
@@ -88,6 +89,37 @@ describe('POST /api/photos/relay', () => {
         bob.id,
       ]),
     ).toBe(1);
+  });
+
+  it('delivers only to members of the sender’s audience: no strangers, no blocks, not the sender', async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const carol = await createUser();
+    const dave = await createUser();
+    const stranger = await createUser();
+    const group = await createGroup({ createdBy: alice, members: [bob, carol, dave] });
+    const challenge = await createChallenge({ groupId: group.id, createdBy: alice });
+    const response = await createResponse({ challengeId: challenge.id, user: alice });
+    await block(alice, carol); // sender blocked a recipient
+    await block(dave, alice); // a recipient blocked the sender
+    const online = await Promise.all([bob, carol, dave, stranger].map((u) => onlineRecipient(u)));
+
+    const res = await server
+      .api()
+      .post('/api/photos/relay')
+      .set(bearer(alice))
+      .send(
+        relayBody({
+          groupId: group.id,
+          challengeId: challenge.id,
+          responseId: response.id,
+          recipients: [alice.id, bob.id, carol.id, dave.id, stranger.id],
+        }),
+      );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ v: 1, delivered_user_ids: [bob.id], queued_user_ids: [] });
+    expect(online.map((o) => o.received.length)).toEqual([1, 0, 0, 0]);
   });
 
   // KNOWN BUG (recovery plan Phase 3): the relay only filters *recipients* by

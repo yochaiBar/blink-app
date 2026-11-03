@@ -1,5 +1,6 @@
 import { query } from '../config/database';
 import logger from '../utils/logger';
+import { env } from '../config/env';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
@@ -30,8 +31,8 @@ function getHeaders(): Record<string, string> {
     Accept: 'application/json',
   };
 
-  if (process.env.EXPO_ACCESS_TOKEN) {
-    headers['Authorization'] = `Bearer ${process.env.EXPO_ACCESS_TOKEN}`;
+  if (env.EXPO_ACCESS_TOKEN) {
+    headers['Authorization'] = `Bearer ${env.EXPO_ACCESS_TOKEN}`;
   }
 
   return headers;
@@ -159,31 +160,30 @@ async function sendPushBatch(messages: PushMessage[]): Promise<void> {
 }
 
 /**
- * Send push notifications to all members of a group.
- * Optionally exclude a specific user (e.g. the one who triggered the event).
+ * Send push notifications to a group. With `actorId` (the user who caused
+ * the event) only the actor's audience is notified: everyone else in the
+ * group except members blocked with the actor. Without it (system events),
+ * every member is.
  */
 export async function sendPushToGroup(
   groupId: string,
   title: string,
   body: string,
   data?: Record<string, unknown>,
-  excludeUserId?: string,
+  actorId?: string,
 ): Promise<void> {
   try {
-    let tokenQuery = `
-      SELECT u.push_token
-      FROM group_members gm
-      JOIN users u ON u.id = gm.user_id
-      WHERE gm.group_id = $1 AND u.push_token IS NOT NULL
-    `;
-    const params: unknown[] = [groupId];
-
-    if (excludeUserId) {
-      tokenQuery += ` AND gm.user_id != $2`;
-      params.push(excludeUserId);
-    }
-
-    const result = await query(tokenQuery, params);
+    const result = actorId
+      ? await query(
+          `SELECT u.push_token FROM audience($1, $2) a JOIN users u ON u.id = a.user_id
+            WHERE u.push_token IS NOT NULL`,
+          [groupId, actorId],
+        )
+      : await query(
+          `SELECT u.push_token FROM group_members gm JOIN users u ON u.id = gm.user_id
+            WHERE gm.group_id = $1 AND u.push_token IS NOT NULL`,
+          [groupId],
+        );
     const tokens: string[] = result.rows
       .map((r) => r.push_token as string)
       .filter((t) => t && t.startsWith('ExponentPushToken['));

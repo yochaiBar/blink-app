@@ -193,3 +193,9 @@ export function disconnectSession(sid: string): void {
 export function disconnectUser(userId: string): void {
   if (io) io.in(`user:${userId}`).disconnectSockets(true);
 }
+
+/** Emit to each listed user's sockets (e.g. a block-filtered audience). */
+export function emitToUsers(userIds: string[], event: string, data: unknown): void {
+  if (!io) return;
+  for (const userId of userIds) io.to(`user:${userId}`).emit(event, data);
+}

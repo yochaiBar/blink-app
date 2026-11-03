@@ -10,9 +10,13 @@ import { createNotification } from '../utils/notifications';
 import { emitToGroup, isUserOnline } from '../socket';
 import { enqueueKeyshare, dispatchPendingKeysharesForUser } from '../services/keyshareHub';
 import { sendPushToUser } from '../services/pushNotifications';
-import { validateUuidParams } from '../middleware/validateParams';
+import { uuidParams } from '../middleware/params';
 import { GroupRow, CountRow, UserDisplayNameRow } from '../types/db';
-import { verifyMembership, getGroupWithMembers, handleAdminLeave } from '../services/groupService';
+import { getGroupWithMembers, handleAdminLeave } from '../services/groupService';
+import { requireMember } from '../services/membership';
+import { audienceOf } from '../services/audience';
+import { HttpError } from '../utils/httpError';
+
 // (Legacy server-side group encryption removed in Phase 6 — group keys
 // now live exclusively on member devices and arrive via the courier
 // handshake at join.)
@@ -25,6 +29,7 @@ function generateInviteCode(): string {
 }
 
 router.use(authenticate);
+uuidParams(router, 'id');
 
 // POST /api/groups - Create a group
 router.post(
@@ -95,26 +100,16 @@ router.get(
 // GET /api/groups/:id - Get group details + members + stats
 router.get(
   '/:id',
-  validateUuidParams('id'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
 
-    try {
-      await verifyMembership(req.userId!, id);
-      const { group, members } = await getGroupWithMembers(id);
+    await requireMember(req.userId!, { groupId: id });
+    const { group, members } = await getGroupWithMembers(id);
 
-      res.json({
-        ...group,
-        members,
-      });
-    } catch (err: unknown) {
-      if (err instanceof Error && 'statusCode' in err) {
-        const statusErr = err as Error & { statusCode: number };
-        res.status(statusErr.statusCode).json({ error: statusErr.message });
-        return;
-      }
-      throw err;
-    }
+    res.json({
+      ...group,
+      members,
+    });
   }),
 );
 
@@ -143,30 +138,47 @@ router.post(
 
     const g = group.rows[0];
 
-    const count = await query<CountRow>(`SELECT COUNT(*) FROM group_members WHERE group_id = $1`, [g.id]);
-    if (parseInt(count.rows[0].count) >= g.max_members) {
+    // Capacity check and insert under a lock on the group row, so concurrent
+    // joins serialize and can never push the group past max_members.
+    const outcome = await withTransaction(async (client) => {
+      await client.query(`SELECT id FROM groups WHERE id = $1 FOR UPDATE`, [g.id]);
+      const existing = await client.query(`SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`, [
+        g.id,
+        req.userId,
+      ]);
+      if (existing.rows.length > 0) return 'already_member' as const;
+      const count = await client.query<CountRow>(`SELECT COUNT(*) FROM group_members WHERE group_id = $1`, [g.id]);
+      if (parseInt(count.rows[0].count) >= g.max_members) return 'full' as const;
+      await client.query(`INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'member')`, [
+        g.id,
+        req.userId,
+      ]);
+      return 'joined' as const;
+    });
+    if (outcome === 'full') {
+      // Same answer as an unknown code, so a full group can't be probed.
       res.status(404).json({ error: 'Invalid invite code' });
       return;
     }
+    if (outcome === 'already_member') {
+      res.json(g);
+      return;
+    }
 
-    await query(
-      `INSERT INTO group_members (group_id, user_id, role)
-     VALUES ($1, $2, 'member')
-     ON CONFLICT (group_id, user_id) DO NOTHING`,
-      [g.id, req.userId],
-    );
-
-    // Notify existing group members
-    const joinerUser = await query<UserDisplayNameRow>(`SELECT display_name FROM users WHERE id = $1`, [req.userId]);
-    const joinerName = joinerUser.rows[0]?.display_name || 'Someone';
-
-    const existingMembers = await query(`SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2`, [
-      g.id,
+    // Notify existing group members (except anyone blocked with the joiner)
+    const joinerUser = await query<UserDisplayNameRow>(`SELECT display_name FROM public_users WHERE id = $1`, [
       req.userId,
     ]);
-    for (const member of existingMembers.rows) {
+    const joinerName = joinerUser.rows[0]?.display_name || 'Someone';
+
+    const audience = await audienceOf(g.id, req.userId!);
+    const existingMembers = await query<{ user_id: string }>(
+      `SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2`,
+      [g.id, req.userId],
+    );
+    for (const memberId of audience) {
       await createNotification(
-        member.user_id,
+        memberId,
         'group_joined',
         'New Member!',
         `${joinerName} joined ${g.name}`,
@@ -183,7 +195,7 @@ router.post(
     });
 
     // Fire-and-forget push notification to group creator
-    if (g.created_by && g.created_by !== req.userId) {
+    if (g.created_by && audience.includes(g.created_by)) {
       sendPushToUser(g.created_by, 'New Member!', `${joinerName} joined ${g.name}`, {
         type: 'group_joined',
         groupId: g.id,
@@ -230,28 +242,27 @@ router.post(
 // POST /api/groups/:id/leave - Leave a group
 router.post(
   '/:id/leave',
-  validateUuidParams('id'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
 
-    let membership;
-    try {
-      membership = await verifyMembership(req.userId!, id);
-    } catch {
-      // verifyMembership throws 403, but leave returns 404 for non-members
-      res.status(404).json({ error: 'Not a member of this group' });
+    // Leaving a group you're not in answers 404 rather than 403.
+    const membership = await requireMember(req.userId!, { groupId: id }).catch(() => {
+      throw new HttpError(404, 'Not a member of this group');
+    });
+
+    // Admin hand-over and the membership delete commit together.
+    const result = await withTransaction(async (client) => {
+      if (membership.role === 'admin') {
+        const handover = await handleAdminLeave(client, id, req.userId!);
+        if (handover === 'deleted') return 'group_deleted' as const;
+      }
+      await client.query(`DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, [id, req.userId]);
+      return 'left' as const;
+    });
+    if (result === 'group_deleted') {
+      res.json({ message: 'Left group. Group was deleted as you were the last member.' });
       return;
     }
-
-    if (membership.role === 'admin') {
-      const result = await handleAdminLeave(id, req.userId!);
-      if (result === 'deleted') {
-        res.json({ message: 'Left group. Group was deleted as you were the last member.' });
-        return;
-      }
-    }
-
-    await query(`DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, [id, req.userId]);
 
     logger.info('User left group', { groupId: id, userId: req.userId });
     res.json({ message: 'Left group successfully' });
@@ -261,21 +272,12 @@ router.post(
 // DELETE /api/groups/:id - Delete a group (admin only)
 router.delete(
   '/:id',
-  validateUuidParams('id'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
 
-    let membership;
-    try {
-      membership = await verifyMembership(req.userId!, id);
-    } catch {
-      res.status(403).json({ error: 'Not a member of this group' });
-      return;
-    }
-
+    const membership = await requireMember(req.userId!, { groupId: id });
     if (membership.role !== 'admin') {
-      res.status(403).json({ error: 'Only group admins can delete a group' });
-      return;
+      throw new HttpError(403, 'Only group admins can delete a group');
     }
 
     const result = await query(`DELETE FROM groups WHERE id = $1 RETURNING id`, [id]);
@@ -292,30 +294,20 @@ router.delete(
 // ── GET /api/groups/:id/stats -- Group statistics (top trigger, longest streak, fastest responder) ──
 router.get(
   '/:id/stats',
-  validateUuidParams('id'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
 
-    try {
-      await verifyMembership(req.userId!, id);
-    } catch (err: unknown) {
-      if (err instanceof Error && 'statusCode' in err) {
-        const statusErr = err as Error & { statusCode: number };
-        res.status(statusErr.statusCode).json({ error: statusErr.message });
-        return;
-      }
-      throw err;
-    }
+    await requireMember(req.userId!, { groupId: id });
 
     // Top trigger: user who triggered the most challenges in this group
     const topTriggerResult = await query(
       `SELECT c.created_by AS user_id,
-            COALESCE(u.display_name, u.phone_number) AS display_name,
+            u.display_name,
             COUNT(*)::int AS count
      FROM challenges c
-     JOIN users u ON u.id = c.created_by
+     JOIN public_users u ON u.id = c.created_by
      WHERE c.group_id = $1 AND c.created_by IS NOT NULL
-     GROUP BY c.created_by, u.display_name, u.phone_number
+     GROUP BY c.created_by, u.display_name
      ORDER BY count DESC
      LIMIT 1`,
       [id],
@@ -324,10 +316,10 @@ router.get(
     // Longest streak: member with the highest current_streak in this group
     const longestStreakResult = await query(
       `SELECT gm.user_id,
-            COALESCE(u.display_name, u.phone_number) AS display_name,
+            u.display_name,
             gm.current_streak AS streak
      FROM group_members gm
-     JOIN users u ON u.id = gm.user_id
+     JOIN public_users u ON u.id = gm.user_id
      WHERE gm.group_id = $1
      ORDER BY gm.current_streak DESC
      LIMIT 1`,
@@ -337,13 +329,13 @@ router.get(
     // Fastest responder: user with the lowest average response_time_ms
     const fastestResponderResult = await query(
       `SELECT cr.user_id,
-            COALESCE(u.display_name, u.phone_number) AS display_name,
+            u.display_name,
             AVG(cr.response_time_ms)::int AS avg_ms
      FROM challenge_responses cr
      JOIN challenges c ON c.id = cr.challenge_id
-     JOIN users u ON u.id = cr.user_id
+     JOIN public_users u ON u.id = cr.user_id
      WHERE c.group_id = $1 AND cr.response_time_ms IS NOT NULL
-     GROUP BY cr.user_id, u.display_name, u.phone_number
+     GROUP BY cr.user_id, u.display_name
      ORDER BY avg_ms ASC
      LIMIT 1`,
       [id],

@@ -19,10 +19,9 @@ export async function notifyUserOfResponse(
   groupId: string,
   challengeId: string,
 ): Promise<void> {
-  const responderUser = await query<UserDisplayNameRow>(
-    `SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`,
-    [responderId],
-  );
+  const responderUser = await query<UserDisplayNameRow>(`SELECT display_name FROM public_users WHERE id = $1`, [
+    responderId,
+  ]);
   const responderName = responderUser.rows[0]?.display_name || 'Someone';
 
   await createNotification(
@@ -49,18 +48,18 @@ export async function notifyUserOfResponse(
 export async function notifySocialObligation(challengeId: string, groupId: string): Promise<void> {
   // Get all group members with names
   const allMembers = await query<UserSummaryRow>(
-    `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name
+    `SELECT gm.user_id, u.display_name
      FROM group_members gm
-     JOIN users u ON u.id = gm.user_id
+     JOIN public_users u ON u.id = gm.user_id
      WHERE gm.group_id = $1`,
     [groupId],
   );
 
   // Get who has responded so far
   const allResponded = await query<UserSummaryRow>(
-    `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name
+    `SELECT cr.user_id, u.display_name
      FROM challenge_responses cr
-     JOIN users u ON u.id = cr.user_id
+     JOIN public_users u ON u.id = cr.user_id
      WHERE cr.challenge_id = $1`,
     [challengeId],
   );
@@ -104,16 +103,11 @@ export async function notifySocialObligation(challengeId: string, groupId: strin
  * Notify all group members (except the triggerer) about a new challenge.
  */
 export async function notifyGroupOfChallenge(groupId: string, challengeId: string, triggeredBy: string): Promise<void> {
-  const groupMembers = await query(
-    `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name FROM group_members gm
-     JOIN users u ON u.id = gm.user_id
-     WHERE gm.group_id = $1 AND gm.user_id != $2`,
-    [groupId, triggeredBy],
-  );
-  const triggerUser = await query<UserDisplayNameRow>(
-    `SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`,
-    [triggeredBy],
-  );
+  // The trigger-er's audience: other members, minus anyone blocked with them.
+  const groupMembers = await query<{ user_id: string }>(`SELECT user_id FROM audience($1, $2)`, [groupId, triggeredBy]);
+  const triggerUser = await query<UserDisplayNameRow>(`SELECT display_name FROM public_users WHERE id = $1`, [
+    triggeredBy,
+  ]);
   const triggerName = triggerUser.rows[0]?.display_name || 'Someone';
   const groupInfo = await query<{ name: string }>(`SELECT name FROM groups WHERE id = $1`, [groupId]);
   const groupName = groupInfo.rows[0]?.name || 'your group';

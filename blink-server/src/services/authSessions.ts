@@ -21,7 +21,7 @@ import { JWT_ACCESS_EXPIRY } from '../utils/constants';
 import { disconnectSession } from '../socket';
 import logger from '../utils/logger';
 
-const SESSION_TTL = "INTERVAL '7 days'";
+const SESSION_TTL_DAYS = 7;
 export const REFRESH_GRACE_SECONDS = 30;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,9 +54,9 @@ export async function createSession(userId: string): Promise<SessionTokens> {
   const secret = crypto.randomBytes(32).toString('base64url');
   const result = await query<{ id: string }>(
     `INSERT INTO auth_sessions (user_id, refresh_hash, expires_at)
-     VALUES ($1, $2, NOW() + ${SESSION_TTL})
+     VALUES ($1, $2, NOW() + make_interval(days => $3))
      RETURNING id`,
-    [userId, sha256(secret)],
+    [userId, sha256(secret), SESSION_TTL_DAYS],
   );
   const sid = result.rows[0].id;
   return { access_token: signAccessToken(userId, sid), refresh_token: `${sid}.${secret}` };
@@ -82,10 +82,10 @@ export async function rotateRefreshToken(refreshToken: string): Promise<RefreshO
         SET prev_refresh_hash = refresh_hash,
             refresh_hash = $3,
             rotated_at = NOW(),
-            expires_at = NOW() + ${SESSION_TTL}
+            expires_at = NOW() + make_interval(days => $4)
       WHERE id = $1 AND refresh_hash = $2 AND revoked_at IS NULL AND expires_at > NOW()
       RETURNING user_id`,
-    [sid, presentedHash, sha256(next)],
+    [sid, presentedHash, sha256(next), SESSION_TTL_DAYS],
   );
   if (rotated.rows.length > 0) {
     const userId = rotated.rows[0].user_id;

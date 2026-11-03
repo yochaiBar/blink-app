@@ -300,22 +300,6 @@ describe('POST /api/groups/join', () => {
     expect(res.body.error).toContain('Free tier limited to 3 groups');
   });
 
-  it('should return 404 when group is full (prevents oracle attacks)', async () => {
-    const group = makeGroup({ max_members: 5 });
-    mockQuery
-      .mockResolvedValueOnce(queryResult([{ count: '0' }]))
-      .mockResolvedValueOnce(queryResult([group]))
-      .mockResolvedValueOnce(queryResult([{ count: '5' }])); // already at max
-
-    const res = await request(app)
-      .post('/api/groups/join')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ invite_code: TEST_INVITE_CODE });
-
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Invalid invite code');
-  });
-
   it('should return 400 for missing invite_code', async () => {
     const res = await request(app).post('/api/groups/join').set('Authorization', `Bearer ${token}`).send({});
 

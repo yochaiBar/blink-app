@@ -11,7 +11,7 @@ import { query } from '../config/database';
 import { env } from '../config/env';
 
 export const MAX_OTP_ATTEMPTS = 5;
-const OTP_TTL = "INTERVAL '5 minutes'";
+const OTP_TTL_MINUTES = 5;
 
 export const DEV_OTP = '123456';
 
@@ -32,10 +32,10 @@ export async function storeOtp(phone: string, code: string): Promise<void> {
   await query(`DELETE FROM otp_codes WHERE expires_at < NOW()`);
   await query(
     `INSERT INTO otp_codes (phone, code_hash, expires_at)
-     VALUES ($1, $2, NOW() + ${OTP_TTL})
+     VALUES ($1, $2, NOW() + make_interval(mins => $3))
      ON CONFLICT (phone) DO UPDATE
        SET code_hash = EXCLUDED.code_hash, attempts = 0, created_at = NOW(), expires_at = EXCLUDED.expires_at`,
-    [phone, hashCode(phone, code)],
+    [phone, hashCode(phone, code), OTP_TTL_MINUTES],
   );
 }
 

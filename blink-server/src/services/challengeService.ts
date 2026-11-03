@@ -1,8 +1,10 @@
 import { query, withTransaction } from '../config/database';
 import { emitToGroup } from '../socket';
 import { processSkipsForChallenge } from './streakService';
+import { requireMember } from './membership';
+import { HttpError } from '../utils/httpError';
 import { sendPushToGroup } from './pushNotifications';
-import { ChallengeRow, GroupMemberRow, ChallengeResponseRow, CountRow } from '../types/db';
+import { ChallengeRow, ChallengeResponseRow, CountRow } from '../types/db';
 
 /**
  * Submit a response to a challenge. Validates preconditions, inserts the response,
@@ -22,22 +24,15 @@ export async function submitResponse(
   // Fetch challenge
   const challenge = await query<ChallengeRow>(`SELECT * FROM challenges WHERE id = $1`, [challengeId]);
   if (challenge.rows.length === 0) {
-    throw Object.assign(new Error('Challenge not found'), { statusCode: 404 });
+    throw new HttpError(404, 'Challenge not found');
   }
   const c = challenge.rows[0];
 
   if (c.status !== 'active' || new Date(c.expires_at) < new Date()) {
-    throw Object.assign(new Error('This challenge has expired or is no longer active'), { statusCode: 400 });
+    throw new HttpError(400, 'This challenge has expired or is no longer active');
   }
 
-  // Verify membership
-  const membership = await query<GroupMemberRow>(`SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`, [
-    c.group_id,
-    userId,
-  ]);
-  if (membership.rows.length === 0) {
-    throw Object.assign(new Error('Not a member of this group'), { statusCode: 403 });
-  }
+  await requireMember(userId, { groupId: c.group_id });
 
   // Check duplicate response
   const existing = await query<Pick<ChallengeResponseRow, 'id'>>(
@@ -45,7 +40,7 @@ export async function submitResponse(
     [challengeId, userId],
   );
   if (existing.rows.length > 0) {
-    throw Object.assign(new Error('Already responded'), { statusCode: 400 });
+    throw new HttpError(400, 'Already responded');
   }
 
   const result = await query<ChallengeResponseRow>(
