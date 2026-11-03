@@ -97,6 +97,10 @@ CREATE TABLE groups (
   -- counter lets clients resolve rotations (POST /api/keyshare/reset), and
   -- photos and keyshares must be made under it.
   group_key_version INTEGER NOT NULL DEFAULT 1,
+  -- The admin whose reset made the current version. Only they may be its
+  -- first holder (POST /api/keyshare/confirm) while they're still an admin;
+  -- otherwise any admin may. NULL for a version made at group creation.
+  key_minted_by UUID REFERENCES users(id) ON DELETE SET NULL,
   -- Daily auto-challenge: day hours are read in this IANA zone, and the
   -- next run is claimed from next_auto_challenge_at (jobs/dailyChallenge.ts).
   timezone TEXT NOT NULL DEFAULT 'UTC',

@@ -326,6 +326,52 @@ describe('keyshare — reset', () => {
     expect(bobOnline.rotations).toHaveLength(1);
   });
 
+  it('only the admin who reset can introduce the new key; members confirm it after her', async () => {
+    const { alice, bob, group } = await scene();
+    const carol = await createUser();
+    await addMember(group.id, bob.id);
+    await addMember(group.id, carol.id, 'admin');
+    await holdKey(group.id, bob);
+    await holdKey(group.id, carol);
+    const bobOnline = await online(bob);
+    const confirm = (user: TestUser, keyVersion: number) =>
+      server
+        .api()
+        .post('/api/keyshare/confirm')
+        .set(bearer(user))
+        .send({ v: 2, group_id: group.id, key_version: keyVersion });
+
+    await server.api().post('/api/keyshare/reset').set(bearer(alice)).send({ v: 2, group_id: group.id });
+
+    // A key Bob (or co-admin Carol) minted themselves must not become v2.
+    expect((await confirm(bob, 2)).status).toBe(403);
+    expect((await confirm(carol, 2)).status).toBe(403);
+    await settle();
+    expect(bobOnline.rotations).toHaveLength(0);
+    expect(await keyVersionOf(group.id, bob.id)).toBe(1);
+
+    expect((await confirm(alice, 2)).status).toBe(200);
+    await until(() => bobOnline.rotations.length === 1);
+    expect((await confirm(bob, 2)).status).toBe(200);
+    expect(await keyVersionOf(group.id, bob.id)).toBe(2);
+    await settle();
+    expect(bobOnline.rotations).toHaveLength(1);
+  });
+
+  it('a version nobody holds yet can only be introduced by an admin, e.g. the creator at v1', async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const group = await createGroup({ createdBy: alice, members: [bob] });
+    const confirm = (user: TestUser) =>
+      server.api().post('/api/keyshare/confirm').set(bearer(user)).send({ v: 2, group_id: group.id, key_version: 1 });
+
+    expect((await confirm(bob)).status).toBe(403);
+    expect((await confirm(alice)).status).toBe(200);
+    expect((await confirm(bob)).status).toBe(200);
+    // Re-confirming a version you hold is always fine.
+    expect((await confirm(bob)).status).toBe(200);
+  });
+
   it('a reset frees claims made under the old version', async () => {
     const { alice, bob, group, bobDevice } = await scene();
     await online(bob, bobDevice);
