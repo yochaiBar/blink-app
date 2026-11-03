@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert, Linking, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Shield, LogOut, ChevronRight, Trash2, FileText, Mail, UserX, X } from 'lucide-react-native';
+import { ArrowLeft, Shield, LogOut, ChevronRight, Trash2, FileText, Mail, UserX, X, Bell } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
@@ -15,6 +15,15 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { logout } = useApp();
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
+  const pushEnabled = useAuthStore((s) => s.user?.push_enabled ?? true);
+  const setPushEnabled = useAuthStore((s) => s.setPushEnabled);
+
+  const handlePushToggle = useCallback(
+    (enabled: boolean) => {
+      setPushEnabled(enabled).catch(() => Alert.alert('Error', 'Could not update notifications. Please try again.'));
+    },
+    [setPushEnabled],
+  );
 
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
   const [blockedUsers, setBlockedUsers] = useState<{ blocked_id: string; display_name: string | null }[]>([]);
@@ -109,6 +118,24 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Notifications</Text>
+          <View style={styles.card}>
+            <View style={styles.settingRow}>
+              <View style={[styles.iconBg, { backgroundColor: theme.coralMuted }]}>
+                <Bell size={18} color={theme.coral} />
+              </View>
+              <Text style={styles.settingLabel}>Push notifications</Text>
+              <Switch
+                value={pushEnabled}
+                onValueChange={handlePushToggle}
+                trackColor={{ true: theme.coral, false: theme.border }}
+                testID="push-toggle"
+              />
+            </View>
+          </View>
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
           <View style={styles.card}>

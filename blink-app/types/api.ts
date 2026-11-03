@@ -36,6 +36,9 @@ export interface ApiGroupDetail {
   invite_code: string;
   created_by: string;
   created_at: string;
+  /** Consecutive challenges everyone answered, and the record (kept by the server's finalize). */
+  group_streak?: number;
+  longest_group_streak?: number;
   members: ApiGroupMember[];
 }
 

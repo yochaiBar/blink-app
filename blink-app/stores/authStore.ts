@@ -14,6 +14,8 @@ interface User {
   phone_number: string;
   display_name: string | null;
   bio: string | null;
+  /** Whether the server sends this user push notifications (users.push_enabled). */
+  push_enabled?: boolean;
 }
 
 interface AuthState {
@@ -26,6 +28,8 @@ interface AuthState {
   logout: () => Promise<void>;
   /** Delete the account on the server, then wipe this device. Throws (and stays signed in) if the server refuses. */
   deleteAccount: () => Promise<void>;
+  /** Turn push notifications on or off on the server; reverts and throws on failure. */
+  setPushEnabled: (enabled: boolean) => Promise<void>;
   updateName: (name: string) => void;
   updateBio: (bio: string) => void;
 }
@@ -45,7 +49,7 @@ async function wipeLocalData(): Promise<void> {
   ]);
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: true,
   isAuthenticated: false,
@@ -105,6 +109,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     await wipeLocalData();
     await useOnboardingStore.getState().reset();
     set({ user: null, isAuthenticated: false });
+  },
+
+  setPushEnabled: async (enabled: boolean) => {
+    const previous = get().user?.push_enabled;
+    set((state) => ({ user: state.user ? { ...state.user, push_enabled: enabled } : null }));
+    try {
+      await api('/auth/profile', { method: 'PATCH', body: JSON.stringify({ push_enabled: enabled }) });
+    } catch (err) {
+      set((state) => ({ user: state.user ? { ...state.user, push_enabled: previous } : null }));
+      throw err;
+    }
   },
 
   updateName: (name: string) => {

@@ -119,10 +119,9 @@ export default function GroupDetailScreen() {
     ? group.members.some((m) => m.id === user.id && m.role === 'admin') || group.createdBy === user.id
     : false;
 
-  const groupStreak = group
-    ? group.members.reduce((min, m) => Math.min(min, m.streak), group.members[0]?.streak ?? 0)
-    : 0;
-  const longestGroupStreak = group ? Math.max(...group.members.map((m) => m.streak), 0) : 0;
+  // Streaks are the server's (settled when a challenge finalizes), not re-derived here.
+  const groupStreak = groupQuery.data?.group_streak ?? 0;
+  const longestGroupStreak = groupQuery.data?.longest_group_streak ?? 0;
 
   // ── Side effects: fetch progress, preview, socket listeners ──
   useEffect(() => {

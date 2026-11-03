@@ -258,6 +258,13 @@ function RootLayoutNav() {
             headerShown: false,
           }}
         />
+        <Stack.Screen
+          name="comments/[responseId]"
+          options={{
+            presentation: 'modal',
+            headerShown: false,
+          }}
+        />
         <Stack.Screen name="+not-found" />
       </Stack>
     </AuthGate>
