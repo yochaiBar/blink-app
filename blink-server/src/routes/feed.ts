@@ -18,7 +18,7 @@ router.get(
     const { limit, before } = parsedQuery<PaginationQuery>(res);
     const challenges = await listChallenges(
       `c.group_id IN (SELECT group_id FROM group_members WHERE user_id = $1)
-       AND ($2::timestamptz IS NULL OR c.created_at < $2::timestamptz)`,
+       AND ($3::timestamptz IS NULL OR c.created_at < $3::timestamptz)`,
       [before ?? null],
       req.userId!,
       limit,

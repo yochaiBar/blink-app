@@ -317,7 +317,7 @@ router.get(
     await requireMember(req.userId!, { groupId: id });
 
     const items = await listChallenges(
-      `c.group_id = $2 AND ($3::timestamptz IS NULL OR c.created_at < $3::timestamptz)`,
+      `c.group_id = $3 AND ($4::timestamptz IS NULL OR c.created_at < $4::timestamptz)`,
       [id, before ?? null],
       req.userId!,
       limit,

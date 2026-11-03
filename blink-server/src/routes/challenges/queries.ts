@@ -82,7 +82,7 @@ router.get(
     const id = req.params.id as string;
     await requireMember(req.userId!, { challengeId: id });
 
-    const [challenge] = await listChallenges('c.id = $2', [id], req.userId!, 1);
+    const [challenge] = await listChallenges('c.id = $3', [id], req.userId!, 1);
     if (!challenge) throw new HttpError(404, 'Challenge not found');
     const responses = await loadResponses([id], req.userId!);
     res.json({ ...challenge, responses: responses.get(id) ?? [] });

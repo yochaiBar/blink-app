@@ -24,7 +24,7 @@ import type { ChallengeResponseRow } from '../types/db';
 
 export const CHALLENGE_DURATION_SECONDS = 5 * 60;
 export const MILESTONES = [3, 7, 14, 30, 50, 100];
-const CREATE_COOLDOWN = "INTERVAL '5 seconds'";
+const CREATE_COOLDOWN_SECONDS = 5;
 
 // Columns every challenge payload returns to the client.
 export const CHALLENGE_SELECT = `id, group_id, prompt, created_by, created_at, expires_at, status`;
@@ -182,8 +182,8 @@ export async function createChallenge(opts: {
     await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [opts.groupId]);
 
     const recent = await client.query(
-      `SELECT 1 FROM challenges WHERE group_id = $1 AND created_at > NOW() - ${CREATE_COOLDOWN} LIMIT 1`,
-      [opts.groupId],
+      `SELECT 1 FROM challenges WHERE group_id = $1 AND created_at > NOW() - make_interval(secs => $2) LIMIT 1`,
+      [opts.groupId, CREATE_COOLDOWN_SECONDS],
     );
     if (recent.rows.length > 0) throw new HttpError(409, 'A challenge was just started');
 

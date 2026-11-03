@@ -64,8 +64,9 @@ export async function loadResponses(challengeIds: string[], viewerId: string): P
 }
 
 /**
- * Challenges matching `where` (SQL over alias c; viewer is $1, extra params
- * start at $2), newest first, as the viewer sees them.
+ * Challenges matching `where` (a fixed SQL condition over alias c written by
+ * the caller — never user input; viewer is $1, the limit $2, extra params
+ * start at $3), newest first, as the viewer sees them.
  */
 export async function listChallenges(
   where: string,
@@ -84,8 +85,8 @@ export async function listChallenges(
        JOIN groups g ON g.id = c.group_id
       WHERE ${where}
       ORDER BY c.created_at DESC
-      LIMIT ${Number(limit)}`,
-    [viewerId, ...params],
+      LIMIT $2`,
+    [viewerId, limit, ...params],
   );
   return result.rows;
 }
