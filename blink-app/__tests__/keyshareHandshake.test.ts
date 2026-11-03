@@ -10,11 +10,6 @@
 
 import './setup';
 
-// Stateful secure-store backing so each "device" gets its own keypair.
-const ssA = new Map<string, string>();
-const ssB = new Map<string, string>();
-let currentSs: Map<string, string> = ssA;
-
 import * as SecureStore from 'expo-secure-store';
 
 import {
@@ -26,6 +21,22 @@ import {
   getOrCreateDeviceKey,
   clearDeviceKey,
 } from '../services/groupCrypto';
+
+// Stateful secure-store backing so each "device" gets its own keypair.
+const ssA = new Map<string, string>();
+const ssB = new Map<string, string>();
+let currentSs: Map<string, string> = ssA;
+
+const GROUP_ID = '11111111-1111-4111-8111-111111111111';
+const BOB_ID = '22222222-2222-4222-8222-222222222222';
+
+/** The context both sides bind the wrapped key to (keyshareAad). */
+const forBob = (deviceId: string) => ({
+  groupId: GROUP_ID,
+  joinerUserId: BOB_ID,
+  joinerDeviceId: deviceId,
+  keyVersion: 1,
+});
 
 beforeEach(() => {
   ssA.clear();
@@ -58,7 +69,7 @@ describe('courier handshake — end-to-end across two simulated devices', () => 
 
     // Alice (back to her secure-store)
     currentSs = ssA;
-    const envelope = courierEncryptGroupKey(b64ToBytes(bobPubB64), groupKey);
+    const envelope = courierEncryptGroupKey(b64ToBytes(bobPubB64), groupKey, forBob(bobDevice.device_id));
 
     // Wire transit — serialize, transmit, deserialize.
     const wire = {
@@ -69,11 +80,16 @@ describe('courier handshake — end-to-end across two simulated devices', () => 
 
     // Bob's role
     currentSs = ssB;
-    const recovered = joinerDecryptGroupKey(bobDevice.privateScalar, bobDevice.publicKey, {
-      ephemeralPublicKey: b64ToBytes(wire.ephemeral_public_key_b64),
-      iv: b64ToBytes(wire.iv_b64),
-      ciphertext: b64ToBytes(wire.ciphertext_b64),
-    });
+    const recovered = joinerDecryptGroupKey(
+      bobDevice.privateScalar,
+      bobDevice.publicKey,
+      {
+        ephemeralPublicKey: b64ToBytes(wire.ephemeral_public_key_b64),
+        iv: b64ToBytes(wire.iv_b64),
+        ciphertext: b64ToBytes(wire.ciphertext_b64),
+      },
+      forBob(bobDevice.device_id),
+    );
 
     expect(recovered).toEqual(groupKey);
     // Sanity: Alice's device is unrelated to the recovery — Bob did it
@@ -95,11 +111,13 @@ describe('courier handshake — end-to-end across two simulated devices', () => 
     await clearDeviceKey();
     const attackerKeyMaterial = await getOrCreateDeviceKey();
 
-    const envelope = courierEncryptGroupKey(attackerKeyMaterial.publicKey, groupKey);
+    const envelope = courierEncryptGroupKey(attackerKeyMaterial.publicKey, groupKey, forBob(bobDevice.device_id));
 
     // Bob's device receives. Salt input uses HIS pub key, not the
     // attacker's. HKDF derives a different AEAD key. Decrypt throws.
-    expect(() => joinerDecryptGroupKey(bobDevice.privateScalar, bobDevice.publicKey, envelope)).toThrow();
+    expect(() =>
+      joinerDecryptGroupKey(bobDevice.privateScalar, bobDevice.publicKey, envelope, forBob(bobDevice.device_id)),
+    ).toThrow();
   });
 
   it('rejects an envelope whose ciphertext was tampered in transit', async () => {
@@ -109,7 +127,7 @@ describe('courier handshake — end-to-end across two simulated devices', () => 
 
     currentSs = ssA;
     const groupKey = newGroupKey();
-    const envelope = courierEncryptGroupKey(bobDevice.publicKey, groupKey);
+    const envelope = courierEncryptGroupKey(bobDevice.publicKey, groupKey, forBob(bobDevice.device_id));
 
     // Flip a bit in the ciphertext.
     const tampered = new Uint8Array(envelope.ciphertext);
@@ -117,11 +135,12 @@ describe('courier handshake — end-to-end across two simulated devices', () => 
 
     currentSs = ssB;
     expect(() =>
-      joinerDecryptGroupKey(bobDevice.privateScalar, bobDevice.publicKey, {
-        ephemeralPublicKey: envelope.ephemeralPublicKey,
-        iv: envelope.iv,
-        ciphertext: tampered,
-      }),
+      joinerDecryptGroupKey(
+        bobDevice.privateScalar,
+        bobDevice.publicKey,
+        { ephemeralPublicKey: envelope.ephemeralPublicKey, iv: envelope.iv, ciphertext: tampered },
+        forBob(bobDevice.device_id),
+      ),
     ).toThrow();
   });
 });

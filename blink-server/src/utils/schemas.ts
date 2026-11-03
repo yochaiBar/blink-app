@@ -128,14 +128,11 @@ const base64_ciphertext = z
   .regex(/^[A-Za-z0-9+/=]+$/, 'Must be valid base64');
 
 export const relayPhotoSchema = z.object({
-  v: z.literal(1),
-  group_id: z.string().uuid(),
-  challenge_id: z.string().uuid(),
+  v: z.literal(2),
   response_id: z.string().uuid(),
   sender_device_id: z.string().uuid(),
+  key_version: z.number().int().min(1),
   iv_b64: base64_12bytes,
-  auth_tag_b64: base64_16bytes,
-  recipient_user_ids: z.array(z.string().uuid()).min(1).max(64),
   ciphertext_b64: base64_ciphertext,
   pickup_id: z.string().uuid().optional(),
 });

@@ -66,6 +66,6 @@ names the recovery-plan phase that fixes it. `it.failing` passes while the
 assertion fails; when the fix lands Jest reports it, and the fix PR flips it to
 a plain `it(...)`.
 
-Status: (a) account deletion, (b) double-counted finalize and (d) joins past
-`max_members` are fixed (Stages 1a, 2c, 2b). (c), a relay from a non-member
-sender, stays `it.failing` until Stage 3.
+Status: all four seeded bugs are fixed — (a) account deletion (Stage 1a),
+(d) joins past `max_members` (2b), (b) double-counted finalize (2c) and (c) a
+relay from a non-member sender (3a) — and their tests are plain `it`s.

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import type { NotificationItem } from '@/types';
+import type { RelayPhotoRequest, RelayPhotoResult } from '@/shared/photoProtocol';
 
 // ── Response types for API functions ──
 
@@ -253,28 +254,9 @@ export function resetGroupKey(body: { group_id: string }): Promise<KeyshareReset
   });
 }
 
-// ── Photo relay (E2E photo flow, Phase 3) ──
-export interface RelayPhotoBody {
-  v: 1;
-  group_id: string;
-  challenge_id: string;
-  response_id: string;
-  sender_device_id: string;
-  iv_b64: string;
-  auth_tag_b64: string;
-  recipient_user_ids: string[];
-  ciphertext_b64: string;
-  pickup_id?: string;
-}
-
-export interface RelayPhotoResultApi {
-  v: 1;
-  delivered_user_ids: string[];
-  queued_user_ids: string[];
-}
-
-export function relayPhoto(body: RelayPhotoBody): Promise<RelayPhotoResultApi> {
-  return api<RelayPhotoResultApi>('/photos/relay', {
+// ── Photo relay (E2E photo flow, protocol v2) ──
+export function relayPhoto(body: RelayPhotoRequest): Promise<RelayPhotoResult> {
+  return api<RelayPhotoResult>('/photos/relay', {
     method: 'POST',
     body: JSON.stringify(body),
   });

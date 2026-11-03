@@ -82,6 +82,12 @@ jest.mock('../socket', () => ({
   onUserConnect: jest.fn(),
   disconnectSession: jest.fn(),
   disconnectUser: jest.fn(),
+  emitToUsers: jest.fn(),
+  onDeviceReady: jest.fn(),
+  isDeviceOnline: jest.fn().mockResolvedValue(false),
+  joinGroupRoom: jest.fn(),
+  leaveGroupRoom: jest.fn(),
+  closeGroupRoom: jest.fn(),
   initSocket: jest.fn().mockReturnValue({}),
 }));
 

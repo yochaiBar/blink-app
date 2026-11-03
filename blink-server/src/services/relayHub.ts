@@ -1,45 +1,52 @@
 /**
- * Photo relay hub — fan-out + ACK accounting + pending-pickup creation.
+ * Photo relay hub (protocol v2): authorize, fan out, and queue pickups.
  *
- * The relay endpoint hands a (metadata, ciphertext) pair to this service.
- * The hub:
- *   1. Intersects the requested recipients with group membership and
- *      removes any who have blocked / been blocked by the sender.
- *   2. For each surviving recipient: if they have a connected socket, emit
- *      `photo:incoming` with `emitWithAck`; if they ACK within 30s, mark
- *      delivered. Otherwise (offline OR ack failure) write a
- *      `pending_photo_pickups` row in `pending` state.
- *   3. If this dispatch is fulfilling a pickup_request (caller passes
- *      `pickup_id`), ACK that row terminally so it doesn't loop.
+ * The relay route hands this service one encrypted photo. The hub:
+ *   1. Authorizes: the caller must own the response, still be a member of
+ *      its group, and have encrypted under the group's current key version.
+ *   2. Picks recipients itself: the sender's audience (other members, minus
+ *      anyone blocked with the sender), or the one recipient of the pickup
+ *      being fulfilled. The client never chooses who receives a photo.
+ *   3. For each recipient: if online, emit `photo:incoming` and wait for the
+ *      ACK; on success the recipient's pickup (if any) is deleted. Otherwise
+ *      a pickup row is queued.
  *
- * The hub does NOT persist photo bytes anywhere. Ciphertext is in memory
- * only for the duration of this call, then garbage-collected. The privacy
- * promise depends on this; do not introduce any persistence path here.
+ * Pickups: one row per (response, recipient), deleted on delivery. When the
+ * recipient and the sender's originating device are both online, the row
+ * is claimed with a short lease and `photo:pickup_request` asks that device
+ * to re-encrypt and re-relay. An unanswered lease just expires; the next
+ * connect of either party offers it again. Rows older than 7 days are reaped.
  *
- * Pickup-on-connect: `dispatchPendingPickupsForUser` is called from the
- * socket `connection` handler (registered via `onUserConnect`). It scans
- * pending rows where this user is the recipient and emits
- * `photo:pickup_request` to the matching sender's device-specific room.
+ * The hub never persists photo bytes: ciphertext lives in memory only for
+ * the duration of a call. The privacy promise depends on this.
  */
 
 import { query } from '../config/database';
-import { emitToUserDevice, emitToUserWithAck, isUserOnline, onUserConnect } from '../socket';
+import {
+  emitToUserDevice,
+  emitToUserWithAck,
+  isDeviceOnline,
+  isUserOnline,
+  onDeviceReady,
+  onUserConnect,
+} from '../socket';
+import { HttpError } from '../utils/httpError';
 import logger from '../utils/logger';
 import type { IncomingPhotoEnvelope, PhotoPickupRequest } from '../shared/photoProtocol';
 
 const ACK_TIMEOUT_MS = 30_000;
+/** How long a claimed pickup waits for the sender's re-relay before it's offered again. */
+export const PICKUP_LEASE_SECONDS = 120;
+const PICKUP_TTL_DAYS = 7;
 
 export interface DispatchArgs {
-  groupId: string;
-  challengeId: string;
+  callerUserId: string;
   responseId: string;
-  senderUserId: string;
   senderDeviceId: string;
+  keyVersion: number;
   ivB64: string;
-  authTagB64: string;
   ciphertextB64: string;
-  recipientUserIds: string[];
-  pickupId?: string; // when fulfilling a pickup_request
+  pickupId?: string;
 }
 
 export interface DispatchResult {
@@ -47,215 +54,197 @@ export interface DispatchResult {
   queuedUserIds: string[];
 }
 
-interface MemberRow {
-  user_id: string;
+interface ResponseContext {
+  owner_id: string;
+  challenge_id: string;
+  group_id: string;
+  group_key_version: number;
+  is_member: boolean;
 }
 
-/**
- * Returns the recipient_user_ids that should actually receive the photo:
- * the requested ids that are in the sender's audience for this group
- * (current members, not the sender, not blocked with the sender).
- *
- * Plan: defense in depth. The app filters too, but the server is the
- * authoritative gate — we never trust the sender's list verbatim.
- */
-async function filterRecipients(groupId: string, senderUserId: string, requested: string[]): Promise<string[]> {
-  if (requested.length === 0) return [];
-  const result = await query<MemberRow>(`SELECT user_id FROM audience($1, $2) WHERE user_id = ANY($3::uuid[])`, [
-    groupId,
-    senderUserId,
-    requested,
-  ]);
-  const allowed = new Set(result.rows.map((r) => r.user_id));
-  return requested.filter((id, i) => allowed.has(id) && requested.indexOf(id) === i);
+async function loadContext(responseId: string, callerUserId: string): Promise<ResponseContext> {
+  const result = await query<ResponseContext>(
+    `SELECT cr.user_id AS owner_id, c.id AS challenge_id, c.group_id, g.group_key_version,
+            EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = c.group_id AND gm.user_id = $2) AS is_member
+       FROM challenge_responses cr
+       JOIN challenges c ON c.id = cr.challenge_id
+       JOIN groups g ON g.id = c.group_id
+      WHERE cr.id = $1`,
+    [responseId, callerUserId],
+  );
+  const ctx = result.rows[0];
+  if (!ctx) throw new HttpError(404, 'Response not found');
+  if (ctx.owner_id !== callerUserId) throw new HttpError(403, 'Only the response’s author can relay its photo');
+  if (!ctx.is_member) throw new HttpError(403, 'Not a member of this group');
+  return ctx;
 }
 
-/**
- * Insert a pending_photo_pickups row for an offline / failed recipient.
- * ON CONFLICT DO NOTHING because the UNIQUE (response_id, recipient, state)
- * keeps us from queuing the same recipient twice — if there's already a
- * `pending` row for them, the existing one is good enough.
- */
-async function queuePending(
-  args: Pick<DispatchArgs, 'groupId' | 'challengeId' | 'responseId' | 'senderUserId' | 'senderDeviceId'>,
-  recipientUserId: string,
-): Promise<void> {
+async function queuePickup(ctx: ResponseContext, args: DispatchArgs, recipientUserId: string): Promise<void> {
   await query(
     `INSERT INTO pending_photo_pickups
-       (response_id, challenge_id, recipient_user_id, sender_user_id, sender_device_id, group_id, state)
-     VALUES ($1, $2, $3, $4, $5, $6, 'pending')
-     ON CONFLICT (response_id, recipient_user_id, state) DO NOTHING`,
-    [args.responseId, args.challengeId, recipientUserId, args.senderUserId, args.senderDeviceId, args.groupId],
+       (response_id, challenge_id, group_id, recipient_user_id, sender_user_id, sender_device_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (response_id, recipient_user_id)
+       DO UPDATE SET sender_device_id = EXCLUDED.sender_device_id, lease_expires_at = NULL`,
+    [args.responseId, ctx.challenge_id, ctx.group_id, recipientUserId, args.callerUserId, args.senderDeviceId],
   );
 }
 
-/**
- * Mark a pending row terminally `acked`. Used both:
- *   - by the relay route when a pickup_request fulfillment is acknowledged
- *   - by an explicit ack from the recipient (Phase 4: `photo:ack` socket event)
- */
-async function ackPendingPickup(pickupId: string): Promise<void> {
-  await query(
-    `UPDATE pending_photo_pickups
-        SET state = 'acked', state_changed_at = NOW()
-      WHERE id = $1 AND state IN ('pending', 'in_flight')`,
-    [pickupId],
-  );
+async function dropPickup(responseId: string, recipientUserId: string): Promise<void> {
+  await query(`DELETE FROM pending_photo_pickups WHERE response_id = $1 AND recipient_user_id = $2`, [
+    responseId,
+    recipientUserId,
+  ]);
 }
 
-/**
- * Main entry point. Fan out one encrypted photo to its recipients.
- */
+/** Main entry point: authorize and fan out one encrypted photo. */
 export async function dispatchPhoto(args: DispatchArgs): Promise<DispatchResult> {
-  const finalRecipients = await filterRecipients(args.groupId, args.senderUserId, args.recipientUserIds);
+  const ctx = await loadContext(args.responseId, args.callerUserId);
+  if (args.keyVersion !== ctx.group_key_version) {
+    throw new HttpError(409, 'Group key version mismatch');
+  }
 
-  if (finalRecipients.length === 0) {
-    // The request was either malformed (no valid recipients) or every
-    // requested recipient was filtered out. Either way: nothing to do,
-    // not an error.
-    if (args.pickupId) {
-      await ackPendingPickup(args.pickupId);
-    }
-    return { deliveredUserIds: [], queuedUserIds: [] };
+  let recipients: string[];
+  if (args.pickupId) {
+    // Fulfilling a pickup: only its sender may, and only for its recipient.
+    const claimed = await query<{ recipient_user_id: string }>(
+      `DELETE FROM pending_photo_pickups
+        WHERE id = $1 AND sender_user_id = $2 AND response_id = $3
+        RETURNING recipient_user_id`,
+      [args.pickupId, args.callerUserId, args.responseId],
+    );
+    if (claimed.rows.length === 0) throw new HttpError(404, 'Pickup not found');
+    const stillAudience = await query(`SELECT 1 FROM audience($1, $2) WHERE user_id = $3`, [
+      ctx.group_id,
+      args.callerUserId,
+      claimed.rows[0].recipient_user_id,
+    ]);
+    recipients = stillAudience.rows.length > 0 ? [claimed.rows[0].recipient_user_id] : [];
+  } else {
+    const audience = await query<{ user_id: string }>(`SELECT user_id FROM audience($1, $2)`, [
+      ctx.group_id,
+      args.callerUserId,
+    ]);
+    recipients = audience.rows.map((r) => r.user_id);
   }
 
   const envelope: IncomingPhotoEnvelope = {
-    v: 1,
-    group_id: args.groupId,
-    challenge_id: args.challengeId,
+    v: 2,
+    group_id: ctx.group_id,
+    challenge_id: ctx.challenge_id,
     response_id: args.responseId,
-    sender_user_id: args.senderUserId,
+    sender_user_id: args.callerUserId,
     sender_device_id: args.senderDeviceId,
+    key_version: args.keyVersion,
     iv_b64: args.ivB64,
-    auth_tag_b64: args.authTagB64,
+    ciphertext_b64: args.ciphertextB64,
   };
 
   const delivered: string[] = [];
   const queued: string[] = [];
-
   await Promise.all(
-    finalRecipients.map(async (recipientId) => {
-      if (!(await isUserOnline(recipientId))) {
-        await queuePending(args, recipientId);
-        queued.push(recipientId);
-        return;
-      }
-      const result = await emitToUserWithAck(
-        recipientId,
-        'photo:incoming',
-        // The envelope + ciphertext_b64 travel together. Recipient slices off
-        // the ciphertext from the JSON payload, base64-decodes, decrypts.
-        { ...envelope, ciphertext_b64: args.ciphertextB64 },
-        ACK_TIMEOUT_MS,
-      );
-      // ANY socket of this user ACKing successfully = delivered. If every
-      // socket NACKed or timed out, fall back to pending.
+    recipients.map(async (recipientId) => {
+      const result = (await isUserOnline(recipientId))
+        ? await emitToUserWithAck(recipientId, 'photo:incoming', envelope, ACK_TIMEOUT_MS)
+        : { acked: 0 };
+      // ANY socket of this user ACKing = delivered. Offline, NACK or timeout = queue.
       if (result.acked > 0) {
+        await dropPickup(args.responseId, recipientId);
         delivered.push(recipientId);
       } else {
-        await queuePending(args, recipientId);
+        await queuePickup(ctx, args, recipientId);
         queued.push(recipientId);
       }
     }),
   );
 
-  if (args.pickupId) {
-    await ackPendingPickup(args.pickupId);
-  }
-
   // Privacy-safe summary log: counts only, no IDs.
   logger.info('photo relay dispatched', {
     delivered_count: delivered.length,
     queued_count: queued.length,
-    recipient_count: finalRecipients.length,
+    pickup: !!args.pickupId,
   });
 
   return { deliveredUserIds: delivered, queuedUserIds: queued };
 }
 
-interface PendingRow {
+interface PickupRow {
   id: string;
   response_id: string;
   challenge_id: string;
   group_id: string;
+  recipient_user_id: string;
   sender_user_id: string;
   sender_device_id: string;
 }
 
 /**
- * On recipient connect: find pending pickups for this user, mark them
- * `in_flight`, and emit `photo:pickup_request` to the sender's specific
- * device. The sender's device responds by POSTing to /api/photos/relay
- * with the same ciphertext (re-encrypted from its local plaintext cache).
- *
- * If the sender's device isn't online either, the row stays `in_flight`;
- * the next time the recipient or sender connects we re-attempt. The TTL
- * cleanup job eventually moves stale rows to `expired`.
+ * Offer every claimable pickup that involves `userId` (as recipient or as
+ * sender) and whose other party is online now: claim it with a lease, then
+ * ask the sender's device to re-relay. Returns how many requests went out.
  */
-export async function dispatchPendingPickupsForUser(recipientUserId: string): Promise<number> {
-  // Atomic claim: flip pending → in_flight and capture the rows we're now
-  // responsible for emitting. Other listeners (if any) won't see these as
-  // pending anymore. Re-check the recipient still exists is implicit
-  // via FK to users.
-  const claimed = await query<PendingRow>(
-    `UPDATE pending_photo_pickups
-        SET state = 'in_flight', state_changed_at = NOW()
-      WHERE recipient_user_id = $1 AND state = 'pending'
-     RETURNING id, response_id, challenge_id, group_id, sender_user_id, sender_device_id`,
-    [recipientUserId],
+export async function dispatchPickupsFor(userId: string): Promise<number> {
+  const candidates = await query<PickupRow>(
+    `SELECT id, response_id, challenge_id, group_id, recipient_user_id, sender_user_id, sender_device_id
+       FROM pending_photo_pickups
+      WHERE (recipient_user_id = $1 OR sender_user_id = $1)
+        AND (lease_expires_at IS NULL OR lease_expires_at < NOW())`,
+    [userId],
   );
 
-  if (claimed.rows.length === 0) return 0;
+  let sent = 0;
+  for (const row of candidates.rows) {
+    const bothOnline =
+      (await isUserOnline(row.recipient_user_id)) && (await isDeviceOnline(row.sender_user_id, row.sender_device_id));
+    if (!bothOnline) continue;
 
-  for (const row of claimed.rows) {
-    const payload: PhotoPickupRequest = {
-      v: 1,
+    // Atomic claim: only one dispatcher wins a free (or lapsed) lease.
+    const claim = await query(
+      `UPDATE pending_photo_pickups
+          SET lease_expires_at = NOW() + make_interval(secs => $2)
+        WHERE id = $1 AND (lease_expires_at IS NULL OR lease_expires_at < NOW())
+        RETURNING id`,
+      [row.id, PICKUP_LEASE_SECONDS],
+    );
+    if (claim.rows.length === 0) continue;
+
+    const request: PhotoPickupRequest = {
+      v: 2,
       response_id: row.response_id,
       challenge_id: row.challenge_id,
       group_id: row.group_id,
-      recipient_user_id: recipientUserId,
+      recipient_user_id: row.recipient_user_id,
       pickup_id: row.id,
     };
-    emitToUserDevice(row.sender_user_id, row.sender_device_id, 'photo:pickup_request', payload);
+    emitToUserDevice(row.sender_user_id, row.sender_device_id, 'photo:pickup_request', request);
+    sent++;
   }
 
-  logger.info('pickup_requests dispatched', {
-    recipient_count: 1,
-    request_count: claimed.rows.length,
-  });
-
-  return claimed.rows.length;
+  if (sent > 0) logger.info('pickup_requests dispatched', { request_count: sent });
+  return sent;
 }
 
 let registered = false;
 
 /**
- * Wire the pickup-on-connect listener. Idempotent — calling twice in test
- * setup or hot-reload is safe. Called once from server startup in server.ts.
+ * Wire dispatch-on-connect: a recipient or sender connecting, or a sender's
+ * device identifying itself, may make pickups deliverable. Idempotent.
  */
 export function registerRelayHub(): void {
   if (registered) return;
   registered = true;
   onUserConnect(async (userId) => {
-    await dispatchPendingPickupsForUser(userId);
+    await dispatchPickupsFor(userId);
+  });
+  onDeviceReady(async (userId) => {
+    await dispatchPickupsFor(userId);
   });
 }
 
-// ── TTL cleanup ────────────────────────────────────────────────────
-
-const TTL_DAYS = 7;
-
-/**
- * Move stale `pending` / `in_flight` rows to `expired` after the TTL.
- * Returns the number of rows touched. Designed to be called from a cron
- * job; idempotent across runs.
- */
-export async function expireStalePendingPickups(): Promise<number> {
-  const result = await query(
-    `UPDATE pending_photo_pickups
-        SET state = 'expired', state_changed_at = NOW()
-      WHERE state IN ('pending', 'in_flight')
-        AND created_at < NOW() - INTERVAL '${TTL_DAYS} days'`,
-  );
+/** Delete pickups older than the TTL (privacy: no lingering social-graph metadata). */
+export async function reapOldPickups(): Promise<number> {
+  const result = await query(`DELETE FROM pending_photo_pickups WHERE created_at < NOW() - make_interval(days => $1)`, [
+    PICKUP_TTL_DAYS,
+  ]);
   return result.rowCount ?? 0;
 }

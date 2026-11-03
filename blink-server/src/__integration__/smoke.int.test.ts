@@ -64,7 +64,6 @@ describe('smoke', () => {
     const group = await createGroup({ createdBy: alice });
 
     const aliceSocket = await server.connectSocket(alice.token);
-    aliceSocket.emit('join-groups', [group.id]);
     await server.waitForRoomSize(`group:${group.id}`, 1);
     const joined = new Promise<{ groupId: string; userId: string; displayName: string }>((resolve) => {
       aliceSocket.once('group:member-joined', resolve);

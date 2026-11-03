@@ -4,19 +4,20 @@
  * ⚠️ DUPLICATE FILE — MUST stay byte-identical with
  * `blink-app/shared/photoProtocol.ts`. The packages don't share a node_modules
  * boundary; this is the pragmatic alternative to a workspace setup for one
- * spec file. CI should diff the two on every PR (script: TODO).
+ * spec file. CI `cmp`s the two on every PR (contract-checks job).
  *
- * Pure TypeScript interfaces, no runtime, no React. The server additionally
- * validates incoming payloads with a matching Zod schema (see
+ * TypeScript interfaces plus the AEAD associated-data builders, so both
+ * ends agree on them byte for byte. No imports, no React. The server
+ * additionally validates incoming payloads with a matching Zod schema (see
  * `blink-server/src/utils/schemas.ts`); the app trusts these types statically.
  *
  * Plan: ~/Documents/Obsidian Vault/Blink/Plans/No server photo storage — E2E private photo flow.md
  *
  * Versioning rule
  * ───────────────
- * Every payload carries `v: 1` as the first field. Protocol changes WILL
- * happen; bumping `v` lets old and new clients/servers negotiate gracefully.
- * Treat unknown `v` as an error — never best-effort-parse.
+ * Every payload carries `v` as the first field. Photo relay payloads are
+ * v2 (recovery Stage 3); device keys and the keyshare handshake are still
+ * v1. Treat unknown `v` as an error — never best-effort-parse.
  */
 
 // ── Device public keys ──────────────────────────────────────────
@@ -64,112 +65,134 @@ export interface DevicePublicKey {
   tombstoned_at: string | null;
 }
 
-// ── Photo relay (Phase 3) ───────────────────────────────────────
+// ── Associated data (AEAD) ──────────────────────────────────────
 
 /**
- * Sender → server: an encrypted photo to be fanned out to the listed
- * recipient user IDs. The server never decrypts; it only routes.
- *
- * The bulk ciphertext travels as a Socket.io binary frame in Phase 3, not as
- * a base64 string in a JSON body. The HTTP request that arrives at
- * `POST /api/photos/relay` carries the addressing metadata + a body stream
- * (the ciphertext), and the relay route hands the stream to relayHub which
- * fans it out without ever materializing the bytes in a logged structure.
+ * Associated data bound into every photo's AES-GCM encryption. A
+ * ciphertext only decrypts under the exact group, challenge, response,
+ * sender and key version it was made for, so the (blind) server can't
+ * replay one photo as another response, group or sender.
  */
-export interface RelayPhotoMetadata {
-  v: 1;
-  group_id: string;
-  challenge_id: string;
+export function photoAad(args: {
+  groupId: string;
+  challengeId: string;
+  responseId: string;
+  senderUserId: string;
+  keyVersion: number;
+}): string {
+  return `blink/photo/v2|${args.groupId}|${args.challengeId}|${args.responseId}|${args.senderUserId}|${args.keyVersion}`;
+}
+
+/**
+ * Associated data for the group-key courier handshake, used both as the
+ * AES-GCM AAD and as the HKDF info: the wrapped key is bound to one group,
+ * joiner, joiner device and key version.
+ */
+export function keyshareAad(args: {
+  groupId: string;
+  joinerUserId: string;
+  joinerDeviceId: string;
+  keyVersion: number;
+}): string {
+  return `blink/keyshare/v2|${args.groupId}|${args.joinerUserId}|${args.joinerDeviceId}|${args.keyVersion}`;
+}
+
+// ── Photo relay (v2) ────────────────────────────────────────────
+
+/**
+ * Sender → server (`POST /api/photos/relay`): one encrypted photo.
+ *
+ * The server never decrypts; it only routes, and it decides the routing
+ * itself: group and challenge come from the response, the caller must own
+ * that response and still be a member, `key_version` must equal the
+ * group's current version (409 otherwise), and the recipients are the
+ * sender's audience (other members, minus anyone blocked with the sender).
+ */
+export interface RelayPhotoRequest {
+  v: 2;
   response_id: string;
   // The originating device's UUID. Recorded on `pending_photo_pickups` so the
   // server can later target pickup_request to this specific device (the one
   // holding the plaintext locally).
   sender_device_id: string;
+  // The group-key version the photo was encrypted under (also in the AAD).
+  key_version: number;
   // Per-photo random IV (12 bytes for AES-GCM). MUST be freshly generated for
   // every encrypt call — never reused with the same group key (Plan H2 guard).
   iv_b64: string;
-  // GCM auth tag (16 bytes). `@noble/ciphers`' AES-GCM appends the tag to
-  // ciphertext; the app slices it off and sends separately so the server can
-  // sanity-check sizes without parsing ciphertext bytes.
-  auth_tag_b64: string;
-  // The recipient user IDs the sender expects to deliver to. Server intersects
-  // with group membership and block-list at fan-out time (defense in depth).
-  recipient_user_ids: string[];
-  // The encrypted bytes. Base64'd in JSON for simplicity in v1 — see Phase 3
-  // notes in the plan. Future optimization: multipart/form-data with raw bytes.
+  // The encrypted bytes with the 16-byte GCM tag appended (as @noble/ciphers
+  // produces them). Base64 in JSON for simplicity.
   ciphertext_b64: string;
-  // OPTIONAL — present when this relay is fulfilling a pickup_request.
-  // Server uses it to ACK the corresponding pending_photo_pickups row.
+  // OPTIONAL — present when this relay fulfils a pickup_request: the photo
+  // goes only to that pickup's recipient.
   pickup_id?: string;
 }
 
 export interface RelayPhotoResult {
-  v: 1;
+  v: 2;
   delivered_user_ids: string[];
   queued_user_ids: string[];
 }
 
 /**
- * Server → recipient (via Socket.io): a photo to decrypt. Bytes ride as a
- * binary frame attached to the event; this object is the addressing envelope.
+ * Server → recipient (Socket.io `photo:incoming`, with an ACK callback):
+ * a photo to decrypt with the group key at `key_version`, using
+ * photoAad(group_id, challenge_id, response_id, sender_user_id, key_version).
  */
 export interface IncomingPhotoEnvelope {
-  v: 1;
+  v: 2;
   group_id: string;
   challenge_id: string;
   response_id: string;
   sender_user_id: string;
   sender_device_id: string;
+  key_version: number;
   iv_b64: string;
-  auth_tag_b64: string;
+  ciphertext_b64: string;
 }
 
 /**
  * Recipient → server (via Socket.io ACK): explicit decryption outcome.
- * Server uses these to update `pending_photo_pickups` and to alert on
- * crypto failures via the `photo:decrypt_failed` rate metric (Plan §
- * "Observability of a blind server").
+ * Anything but `ok: true` keeps the recipient's pickup queued.
  */
 export type PhotoDecryptErrorCode =
   | 'KEY_MISSING' // recipient doesn't have the group key
-  | 'AUTH_TAG_FAIL' // ciphertext tampered or wrong key
-  | 'VERSION_MISMATCH' // payload v doesn't match a version this client knows
+  | 'AUTH_TAG_FAIL' // ciphertext tampered, wrong key or wrong associated data
+  | 'VERSION_MISMATCH' // payload v or key_version doesn't match what this client holds
   | 'BAD_PAYLOAD'; // malformed envelope / bytes
 
 export interface PhotoIncomingAck {
-  v: 1;
+  v: 2;
   response_id: string;
   ok: true;
 }
 
 export interface PhotoIncomingNack {
-  v: 1;
+  v: 2;
   response_id: string;
   ok: false;
   error: PhotoDecryptErrorCode;
 }
 
-// ── Pickup-on-demand (Phase 3, Q1=b) ────────────────────────────
+// ── Pickup-on-demand ────────────────────────────────────────────
 
 /**
- * Server → sender (via Socket.io): "Recipient X just came online and is owed
- * the photo for response_id Y. Please re-encrypt for X and relay it."
+ * Server → sender's originating device (Socket.io `photo:pickup_request`):
+ * "Recipient X is owed the photo for response Y. Please re-encrypt and
+ * relay it." Sent only while both are online; the server holds a short
+ * lease on the pickup, and an unanswered one is offered again later.
  *
- * Routed to the sender's originating device specifically (not any device of
- * the sender's account) — the originating device is the one that has the
- * plaintext cached locally. The recipient's X25519 key is NOT included
- * because photos are encrypted under the group key (which the recipient
- * already has, by virtue of being a group member). The sender re-encrypts
- * with a fresh IV using the same group key and POSTs to the relay with
- * `recipient_user_ids: [recipient_user_id]`.
+ * The sender re-encrypts the locally cached plaintext with a fresh IV under
+ * the current group key and POSTs a RelayPhotoRequest with this `pickup_id`;
+ * the server then delivers to that one recipient and drops the pickup.
  */
 export interface PhotoPickupRequest {
-  v: 1;
+  v: 2;
   response_id: string;
   challenge_id: string;
   group_id: string;
   recipient_user_id: string;
-  pickup_id: string; // pending_photo_pickups.id — sender includes it back on the relay POST so server can mark it acked
+  pickup_id: string;
 }
 
 // ── Group-key handshake (Phase 4, Q2=a) ─────────────────────────

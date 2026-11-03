@@ -7,7 +7,7 @@ import { createGroupSchema, joinGroupSchema } from '../utils/schemas';
 import logger from '../utils/logger';
 import crypto from 'crypto';
 import { createNotification } from '../utils/notifications';
-import { emitToGroup, isUserOnline } from '../socket';
+import { emitToGroup, isUserOnline, joinGroupRoom, leaveGroupRoom, closeGroupRoom } from '../socket';
 import { enqueueKeyshare, dispatchPendingKeysharesForUser } from '../services/keyshareHub';
 import { sendPushToUser } from '../services/pushNotifications';
 import { uuidParams } from '../middleware/params';
@@ -82,6 +82,7 @@ router.post(
     // (Phase 6: no server-side key generation — creator's device generates
     // the group key locally via useGroups → newGroupKey + storeGroupKey.)
 
+    joinGroupRoom(req.userId!, newGroup.id);
     logger.info('Group created', { groupId: newGroup.id, userId: req.userId });
     res.status(201).json(newGroup);
   }),
@@ -180,6 +181,8 @@ router.post(
       return;
     }
 
+    joinGroupRoom(req.userId!, g.id);
+
     // Notify existing group members (except anyone blocked with the joiner)
     const joinerUser = await query<UserDisplayNameRow>(`SELECT display_name FROM public_users WHERE id = $1`, [
       req.userId,
@@ -274,7 +277,9 @@ router.post(
       await client.query(`DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, [id, req.userId]);
       return 'left' as const;
     });
+    leaveGroupRoom(req.userId!, id);
     if (result === 'group_deleted') {
+      closeGroupRoom(id);
       res.json({ message: 'Left group. Group was deleted as you were the last member.' });
       return;
     }
@@ -301,6 +306,7 @@ router.delete(
       return;
     }
 
+    closeGroupRoom(id);
     logger.info('Group deleted by admin', { groupId: id, userId: req.userId });
     res.json({ message: 'Group deleted successfully' });
   }),

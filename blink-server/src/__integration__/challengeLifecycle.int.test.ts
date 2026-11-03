@@ -102,7 +102,6 @@ describe('finalizing', () => {
     const late = await createUser();
     await addMember(group.id, late.id, 'member', 0);
     const socket = await server.connectSocket(alice.token);
-    socket.emit('join-groups', [group.id]);
     await server.waitForRoomSize(`group:${group.id}`, 1);
     const finalized = new Promise<{ status: string; groupStreak: number }>((resolve) =>
       socket.once('challenge:finalized', resolve),
@@ -304,7 +303,6 @@ describe('daily scheduler', () => {
     const lonely = await createGroup({ createdBy: bob });
     await query(`UPDATE groups SET next_auto_challenge_at = NOW() - INTERVAL '1 minute', timezone = 'Asia/Jerusalem'`);
     const socket = await server.connectSocket(alice.token);
-    socket.emit('join-groups', [group.id]);
     await server.waitForRoomSize(`group:${group.id}`, 1);
     const started = new Promise<{ group_id: string; created_by: string | null }>((resolve) =>
       socket.once('challenge:started', resolve),

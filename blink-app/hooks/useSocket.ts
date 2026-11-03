@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
-import { connectSocket, disconnectSocket, joinGroups, getSocket } from '@/services/socket';
-import { api, deliverKeyshare, requestKeyshare } from '@/services/api';
+import { connectSocket, disconnectSocket } from '@/services/socket';
+import { deliverKeyshare, requestKeyshare } from '@/services/api';
 import { playChallengeRing } from '@/utils/challengeSound';
 import {
   bytesToB64,
@@ -21,6 +21,11 @@ import type {
   KeyshareRequest,
   PhotoPickupRequest,
 } from '@/shared/photoProtocol';
+
+/** The signed-in user's id, read at event time (listeners outlive renders). */
+function currentUserId(): string | undefined {
+  return useAuthStore.getState().user?.id;
+}
 
 interface ChallengeStartedPayload {
   id: string;
@@ -53,7 +58,8 @@ interface CommentEventPayload {
 
 /**
  * Manages the Socket.io connection lifecycle and wires real-time events
- * to React Query cache invalidation.
+ * to React Query cache invalidation. Group rooms are joined by the server
+ * (on connect and on create / join / leave), not by the client.
  *
  * Call this once inside the root layout (inside QueryClientProvider and
  * after auth state is available).
@@ -61,7 +67,6 @@ interface CommentEventPayload {
 export function useSocket() {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const user = useAuthStore((s) => s.user);
   const listenersAttached = useRef(false);
 
   // Connect / disconnect based on auth state
@@ -86,7 +91,7 @@ export function useSocket() {
         queryClient.invalidateQueries({ queryKey: ['groups'] });
 
         // Play distinctive alert sound + haptics for group members (skip for originator)
-        if (data.created_by !== user?.id) {
+        if (data.created_by !== currentUserId()) {
           playChallengeRing().catch(() => {});
         }
       });
@@ -125,22 +130,16 @@ export function useSocket() {
         queryClient.invalidateQueries({ queryKey: ['comments', data.response_id] });
       });
 
-      // ── E2E photo flow (Phase 3) ─────────────────────────────
-      // Register this socket with our specific device_id so the server can
-      // target pickup_request to the device that holds the plaintext.
-      getOrCreateDeviceKey()
-        .then(({ device_id }) => socket.emit('register-device', device_id))
-        .catch(() => undefined);
+      // ── E2E photo flow ───────────────────────────────────────
+      // The handshake carries our device_id (services/socket.ts), so the
+      // server can target pickup_request to the device holding the plaintext.
 
       // Incoming photo from a group member: decrypt, store, ACK.
       // Server side uses emitWithAck so the third arg is the ACK callback —
       // we call it with {ok: true} or {ok: false, error}.
       socket.on(
         'photo:incoming',
-        async (
-          payload: IncomingPhotoEnvelope & { ciphertext_b64: string },
-          ack: (response: { ok: boolean; error?: string }) => void,
-        ) => {
+        async (payload: IncomingPhotoEnvelope, ack: (response: { ok: boolean; error?: string }) => void) => {
           if (__DEV__) console.log('[Socket] photo:incoming', payload.response_id);
           try {
             const result = await receivePhoto(payload);
@@ -163,15 +162,14 @@ export function useSocket() {
 
       // Server asks us (sender) to re-encrypt for a now-online recipient.
       // Re-encrypt from our local plaintext cache and POST to /relay.
-      // If our cache has expired (TTL > 7d), respondToPickup returns null
-      // and the server's TTL job will eventually expire the pending row.
+      // If our cache has expired (TTL > 7d), respondToPickup returns null;
+      // the server offers the pickup again later and reaps it after 7 days.
       socket.on('photo:pickup_request', async (payload: PhotoPickupRequest) => {
         if (__DEV__) console.log('[Socket] photo:pickup_request', payload);
+        const senderUserId = currentUserId();
+        if (!senderUserId) return;
         try {
-          await respondToPickup({
-            ...payload,
-            challengeId: payload.challenge_id,
-          });
+          await respondToPickup(payload, senderUserId);
         } catch (err) {
           if (__DEV__) console.warn('[Socket] pickup respond failed', err);
         }
@@ -195,24 +193,30 @@ export function useSocket() {
             }
             return;
           }
-          const joinerPub = b64ToBytes(payload.joiner_x25519_public_key_b64);
-          const envelope = courierEncryptGroupKey(joinerPub, groupKey);
-          const { device_id: fromDeviceId } = await getOrCreateDeviceKey();
           // Send the key's ACTUAL version so the joiner can resolve rotations
           // (higher version wins). Hardcoding 1 here would make every
           // regenerated key look stale to a recipient holding version 1.
-          const groupKeyVersion = await loadGroupKeyVersion(payload.group_id);
+          const storedVersion = await loadGroupKeyVersion(payload.group_id);
+          const groupKeyVersion = storedVersion > 0 ? storedVersion : 1;
+          const joinerPub = b64ToBytes(payload.joiner_x25519_public_key_b64);
+          const envelope = courierEncryptGroupKey(joinerPub, groupKey, {
+            groupId: payload.group_id,
+            joinerUserId: payload.joiner_user_id,
+            joinerDeviceId: payload.joiner_device_id,
+            keyVersion: groupKeyVersion,
+          });
+          const { device_id: fromDeviceId } = await getOrCreateDeviceKey();
           await deliverKeyshare({
             v: 1,
             pending_join_id: payload.pending_join_id,
             group_id: payload.group_id,
-            from_user_id: user?.id ?? '',
+            from_user_id: currentUserId() ?? '',
             from_device_id: fromDeviceId,
             ephemeral_public_key_b64: bytesToB64(envelope.ephemeralPublicKey),
             iv_b64: bytesToB64(envelope.iv),
             auth_tag_b64: bytesToB64(envelope.ciphertext.slice(envelope.ciphertext.length - 16)),
             ciphertext_b64: bytesToB64(envelope.ciphertext),
-            group_key_version: groupKeyVersion > 0 ? groupKeyVersion : 1,
+            group_key_version: groupKeyVersion,
           });
         } catch (err) {
           if (__DEV__) console.warn('[Socket] keyshare_request failed', err);
@@ -226,17 +230,27 @@ export function useSocket() {
       // the envelope (Phase 5+ will surface UX when these differ).
       socket.on('group:keyshare_envelope', async (envelope: KeyshareEnvelope) => {
         if (__DEV__) console.log('[Socket] group:keyshare_envelope', envelope.group_id);
+        const selfUserId = currentUserId();
+        if (!selfUserId) return;
         try {
           const device = await getOrCreateDeviceKey();
           const ephemeral = b64ToBytes(envelope.ephemeral_public_key_b64);
           const iv = b64ToBytes(envelope.iv_b64);
           const ciphertext = b64ToBytes(envelope.ciphertext_b64);
-          const groupKey = joinerDecryptGroupKey(device.privateScalar, device.publicKey, {
-            ephemeralPublicKey: ephemeral,
-            iv,
-            ciphertext,
-          });
           const incomingVersion = envelope.group_key_version ?? 1;
+          // Our own view of the context: an envelope made for another group,
+          // device or version fails to decrypt.
+          const groupKey = joinerDecryptGroupKey(
+            device.privateScalar,
+            device.publicKey,
+            { ephemeralPublicKey: ephemeral, iv, ciphertext },
+            {
+              groupId: envelope.group_id,
+              joinerUserId: selfUserId,
+              joinerDeviceId: device.device_id,
+              keyVersion: incomingVersion,
+            },
+          );
           const existing = await loadGroupKey(envelope.group_id);
           if (existing) {
             const same = existing.length === groupKey.length && existing.every((b, i) => b === groupKey[i]);
@@ -296,57 +310,10 @@ export function useSocket() {
       });
     }
 
-    // Fetch user's groups and join the corresponding rooms
-    fetchAndJoinGroups();
-
     return () => {
       // On cleanup (logout, unmount) tear down everything
       disconnectSocket();
       listenersAttached.current = false;
-    };
-  }, [isAuthenticated]);
-
-  // Re-join group rooms when the user changes (e.g., after token refresh)
-  // or when groups data is refreshed
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchAndJoinGroups();
-    }
-  }, [isAuthenticated, user?.id]);
-
-  /**
-   * Fetch the user's groups from the API and tell the socket to join
-   * those room channels.
-   */
-  async function fetchAndJoinGroups() {
-    try {
-      const groups: { id: string }[] = await api('/groups');
-      if (Array.isArray(groups) && groups.length > 0) {
-        const groupIds = groups.map((g) => g.id);
-        joinGroups(groupIds);
-      }
-    } catch {
-      // Groups may not load on first attempt -- the React Query refetch
-      // will trigger another join via the onConnect callback.
-      if (__DEV__) console.warn('[Socket] Failed to fetch groups for room join');
-    }
-  }
-
-  // Also join rooms when the socket reconnects (e.g., after network drop)
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const socket = getSocket();
-    if (!socket) return;
-
-    const onReconnect = () => {
-      if (__DEV__) console.log('[Socket] Reconnected, re-joining groups');
-      fetchAndJoinGroups();
-    };
-
-    socket.on('connect', onReconnect);
-    return () => {
-      socket.off('connect', onReconnect);
     };
   }, [isAuthenticated]);
 }

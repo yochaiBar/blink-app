@@ -207,35 +207,31 @@ CREATE INDEX idx_response_comments_parent
   WHERE parent_comment_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX idx_response_comments_user ON response_comments(user_id);
 
--- Photo pickups owed to recipients who were offline at relay time: pure
--- metadata ("X is owed response Y from sender Z's device"), never bytes.
--- When X connects, the sender's device is asked to re-encrypt and re-relay.
--- pending → in_flight → acked | expired (7-day TTL) | cancelled.
+-- Photo pickups owed to recipients who couldn't take a photo at relay time
+-- (offline, or no key yet): pure metadata ("X is owed response Y from
+-- sender Z's device"), never bytes. One row per (response, recipient); the
+-- row is deleted as soon as the photo is delivered.
+--
+-- While both parties are online the server claims a row by setting a short
+-- lease and asks the sender's device to re-encrypt and re-relay. An
+-- unanswered lease simply expires and the row is offered again on the next
+-- connect. Rows older than 7 days are reaped.
 CREATE TABLE pending_photo_pickups (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   response_id UUID NOT NULL REFERENCES challenge_responses(id) ON DELETE CASCADE,
   challenge_id UUID NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+  group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   recipient_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   sender_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   sender_device_id UUID NOT NULL,
-  group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
-  state VARCHAR(16) NOT NULL DEFAULT 'pending'
-    CHECK (state IN ('pending', 'in_flight', 'acked', 'expired', 'cancelled')),
-  state_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  lease_expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (response_id, recipient_user_id, state)
+  UNIQUE (response_id, recipient_user_id)
 );
-CREATE INDEX idx_pending_pickups_recipient_active
-  ON pending_photo_pickups(recipient_user_id, created_at DESC)
-  WHERE state IN ('pending', 'in_flight');
-CREATE INDEX idx_pending_pickups_active_age
-  ON pending_photo_pickups(created_at)
-  WHERE state IN ('pending', 'in_flight');
-CREATE INDEX idx_pending_pickups_response_recipient
-  ON pending_photo_pickups(response_id, recipient_user_id);
-CREATE INDEX idx_pending_pickups_group
-  ON pending_photo_pickups(group_id)
-  WHERE state IN ('pending', 'in_flight');
+CREATE INDEX idx_pending_pickups_recipient ON pending_photo_pickups(recipient_user_id);
+CREATE INDEX idx_pending_pickups_sender ON pending_photo_pickups(sender_user_id);
+CREATE INDEX idx_pending_pickups_group ON pending_photo_pickups(group_id);
+CREATE INDEX idx_pending_pickups_created ON pending_photo_pickups(created_at);
 
 -- ── Notifications and safety ─────────────────────────────────────
 

@@ -17,6 +17,24 @@ export function onUserConnect(cb: UserConnectListener): void {
   userConnectListeners.push(cb);
 }
 
+// Fired once a socket has said which device it is (handshake `auth.deviceId`
+// or `register-device`): from then on that device can be addressed, e.g. by
+// pickup requests for photos only it holds.
+type DeviceReadyListener = (userId: string, deviceId: string) => void | Promise<void>;
+const deviceReadyListeners: DeviceReadyListener[] = [];
+
+export function onDeviceReady(cb: DeviceReadyListener): void {
+  deviceReadyListeners.push(cb);
+}
+
+function fireListeners<A extends unknown[]>(listeners: ((...args: A) => void | Promise<void>)[], ...args: A) {
+  for (const cb of listeners) {
+    Promise.resolve(cb(...args)).catch((err) => {
+      logger.error('socket listener failed', { error: err instanceof Error ? err.message : String(err) });
+    });
+  }
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function initSocket(httpServer: HttpServer) {
@@ -51,57 +69,41 @@ export function initSocket(httpServer: HttpServer) {
     const userId = socket.data.userId as string;
     logger.debug('Socket connected', { userId, socketId: socket.id });
 
-    // Auto-join the per-user room so the photo flow can address recipients
-    // by user_id without an explicit subscribe step. (group rooms still
-    // require `join-groups` because they're DB-verified.)
+    // Per-user room so the photo flow can address recipients by user_id.
     socket.join(`user:${userId}`);
     // Per-session room so revoking a session (logout, token reuse) can drop
     // exactly that device's sockets.
     socket.join(`session:${socket.data.sid as string}`);
 
-    // Optional: client emits `register-device` after connect so we can
-    // address a specific device for pickup_request (the one holding the
-    // plaintext locally). Without it, pickup_request fans to all sender's
-    // sockets; whichever device has the plaintext responds, others ignore.
-    socket.on('register-device', (deviceId: string) => {
-      if (typeof deviceId === 'string' && UUID_REGEX.test(deviceId)) {
-        socket.data.deviceId = deviceId;
-        socket.join(`user-device:${userId}:${deviceId}`);
-      }
-    });
+    // Group rooms are managed by the server: joined here for every group the
+    // user is in, and updated on create / join / leave / delete via
+    // joinGroupRoom, leaveGroupRoom and closeGroupRoom. Clients never pick
+    // their own rooms.
+    query<{ group_id: string }>('SELECT group_id FROM group_members WHERE user_id = $1', [userId])
+      .then(({ rows }) => rows.forEach((r) => socket.join(`group:${r.group_id}`)))
+      .catch((err: unknown) => {
+        logger.error('Failed to join group rooms', { userId, error: err instanceof Error ? err.message : String(err) });
+      });
 
-    // Auto-join user's group rooms (verified against DB membership)
-    socket.on('join-groups', async (groupIds: string[]) => {
-      if (!Array.isArray(groupIds) || groupIds.length === 0) return;
-      const validIds = groupIds.filter((id) => typeof id === 'string' && UUID_REGEX.test(id));
-      if (validIds.length === 0) return;
-      try {
-        const result = await query(
-          'SELECT group_id FROM group_members WHERE user_id = $1 AND group_id = ANY($2::uuid[])',
-          [userId, validIds],
-        );
-        const verifiedIds = result.rows.map((r) => r.group_id as string);
-        verifiedIds.forEach((id: string) => socket.join(`group:${id}`));
-      } catch (err) {
-        console.error('Failed to verify group membership for socket', err);
-      }
-    });
+    // The device this socket runs on, so pickups for photos only that device
+    // holds can be routed to it. Sent in the handshake, or later via
+    // `register-device` (older clients).
+    const registerDevice = (deviceId: unknown) => {
+      if (typeof deviceId !== 'string' || !UUID_REGEX.test(deviceId) || socket.data.deviceId === deviceId) return;
+      socket.data.deviceId = deviceId;
+      socket.join(`user-device:${userId}:${deviceId}`);
+      fireListeners(deviceReadyListeners, userId, deviceId);
+    };
+    socket.on('register-device', registerDevice);
 
     socket.on('disconnect', () => {
       logger.debug('Socket disconnected', { userId, socketId: socket.id });
     });
 
     // Fire connect listeners (e.g. relayHub dispatches pending pickups).
-    // Each listener runs in a try/catch — a misbehaving one must not block
-    // socket setup. We don't await; pickup dispatch is best-effort.
-    for (const cb of userConnectListeners) {
-      Promise.resolve(cb(userId)).catch((err) => {
-        logger.error('userConnect listener failed', {
-          userId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      });
-    }
+    // Best-effort and not awaited; a failing listener can't block setup.
+    fireListeners(userConnectListeners, userId);
+    registerDevice(socket.handshake.auth.deviceId);
   });
 
   logger.info('Socket.io initialized');
@@ -198,4 +200,26 @@ export function disconnectUser(userId: string): void {
 export function emitToUsers(userIds: string[], event: string, data: unknown): void {
   if (!io) return;
   for (const userId of userIds) io.to(`user:${userId}`).emit(event, data);
+}
+
+/** Is this specific device of `userId` connected (and registered)? */
+export async function isDeviceOnline(userId: string, deviceId: string): Promise<boolean> {
+  if (!io) return false;
+  const sockets = await io.in(`user-device:${userId}:${deviceId}`).fetchSockets();
+  return sockets.length > 0;
+}
+
+/** Put every socket of `userId` into the group's room (after create / join). */
+export function joinGroupRoom(userId: string, groupId: string): void {
+  if (io) io.in(`user:${userId}`).socketsJoin(`group:${groupId}`);
+}
+
+/** Take every socket of `userId` out of the group's room (after leaving). */
+export function leaveGroupRoom(userId: string, groupId: string): void {
+  if (io) io.in(`user:${userId}`).socketsLeave(`group:${groupId}`);
+}
+
+/** Empty a group's room (the group was deleted). */
+export function closeGroupRoom(groupId: string): void {
+  if (io) io.in(`group:${groupId}`).socketsLeave(`group:${groupId}`);
 }

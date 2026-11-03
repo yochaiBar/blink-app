@@ -15,9 +15,9 @@ import { putReceivedPhoto } from '@/services/photoStore';
  * Submit a snap response to the active challenge in `groupId`.
  *
  * Bytes are encrypted on-device with the group key, POST /respond with
- * { has_photo: true } records the response row, then sendPhoto fans the
- * ciphertext via /api/photos/relay to other members. Server never sees
- * plaintext or key material.
+ * { has_photo: true } records the response row, then sendPhoto relays the
+ * ciphertext via /api/photos/relay; the server fans it out to the other
+ * members. Server never sees plaintext or key material.
  */
 export function useSubmitSnap() {
   const queryClient = useQueryClient();
@@ -120,10 +120,6 @@ interface V2Args {
   selfUserId: string | undefined;
 }
 
-interface MemberListResponse {
-  members?: { user_id?: string; id?: string }[];
-}
-
 interface RespondResponse {
   id: string;
 }
@@ -145,32 +141,22 @@ async function submitV2(args: V2Args): Promise<RespondResponse> {
     }),
   });
 
-  // 3. Fetch the current group members so we know who to encrypt for.
-  //    Recipients = every member except us; the relay endpoint will also
-  //    filter (defense in depth) but we should pass the right set up front.
-  const groupDetail = await api<MemberListResponse>(`/groups/${args.groupId}`);
-  const memberIds = (groupDetail.members ?? [])
-    .map((m) => m.user_id ?? m.id)
-    .filter((id): id is string => typeof id === 'string')
-    .filter((id) => id !== args.selfUserId);
-
-  // 4. Cache plaintext in OUR received store too — feed item renders the
+  // 3. Cache plaintext in OUR received store too — feed item renders the
   //    same path for sender + recipients (one less branch in FeedItem).
   //    Best-effort; failures don't block the relay.
   putReceivedPhoto(response.id, plaintext).catch(() => undefined);
 
-  // 5. Encrypt + relay. sendPhoto also writes to the sender plaintext
-  //    cache (for pickup-on-demand). If memberIds is empty (1-member
-  //    group), skip — the response is recorded; no peers to relay to.
-  if (memberIds.length > 0) {
-    await sendPhoto({
-      groupId: args.groupId,
-      challengeId: args.challengeId,
-      responseId: response.id,
-      recipientUserIds: memberIds,
-      plaintext,
-    });
-  }
+  // 4. Encrypt + relay. The server picks the recipients (the other members
+  //    we may reach; none in a 1-member group). sendPhoto also writes to the
+  //    sender plaintext cache (for pickup-on-demand).
+  if (!args.selfUserId) throw new Error('useSubmitSnap: not signed in');
+  await sendPhoto({
+    groupId: args.groupId,
+    challengeId: args.challengeId,
+    responseId: response.id,
+    senderUserId: args.selfUserId,
+    plaintext,
+  });
 
   return response;
 }
