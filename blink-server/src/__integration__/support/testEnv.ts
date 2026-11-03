@@ -52,6 +52,8 @@ export function applyIntegrationEnv(): void {
   process.env.IOS_BUNDLE_ID = 'com.yochaibar.blinks';
   process.env.ANDROID_PACKAGE = 'com.yochaibar.blinks';
   process.env.ANDROID_CERT_SHA256 = 'AA:BB:CC, DD:EE:FF';
+  process.env.APP_DOWNLOAD_URL = 'https://testflight.apple.com/join/abc"<x>';
+  process.env.SUPPORT_EMAIL = 'help@example.com';
   process.env.JWT_REFRESH_SECRET = 'integration-jwt-refresh-secret-0123456789';
   process.env.PORT = '0';
   process.env.OTP_PEPPER = 'integration-otp-pepper-0123456789';

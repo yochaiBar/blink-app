@@ -1,7 +1,7 @@
 /**
  * Accept anything the user might paste into the Join box and reduce it to the
  * bare invite code:
- *   • a full universal link  → https://blink.app/join/ABC123
+ *   • a full universal link  → https://links.example/join/ABC123
  *   • a custom-scheme link    → blink://join/ABC123
  *   • the raw code            → ABC123
  * Without this, pasting the shared *link* into the code box hits the server as a

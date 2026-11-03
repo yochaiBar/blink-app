@@ -11,7 +11,7 @@ describe('extractInviteCode', () => {
   });
 
   it('extracts the code from a universal link', () => {
-    expect(extractInviteCode('https://blink.app/join/ABC123')).toBe('ABC123');
+    expect(extractInviteCode('https://links.example/join/ABC123')).toBe('ABC123');
   });
 
   it('extracts the code from a custom-scheme link', () => {
@@ -19,7 +19,7 @@ describe('extractInviteCode', () => {
   });
 
   it('ignores query/hash/fragments after the code', () => {
-    expect(extractInviteCode('https://blink.app/join/ABC123?ref=sms#x')).toBe('ABC123');
+    expect(extractInviteCode('https://links.example/join/ABC123?ref=sms#x')).toBe('ABC123');
   });
 
   it('trims surrounding whitespace', () => {
@@ -27,7 +27,7 @@ describe('extractInviteCode', () => {
   });
 
   it('collapses a link pasted with a trailing message', () => {
-    expect(extractInviteCode('https://blink.app/join/ABC123')).toBe('ABC123');
+    expect(extractInviteCode('https://links.example/join/ABC123')).toBe('ABC123');
   });
 
   it('returns empty string for empty input', () => {
@@ -37,7 +37,7 @@ describe('extractInviteCode', () => {
 
 describe('looksLikeInviteLink', () => {
   it('is true for universal and scheme links', () => {
-    expect(looksLikeInviteLink('https://blink.app/join/ABC123')).toBe(true);
+    expect(looksLikeInviteLink('https://links.example/join/ABC123')).toBe(true);
     expect(looksLikeInviteLink('blink://join/ABC123')).toBe(true);
   });
 
@@ -49,12 +49,12 @@ describe('looksLikeInviteLink', () => {
 describe('extractInviteCode — edge cases beyond the happy path', () => {
   it('handles a trailing slash after the code', () => {
     // e.g. a share sheet that appends a trailing slash to the deep link.
-    expect(extractInviteCode('https://blink.app/join/CREW25/')).toBe('CREW25');
+    expect(extractInviteCode('https://links.example/join/CREW25/')).toBe('CREW25');
   });
 
   it('does not crash on a link with no code after join/', () => {
     // Should not throw, and should not silently accept an empty/garbage code as valid.
-    const result = extractInviteCode('https://blink.app/join/');
+    const result = extractInviteCode('https://links.example/join/');
     expect(result).toBe('');
   });
 
@@ -65,7 +65,7 @@ describe('extractInviteCode — edge cases beyond the happy path', () => {
       'pasted link before onChangeText fires. So the full link reaches extractInviteCode() ' +
       'and collapses to the code -- the exact reported repro now works.',
     () => {
-      const pastedLink = 'https://blink.app/join/CREW25';
+      const pastedLink = 'https://links.example/join/CREW25';
       // The whole link (29 chars) fits under maxLength={128}, so onChangeText receives it intact.
       expect(pastedLink.length).toBeLessThanOrEqual(128);
       expect(looksLikeInviteLink(pastedLink)).toBe(true);

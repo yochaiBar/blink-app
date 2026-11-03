@@ -71,6 +71,14 @@ const baseSchema = z.object({
   IOS_BUNDLE_ID: z.string().optional(), // e.g. com.yochaibar.blinks
   ANDROID_PACKAGE: z.string().optional(),
   ANDROID_CERT_SHA256: z.string().optional(), // comma-separated signing-cert fingerprints
+  // Shown on the /join/CODE landing page to people without the app
+  // (TestFlight or store link). Unset → no get-the-app line.
+  APP_DOWNLOAD_URL: z.string().url().optional(),
+
+  // ── Contact ─────────────────────────────────────────────────────
+  // The address the privacy policy and terms give for privacy, security,
+  // legal and support questions. Required in production.
+  SUPPORT_EMAIL: z.string().email().optional(),
 });
 
 // Production must never fall back to the dev OTP (123456): without Twilio
@@ -86,6 +94,9 @@ const envSchema = baseSchema.superRefine((e, ctx) => {
   if (e.NODE_ENV !== 'production') return;
   for (const key of ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER'] as const) {
     if (!e[key]) ctx.addIssue({ code: 'custom', path: [key], message: `${key} is required in production` });
+  }
+  if (!e.SUPPORT_EMAIL) {
+    ctx.addIssue({ code: 'custom', path: ['SUPPORT_EMAIL'], message: 'SUPPORT_EMAIL is required in production' });
   }
   if (!e.OTP_PEPPER || e.OTP_PEPPER.length < 16) {
     ctx.addIssue({ code: 'custom', path: ['OTP_PEPPER'], message: 'OTP_PEPPER (16+ chars) is required in production' });

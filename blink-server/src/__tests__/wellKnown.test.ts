@@ -9,3 +9,11 @@ describe('app-link files', () => {
     expect(assetLinks({ ANDROID_PACKAGE: 'com.yochaibar.blinks', ANDROID_CERT_SHA256: ' , ' })).toBeNull();
   });
 });
+
+describe('join landing page', () => {
+  it('omits the get-the-app line until a download link is configured', () => {
+    const { renderJoinPage } = jest.requireActual('../routes/joinPage');
+    expect(renderJoinPage('ABC123')).not.toContain('Get the app');
+    expect(renderJoinPage('ABC123', 'https://apps.example/blinks')).toContain('href="https://apps.example/blinks"');
+  });
+});

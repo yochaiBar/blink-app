@@ -12,10 +12,13 @@ if (isReleaseBuild && !API_URL) {
   throw new Error('EXPO_PUBLIC_API_URL must be set for a release build (see eas.json)');
 }
 
-// The domain invite links live on (https://<domain>/join/CODE). The server
-// there serves /.well-known/* (blink-server routes/wellKnown.ts). Not settled
-// yet, so it's configurable per build.
-const LINK_DOMAIN = process.env.EXPO_PUBLIC_LINK_DOMAIN || 'blink.app';
+// The domain invite links live on (https://<domain>/join/CODE). By default
+// it's the API's own host, which serves /.well-known/* and the /join/CODE
+// landing page (blink-server routes/wellKnown.ts, routes/joinPage.ts);
+// EXPO_PUBLIC_LINK_DOMAIN overrides it. Never a domain we don't control.
+const LINK_DOMAIN = process.env.EXPO_PUBLIC_LINK_DOMAIN || (API_URL ? new URL(API_URL).hostname : undefined);
+// Where "Contact Support" goes; the rows are hidden when unset.
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL;
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -35,7 +38,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.yochaibar.blinks',
-    associatedDomains: [`applinks:${LINK_DOMAIN}`],
+    associatedDomains: LINK_DOMAIN ? [`applinks:${LINK_DOMAIN}`] : [],
     infoPlist: {
       NSCameraUsageDescription: 'Blink needs camera access to capture snap challenges with your friends.',
       ITSAppUsesNonExemptEncryption: false,
@@ -95,27 +98,23 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     edgeToEdgeEnabled: true,
     package: 'com.yochaibar.blinks',
-    intentFilters: [
-      {
-        action: 'VIEW',
-        autoVerify: true,
-        data: [
+    intentFilters: LINK_DOMAIN
+      ? [
           {
-            scheme: 'https',
-            host: LINK_DOMAIN,
-            pathPrefix: '/join',
+            action: 'VIEW',
+            autoVerify: true,
+            data: [{ scheme: 'https', host: LINK_DOMAIN, pathPrefix: '/join' }],
+            category: ['BROWSABLE', 'DEFAULT'],
           },
-        ],
-        category: ['BROWSABLE', 'DEFAULT'],
-      },
-    ],
+        ]
+      : [],
     permissions: ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'],
   },
   web: {
     favicon: './assets/favicon.png',
   },
   plugins: [
-    ['expo-router', { origin: `https://${LINK_DOMAIN}/` }],
+    ['expo-router', LINK_DOMAIN ? { origin: `https://${LINK_DOMAIN}/` } : {}],
     'expo-secure-store',
     [
       'expo-camera',
@@ -147,9 +146,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     apiUrl: API_URL,
     linkDomain: LINK_DOMAIN,
-    router: {
-      origin: `https://${LINK_DOMAIN}/`,
-    },
+    supportEmail: SUPPORT_EMAIL,
+    router: LINK_DOMAIN ? { origin: `https://${LINK_DOMAIN}/` } : {},
     eas: {
       projectId: '5377c833-4d39-4386-8880-9f67046357b1',
     },

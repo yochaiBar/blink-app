@@ -254,12 +254,18 @@ describe('production guard', () => {
     DATABASE_URL: 'postgresql://unused/blink',
   };
 
-  it('the env schema requires Twilio and an OTP pepper in production', () => {
+  it('the env schema requires Twilio, an OTP pepper and a support address in production', () => {
     const missing = validateEnv(baseEnv);
     expect(missing.success).toBe(false);
     const fields = missing.success ? [] : missing.error.issues.map((i) => i.path.join('.'));
     expect(fields).toEqual(
-      expect.arrayContaining(['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER', 'OTP_PEPPER']),
+      expect.arrayContaining([
+        'TWILIO_ACCOUNT_SID',
+        'TWILIO_AUTH_TOKEN',
+        'TWILIO_PHONE_NUMBER',
+        'OTP_PEPPER',
+        'SUPPORT_EMAIL',
+      ]),
     );
 
     const complete = validateEnv({
@@ -268,6 +274,7 @@ describe('production guard', () => {
       TWILIO_AUTH_TOKEN: 'secret',
       TWILIO_PHONE_NUMBER: '+15550000001',
       OTP_PEPPER: 'p'.repeat(32),
+      SUPPORT_EMAIL: 'help@example.com',
     });
     expect(complete.success).toBe(true);
   });
