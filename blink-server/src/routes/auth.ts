@@ -11,13 +11,6 @@ import logger from '../utils/logger';
 import { isSmsConfigured, sendSms } from '../config/sms';
 import { env } from '../config/env';
 import { UserRow } from '../types/db';
-import type { QueryResult } from 'pg';
-
-/** Minimal query interface compatible with both PoolClient and the pool query helper */
-interface TransactionQueryable {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query(text: string, params?: unknown[]): Promise<QueryResult<any>>;
-}
 
 const router = Router();
 
@@ -360,23 +353,19 @@ router.delete(
   '/delete-account',
   authenticate,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const deleteAccountQueries = async (q: TransactionQueryable) => {
+    const deleted = await withTransaction(async (client) => {
       // Revoke all tokens for this user before deletion
-      await q.query('INSERT INTO revoked_tokens (user_id) VALUES ($1)', [req.userId]);
+      await client.query('INSERT INTO revoked_tokens (user_id) VALUES ($1)', [req.userId]);
 
-      await q.query(`DELETE FROM group_members WHERE user_id = $1`, [req.userId]);
+      await client.query(`DELETE FROM group_members WHERE user_id = $1`, [req.userId]);
 
-      const result = await q.query(
+      const result = await client.query(
         `DELETE FROM users WHERE id = $1 RETURNING id`,
         [req.userId]
       );
 
       return result.rows.length > 0;
-    };
-
-    const deleted = typeof withTransaction === 'function'
-      ? await withTransaction(deleteAccountQueries)
-      : await deleteAccountQueries({ query });
+    });
 
     if (!deleted) {
       res.status(404).json({ error: 'User not found' });

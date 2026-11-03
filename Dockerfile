@@ -19,6 +19,6 @@ USER appuser
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
-# Run versioned migrations, then start the server.
-# migrationRunner.js calls process.exit(0) on success when run standalone, so we chain with &&.
-CMD ["sh", "-c", "node dist/config/migrationRunner.js && node dist/index.js"]
+# server.js runs the versioned migrations on boot (each in its own transaction
+# under an advisory lock) before it starts listening; a failed migration exits 1.
+CMD ["node", "dist/server.js"]
