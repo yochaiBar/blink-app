@@ -10,8 +10,7 @@ import React from 'react';
 
 // Helper to create a simple functional mock component
 function mockComponent(name: string) {
-  const Component = (props: any) =>
-    React.createElement(name, props, props.children);
+  const Component = (props: any) => React.createElement(name, props, props.children);
   Component.displayName = name;
   return Component;
 }
@@ -43,14 +42,11 @@ jest.mock('react-native', () => {
     },
     View: (props: any) => React.createElement('View', props, props.children),
     Text: (props: any) => React.createElement('Text', props, props.children),
-    TouchableOpacity: (props: any) =>
-      React.createElement('TouchableOpacity', props, props.children),
-    ActivityIndicator: (props: any) =>
-      React.createElement('ActivityIndicator', props),
+    TouchableOpacity: (props: any) => React.createElement('TouchableOpacity', props, props.children),
+    ActivityIndicator: (props: any) => React.createElement('ActivityIndicator', props),
     Modal: (props: any) => React.createElement('Modal', props, props.children),
     Animated: {
-      View: (props: any) =>
-        React.createElement('Animated.View', props, props.children),
+      View: (props: any) => React.createElement('Animated.View', props, props.children),
       Value: jest.fn().mockImplementation(() => mockAnimatedValue()),
       spring: jest.fn().mockReturnValue({ start: jest.fn() }),
       timing: jest.fn().mockReturnValue({ start: jest.fn() }),
@@ -82,8 +78,7 @@ jest.mock('expo-haptics', () => ({
 jest.mock('expo-blur', () => {
   const React = require('react');
   return {
-    BlurView: (props: any) =>
-      React.createElement('BlurView', props, props.children),
+    BlurView: (props: any) => React.createElement('BlurView', props, props.children),
   };
 });
 
@@ -91,8 +86,7 @@ jest.mock('expo-blur', () => {
 jest.mock('expo-linear-gradient', () => {
   const React = require('react');
   return {
-    LinearGradient: (props: any) =>
-      React.createElement('LinearGradient', props, props.children),
+    LinearGradient: (props: any) => React.createElement('LinearGradient', props, props.children),
   };
 });
 
@@ -117,8 +111,7 @@ jest.mock('expo-constants', () => ({
 // ── Mock lucide-react-native ──────────────────────────────────────
 jest.mock('lucide-react-native', () => {
   const React = require('react');
-  const createIcon = (name: string) => (props: any) =>
-    React.createElement(name, props);
+  const createIcon = (name: string) => (props: any) => React.createElement(name, props);
   return {
     Lock: createIcon('Lock'),
     MoreHorizontal: createIcon('MoreHorizontal'),

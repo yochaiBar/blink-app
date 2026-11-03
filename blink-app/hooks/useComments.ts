@@ -1,11 +1,6 @@
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  CommentItem,
-  deleteComment as deleteCommentApi,
-  fetchComments,
-  postComment,
-} from '@/services/api';
+import { CommentItem, deleteComment as deleteCommentApi, fetchComments, postComment } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { queryKeys } from '@/utils/queryKeys';
 
@@ -78,9 +73,7 @@ export function useComments(responseId: string | undefined): UseCommentsResult {
       if (!responseId) return { previous: undefined };
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<CommentItem[]>(key);
-      queryClient.setQueryData<CommentItem[]>(key, (old) =>
-        (old ?? []).filter((c) => c.id !== commentId),
-      );
+      queryClient.setQueryData<CommentItem[]>(key, (old) => (old ?? []).filter((c) => c.id !== commentId));
       return { previous };
     },
     onError: (_err, _vars, context) => {

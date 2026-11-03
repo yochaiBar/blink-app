@@ -1,4 +1,12 @@
-import { Group, GroupMember, UserProfile, DailySpotlight, SnapSubmission, LeaderboardEntry, AiPersonality } from '@/types';
+import {
+  Group,
+  GroupMember,
+  UserProfile,
+  DailySpotlight,
+  SnapSubmission,
+  LeaderboardEntry,
+  AiPersonality,
+} from '@/types';
 import { ApiGroupListItem, ApiGroupDetail, ApiGroupMember, ApiSpotlight, ApiChallengeResponse } from '@/types/api';
 import { theme } from '@/constants/colors';
 
@@ -114,7 +122,13 @@ export function apiMembersToLeaderboard(members: ApiGroupMember[]): LeaderboardE
     }));
 }
 
-export function apiUserToProfile(user: { id: string; phone_number: string; display_name: string | null; avatar_url: string | null; bio?: string | null }): UserProfile {
+export function apiUserToProfile(user: {
+  id: string;
+  phone_number: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio?: string | null;
+}): UserProfile {
   return {
     id: user.id,
     name: user.display_name ?? '',

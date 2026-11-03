@@ -1,6 +1,5 @@
 import cron from 'node-cron';
 import { query } from '../config/database';
-import { generateChallenge, AiPersonality } from '../services/aiService';
 import { emitToGroup } from '../socket';
 import { sendPushToGroup } from '../services/pushNotifications';
 import { createNotification } from '../utils/notifications';
@@ -10,10 +9,29 @@ import logger from '../utils/logger';
 interface SchedulerGroupRow {
   id: string;
   name: string;
-  ai_personality: string | null;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
   member_count: number;
+}
+
+// Fixed pool of snap prompts for auto-challenges (no AI). Stage 2c moves
+// this into jobs/dailyChallenge.ts with per-group scheduling.
+export const AUTO_CHALLENGE_PROMPTS = [
+  'Show us what you see right now!',
+  'Selfie time! No filters allowed',
+  'What are you doing RIGHT NOW?',
+  'Show us your current view',
+  'Quick! Snap your surroundings!',
+  'Show us something that made you smile today',
+  'What did you last eat? Show us!',
+  'Show us your outfit today',
+];
+
+/** A random prompt, avoiding the group's most recent ones when possible. */
+export function pickAutoPrompt(recentPrompts: string[]): string {
+  const fresh = AUTO_CHALLENGE_PROMPTS.filter((p) => !recentPrompts.includes(p));
+  const pool = fresh.length > 0 ? fresh : AUTO_CHALLENGE_PROMPTS;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function isEnabled(): boolean {
@@ -56,33 +74,21 @@ function shouldFireThisTick(quietStart: string | null): boolean {
   const remainingSlots = Math.max(1, Math.floor(remainingMinutes / 15));
 
   // Probability = 1/remaining_slots (ensures it fires before quiet hours)
-  return Math.random() < (1 / remainingSlots);
-}
-
-// Pick challenge type, avoiding recent repeats
-function pickChallengeType(recentTypes: string[]): 'snap' | 'quiz' {
-  const weights = { snap: 3, quiz: 2 }; // 60% snap, 40% quiz
-
-  // Reduce weight of recently used types
-  const lastType = recentTypes[0];
-  if (lastType === 'snap') weights.snap = 1;
-  if (lastType === 'quiz') weights.quiz = 1;
-
-  const total = weights.snap + weights.quiz;
-  const rand = Math.random() * total;
-  return rand < weights.snap ? 'snap' : 'quiz';
+  return Math.random() < 1 / remainingSlots;
 }
 
 async function runSchedulerTick(): Promise<void> {
   // Get all active groups (at least 2 members) that haven't had an auto-challenge today
   const groupsResult = await query<SchedulerGroupRow>(`
-    SELECT g.id, g.name, g.ai_personality, g.quiet_hours_start::text, g.quiet_hours_end::text,
+    SELECT g.id, g.name, g.quiet_hours_start::text, g.quiet_hours_end::text,
            COUNT(gm.id)::int as member_count
     FROM groups g
     JOIN group_members gm ON gm.group_id = g.id
-    LEFT JOIN challenge_schedule cs ON cs.group_id = g.id
-    WHERE (cs.last_auto_challenge_at IS NULL OR cs.last_auto_challenge_at < CURRENT_DATE)
-    GROUP BY g.id, g.name, g.ai_personality, g.quiet_hours_start, g.quiet_hours_end
+    WHERE NOT EXISTS (
+      SELECT 1 FROM challenges c
+      WHERE c.group_id = g.id AND c.is_auto_generated AND c.created_at >= CURRENT_DATE
+    )
+    GROUP BY g.id, g.name, g.quiet_hours_start, g.quiet_hours_end
     HAVING COUNT(gm.id) >= 2
   `);
 
@@ -96,82 +102,56 @@ async function runSchedulerTick(): Promise<void> {
 
       await createAutoChallenge(group);
     } catch (err: unknown) {
-      logger.error('Auto-challenge failed for group', { groupId: group.id, error: err instanceof Error ? err.message : String(err) });
+      logger.error('Auto-challenge failed for group', {
+        groupId: group.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 }
 
 async function createAutoChallenge(group: SchedulerGroupRow): Promise<void> {
-  const personality: AiPersonality = (group.ai_personality as AiPersonality) || 'funny';
-
-  // Fetch member names
-  const membersResult = await query(
-    `SELECT u.display_name FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = $1`,
-    [group.id]
+  // Fetch recent challenge prompts so the same one doesn't repeat back-to-back
+  const recentResult = await query<{ prompt: string | null }>(
+    `SELECT prompt FROM challenges WHERE group_id = $1 ORDER BY created_at DESC LIMIT 5`,
+    [group.id],
   );
-  const memberNames = membersResult.rows.map((r) => r.display_name as string);
-
-  // Fetch recent challenge prompts
-  const recentResult = await query(
-    `SELECT type, prompt_text FROM challenges WHERE group_id = $1 ORDER BY triggered_at DESC LIMIT 5`,
-    [group.id]
-  );
-  const recentChallenges = recentResult.rows.map((r) => r.prompt_text as string | null).filter(Boolean) as string[];
-  const recentTypes = recentResult.rows.map((r) => r.type as string);
-
-  // Generate challenge via AI
-  pickChallengeType(recentTypes);
-  const aiChallenge = await generateChallenge(group.id, personality, memberNames, recentChallenges);
+  const recentPrompts = recentResult.rows.map((r) => r.prompt).filter((p): p is string => !!p);
+  const prompt = pickAutoPrompt(recentPrompts);
 
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
 
-  // Insert challenge
+  // Insert challenge (created_by NULL = created by the scheduler)
   const result = await query(
-    `INSERT INTO challenges (group_id, type, prompt_text, options_json, triggered_by, expires_at, countdown_seconds, status, is_auto_generated, ai_generated_prompt)
-     VALUES ($1, $2, $3, $4, NULL, $5, 10, 'active', true, $3)
+    `INSERT INTO challenges (group_id, prompt, created_by, expires_at, status, is_auto_generated)
+     VALUES ($1, $2, NULL, $3, 'active', true)
      RETURNING *`,
-    [group.id, aiChallenge.type, aiChallenge.prompt, aiChallenge.options?.length ? JSON.stringify(aiChallenge.options) : null, expiresAt]
+    [group.id, prompt, expiresAt],
   );
 
   const challenge = result.rows[0];
 
-  // Update schedule
-  await query(
-    `INSERT INTO challenge_schedule (group_id, last_auto_challenge_at, updated_at)
-     VALUES ($1, NOW(), NOW())
-     ON CONFLICT (group_id) DO UPDATE SET last_auto_challenge_at = NOW(), updated_at = NOW()`,
-    [group.id]
-  );
-
   // Emit socket event
   emitToGroup(group.id, 'challenge:started', {
-    challenge: { ...challenge, triggered_by_name: 'Blink AI' },
+    challenge: { ...challenge, triggered_by_name: 'Blink' },
   });
 
   // Send push to all members
-  sendPushToGroup(
-    group.id,
-    `${group.name}`,
-    aiChallenge.prompt || 'New challenge! Respond before time runs out!',
-    { type: 'challenge_started', challengeId: challenge.id, groupId: group.id, challengeType: aiChallenge.type, screen: 'challenge' }
-  ).catch(() => {});
+  sendPushToGroup(group.id, `${group.name}`, prompt, {
+    type: 'challenge_started',
+    challengeId: challenge.id,
+    groupId: group.id,
+    challengeType: 'snap',
+    screen: 'challenge',
+  }).catch(() => {});
 
   // Create notifications for all members
-  const allMembers = await query(
-    `SELECT user_id FROM group_members WHERE group_id = $1`,
-    [group.id]
-  );
+  const allMembers = await query(`SELECT user_id FROM group_members WHERE group_id = $1`, [group.id]);
   for (const member of allMembers.rows) {
-    createNotification(
-      member.user_id,
-      'challenge_started',
-      `${group.name}`,
-      aiChallenge.prompt || 'New challenge!',
-      group.id
-    ).catch(() => {});
+    createNotification(member.user_id, 'challenge_started', `${group.name}`, prompt, group.id).catch(() => {});
   }
 
-  logger.info('Auto-challenge created', { groupId: group.id, type: aiChallenge.type, prompt: aiChallenge.prompt });
+  logger.info('Auto-challenge created', { groupId: group.id, prompt });
 }
 
 export function startChallengeScheduler(): void {

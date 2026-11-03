@@ -21,9 +21,7 @@ export default React.memo(function GlassCard({
   padding = 16,
   noBorder = false,
 }: GlassCardProps) {
-  const borderStyle: ViewStyle = noBorder
-    ? {}
-    : { borderWidth: 1, borderColor: theme.glassBorder };
+  const borderStyle: ViewStyle = noBorder ? {} : { borderWidth: 1, borderColor: theme.glassBorder };
 
   // Android fallback: BlurView can be unreliable, use solid background instead
   if (Platform.OS === 'android') {
@@ -45,19 +43,8 @@ export default React.memo(function GlassCard({
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        { borderRadius },
-        borderStyle,
-        style,
-      ]}
-    >
-      <BlurView
-        intensity={intensity}
-        tint="dark"
-        style={[StyleSheet.absoluteFill, { borderRadius }]}
-      />
+    <View style={[styles.container, { borderRadius }, borderStyle, style]}>
+      <BlurView intensity={intensity} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius }]} />
       {/* Subtle top highlight for depth */}
       <LinearGradient
         colors={[theme.glassHighlight, 'transparent']}

@@ -1,10 +1,10 @@
 export default {
   light: {
-    text: "#000",
-    background: "#fff",
-    tint: "#FF6347",
-    tabIconDefault: "#ccc",
-    tabIconSelected: "#FF6347",
+    text: '#000',
+    background: '#fff',
+    tint: '#FF6347',
+    tabIconDefault: '#ccc',
+    tabIconSelected: '#FF6347',
   },
 };
 

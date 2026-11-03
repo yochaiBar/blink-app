@@ -20,10 +20,7 @@ const PHOTO_GAP = 6;
 const PHOTO_WIDTH = (SCREEN_WIDTH - CARD_PADDING * 2 - PHOTO_GAP * 2) / 3;
 const PHOTO_HEIGHT = PHOTO_WIDTH * 1.3;
 
-export default React.memo(function WorldwideChallengeCard({
-  challenge,
-  onRespond,
-}: WorldwideChallengeCardProps) {
+export default React.memo(function WorldwideChallengeCard({ challenge, onRespond }: WorldwideChallengeCardProps) {
   const [photo1, photo2] = challenge.photos;
   const remaining = challenge.totalCount - 2;
   const locationLine = challenge.photos
@@ -61,10 +58,7 @@ export default React.memo(function WorldwideChallengeCard({
               transition={200}
               recyclingKey={photo1.id}
             />
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.45)']}
-              style={styles.photoGradient}
-            />
+            <LinearGradient colors={['transparent', 'rgba(0,0,0,0.45)']} style={styles.photoGradient} />
             <Text style={styles.photoLocation} numberOfLines={1}>
               {photo1.location}
             </Text>
@@ -80,10 +74,7 @@ export default React.memo(function WorldwideChallengeCard({
               transition={200}
               recyclingKey={photo2.id}
             />
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.45)']}
-              style={styles.photoGradient}
-            />
+            <LinearGradient colors={['transparent', 'rgba(0,0,0,0.45)']} style={styles.photoGradient} />
             <Text style={styles.photoLocation} numberOfLines={1}>
               {photo2.location}
             </Text>
@@ -101,10 +92,7 @@ export default React.memo(function WorldwideChallengeCard({
               recyclingKey={`blur_${challenge.photos[2].id}`}
             />
           ) : (
-            <LinearGradient
-              colors={[theme.bgElevated, theme.surface]}
-              style={styles.photo}
-            />
+            <LinearGradient colors={[theme.bgElevated, theme.surface]} style={styles.photo} />
           )}
           <View style={styles.moreOverlay}>
             <Text style={styles.moreCount}>+{remaining}</Text>

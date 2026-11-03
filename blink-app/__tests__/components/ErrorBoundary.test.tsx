@@ -50,11 +50,7 @@ function createWithAct(element: React.ReactElement): ReactTestRenderer {
 describe('ErrorBoundary', () => {
   it('renders children normally when no error occurs', () => {
     const tree = createWithAct(
-      React.createElement(
-        ErrorBoundary,
-        null,
-        React.createElement('Text', null, 'Hello World'),
-      ),
+      React.createElement(ErrorBoundary, null, React.createElement('Text', null, 'Hello World')),
     );
 
     const json = tree.toJSON();
@@ -66,13 +62,7 @@ describe('ErrorBoundary', () => {
   it('displays error UI when a child throws', () => {
     shouldThrow = true;
 
-    const tree = createWithAct(
-      React.createElement(
-        ErrorBoundary,
-        null,
-        React.createElement(ThrowingChild),
-      ),
-    );
+    const tree = createWithAct(React.createElement(ErrorBoundary, null, React.createElement(ThrowingChild)));
 
     const json = tree.toJSON();
     const output = JSON.stringify(json);
@@ -84,13 +74,7 @@ describe('ErrorBoundary', () => {
     (global as any).__DEV__ = true;
     shouldThrow = true;
 
-    const tree = createWithAct(
-      React.createElement(
-        ErrorBoundary,
-        null,
-        React.createElement(ThrowingChild),
-      ),
-    );
+    const tree = createWithAct(React.createElement(ErrorBoundary, null, React.createElement(ThrowingChild)));
 
     const json = tree.toJSON();
     const output = JSON.stringify(json);
@@ -102,12 +86,7 @@ describe('ErrorBoundary', () => {
     const fallback = React.createElement('Text', null, 'Custom fallback UI');
 
     const child = React.createElement(ThrowingChild);
-    const tree = createWithAct(
-      React.createElement(
-        ErrorBoundary,
-        { fallback, children: child },
-      ),
-    );
+    const tree = createWithAct(React.createElement(ErrorBoundary, { fallback, children: child }));
 
     const json = tree.toJSON();
     const output = JSON.stringify(json);
@@ -118,13 +97,7 @@ describe('ErrorBoundary', () => {
   it('resets error state when "Try Again" is pressed', () => {
     shouldThrow = true;
 
-    const tree = createWithAct(
-      React.createElement(
-        ErrorBoundary,
-        null,
-        React.createElement(ThrowingChild),
-      ),
-    );
+    const tree = createWithAct(React.createElement(ErrorBoundary, null, React.createElement(ThrowingChild)));
 
     // Verify error state
     let output = JSON.stringify(tree.toJSON());

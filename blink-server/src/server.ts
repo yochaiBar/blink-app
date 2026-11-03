@@ -66,7 +66,9 @@ async function main(): Promise<void> {
     logger.info(`Environment: ${env.NODE_ENV}`);
     logger.info(`OTP rate limit: ${OTP_RATE_LIMIT_PER_HOUR}/hour`);
     if (OTP_RATE_LIMIT_PER_HOUR > 10) {
-      logger.warn(`OTP rate limit is set to ${OTP_RATE_LIMIT_PER_HOUR}/hour. This is above the recommended production value of 3. Ensure OTP_RATE_LIMIT_PER_HOUR is not set in production.`);
+      logger.warn(
+        `OTP rate limit is set to ${OTP_RATE_LIMIT_PER_HOUR}/hour. This is above the recommended production value of 3. Ensure OTP_RATE_LIMIT_PER_HOUR is not set in production.`,
+      );
     }
 
     // Start AI-powered challenge scheduler

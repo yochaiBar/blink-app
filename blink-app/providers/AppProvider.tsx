@@ -27,13 +27,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     refreshGroups,
   } = useGroups();
 
-  const {
-    activity,
-    addActivityItem,
-    isActivityLoading,
-    isActivityError,
-    refetchActivity,
-  } = useActivity();
+  const { activity, addActivityItem, isActivityLoading, isActivityError, refetchActivity } = useActivity();
 
   const {
     notifications,

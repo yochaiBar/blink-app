@@ -29,11 +29,8 @@ postgres_data/
 
 # TypeScript
 *.tsbuildinfo
-TEST_STRATEGY.md
 blink-app/GoogleService-Info.plist
-PRODUCTION_ROADMAP.md
 blink-server/.env.production.example
-SECURITY_FIX_PLAN.md
 .claude/scheduled_tasks.lock
 
 # Local tooling artifacts (machine-generated, not shared)

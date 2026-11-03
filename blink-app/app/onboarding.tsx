@@ -1,8 +1,37 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Animated, Dimensions, Platform, KeyboardAvoidingView, Alert, TouchableOpacity, Linking, NativeSyntheticEvent, TextInputKeyPressEventData, ScrollView, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Animated,
+  Dimensions,
+  Platform,
+  KeyboardAvoidingView,
+  Alert,
+  TouchableOpacity,
+  Linking,
+  NativeSyntheticEvent,
+  TextInputKeyPressEventData,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, Users, Zap, Sparkles, Phone, Check, Shield, FileText, ChevronRight, ChevronDown, ArrowLeft, ImagePlus } from 'lucide-react-native';
+import {
+  Camera,
+  Users,
+  Zap,
+  Sparkles,
+  Phone,
+  Check,
+  Shield,
+  FileText,
+  ChevronRight,
+  ChevronDown,
+  ArrowLeft,
+  ImagePlus,
+} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
@@ -75,7 +104,7 @@ export default function OnboardingScreen() {
     [0, 1, 2].map(() => ({
       opacity: new Animated.Value(0),
       translateY: new Animated.Value(24),
-    }))
+    })),
   ).current;
   const socialProofOpacity = useRef(new Animated.Value(0)).current;
   const titleOpacity = useRef(new Animated.Value(0)).current;
@@ -116,15 +145,13 @@ export default function OnboardingScreen() {
         Animated.parallel([
           Animated.timing(a.opacity, { toValue: 1, duration: 250, useNativeDriver: true }),
           Animated.timing(a.translateY, { toValue: 0, duration: 250, useNativeDriver: true }),
-        ])
+        ]),
       ),
       Animated.timing(socialProofOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
 
     // Slow continuous rotation for collage
-    Animated.loop(
-      Animated.timing(collageSpin, { toValue: 1, duration: 20000, useNativeDriver: true })
-    ).start();
+    Animated.loop(Animated.timing(collageSpin, { toValue: 1, duration: 20000, useNativeDriver: true })).start();
   }, [step]);
 
   const collageRotation = collageSpin.interpolate({
@@ -142,21 +169,24 @@ export default function OnboardingScreen() {
     return () => clearTimeout(timer);
   }, [resendCountdown]);
 
-  const animateTransition = useCallback((nextStep: OnboardingStep) => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: -30, duration: 200, useNativeDriver: true }),
-    ]).start(() => {
-      setStep(nextStep);
-      slideAnim.setValue(30);
-      requestAnimationFrame(() => {
-        Animated.parallel([
-          Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-          Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-        ]).start();
+  const animateTransition = useCallback(
+    (nextStep: OnboardingStep) => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: -30, duration: 200, useNativeDriver: true }),
+      ]).start(() => {
+        setStep(nextStep);
+        slideAnim.setValue(30);
+        requestAnimationFrame(() => {
+          Animated.parallel([
+            Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+            Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+          ]).start();
+        });
       });
-    });
-  }, [fadeAnim, slideAnim]);
+    },
+    [fadeAnim, slideAnim],
+  );
 
   const handleNext = useCallback(async () => {
     // Ref-based guard prevents double-tap: multiple rapid presses can queue up
@@ -251,43 +281,62 @@ export default function OnboardingScreen() {
     } finally {
       isProcessing.current = false;
     }
-  }, [step, phone, otp, name, countryCode, ageConfirmed, termsAccepted, animateTransition, requestOtp, verifyOtp, updateName, router]);
+  }, [
+    step,
+    phone,
+    otp,
+    name,
+    countryCode,
+    ageConfirmed,
+    termsAccepted,
+    animateTransition,
+    requestOtp,
+    verifyOtp,
+    updateName,
+    router,
+  ]);
 
-  const handleOtpChange = useCallback((text: string, index: number) => {
-    // Only allow digits
-    const digit = text.replace(/[^0-9]/g, '');
-    if (digit.length > 1) {
-      // Handle paste: distribute digits across boxes
-      const pasted = digit.slice(0, OTP_LENGTH);
-      const newDigits = [...otpDigits];
-      for (let i = 0; i < pasted.length && index + i < OTP_LENGTH; i++) {
-        newDigits[index + i] = pasted[i];
+  const handleOtpChange = useCallback(
+    (text: string, index: number) => {
+      // Only allow digits
+      const digit = text.replace(/[^0-9]/g, '');
+      if (digit.length > 1) {
+        // Handle paste: distribute digits across boxes
+        const pasted = digit.slice(0, OTP_LENGTH);
+        const newDigits = [...otpDigits];
+        for (let i = 0; i < pasted.length && index + i < OTP_LENGTH; i++) {
+          newDigits[index + i] = pasted[i];
+        }
+        setOtpDigits(newDigits);
+        const nextIndex = Math.min(index + pasted.length, OTP_LENGTH - 1);
+        otpInputRefs.current[nextIndex]?.focus();
+        return;
       }
-      setOtpDigits(newDigits);
-      const nextIndex = Math.min(index + pasted.length, OTP_LENGTH - 1);
-      otpInputRefs.current[nextIndex]?.focus();
-      return;
-    }
 
-    const newDigits = [...otpDigits];
-    newDigits[index] = digit;
-    setOtpDigits(newDigits);
-
-    // Auto-advance to next box
-    if (digit && index < OTP_LENGTH - 1) {
-      otpInputRefs.current[index + 1]?.focus();
-    }
-  }, [otpDigits]);
-
-  const handleOtpKeyPress = useCallback((e: NativeSyntheticEvent<TextInputKeyPressEventData>, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && !otpDigits[index] && index > 0) {
-      // Move to previous box on backspace when current is empty
       const newDigits = [...otpDigits];
-      newDigits[index - 1] = '';
+      newDigits[index] = digit;
       setOtpDigits(newDigits);
-      otpInputRefs.current[index - 1]?.focus();
-    }
-  }, [otpDigits]);
+
+      // Auto-advance to next box
+      if (digit && index < OTP_LENGTH - 1) {
+        otpInputRefs.current[index + 1]?.focus();
+      }
+    },
+    [otpDigits],
+  );
+
+  const handleOtpKeyPress = useCallback(
+    (e: NativeSyntheticEvent<TextInputKeyPressEventData>, index: number) => {
+      if (e.nativeEvent.key === 'Backspace' && !otpDigits[index] && index > 0) {
+        // Move to previous box on backspace when current is empty
+        const newDigits = [...otpDigits];
+        newDigits[index - 1] = '';
+        setOtpDigits(newDigits);
+        otpInputRefs.current[index - 1]?.focus();
+      }
+    },
+    [otpDigits],
+  );
 
   const handleResendOtp = useCallback(async () => {
     if (resendCountdown > 0 || isSubmitting) return;
@@ -361,27 +410,28 @@ export default function OnboardingScreen() {
   const getButtonText = () => {
     if (isSubmitting) return 'Loading...';
     switch (step) {
-      case 'welcome': return "Let's Go";
-      case 'phone': return 'Send Code';
-      case 'otp': return 'Verify';
-      case 'age': return 'Continue';
-      case 'terms': return 'I Agree';
-      case 'name': return 'Continue';
-      case 'avatar': return avatarUri ? 'Start Blinking' : 'Skip for now';
+      case 'welcome':
+        return "Let's Go";
+      case 'phone':
+        return 'Send Code';
+      case 'otp':
+        return 'Verify';
+      case 'age':
+        return 'Continue';
+      case 'terms':
+        return 'I Agree';
+      case 'name':
+        return 'Continue';
+      case 'avatar':
+        return avatarUri ? 'Start Blinking' : 'Skip for now';
     }
   };
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#0A0A0F', '#12081a', '#0A0A0F']}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={['#0A0A0F', '#12081a', '#0A0A0F']} style={StyleSheet.absoluteFill} />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.flex}
           contentContainerStyle={[styles.content, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20 }]}
@@ -395,7 +445,12 @@ export default function OnboardingScreen() {
                 key={s}
                 style={[
                   styles.progressDot,
-                  { backgroundColor: (['welcome', 'phone', 'otp', 'age', 'terms', 'name', 'avatar'] as const).indexOf(step) >= i ? theme.coral : theme.surface },
+                  {
+                    backgroundColor:
+                      (['welcome', 'phone', 'otp', 'age', 'terms', 'name', 'avatar'] as const).indexOf(step) >= i
+                        ? theme.coral
+                        : theme.surface,
+                  },
                 ]}
               />
             ))}
@@ -435,11 +490,11 @@ export default function OnboardingScreen() {
                   ]}
                 >
                   {COLLAGE_PHOTOS.map((uri, i) => {
-                    const angle = (i * 60) * (Math.PI / 180);
+                    const angle = i * 60 * (Math.PI / 180);
                     const radius = 52;
                     const offsetX = Math.cos(angle) * radius;
                     const offsetY = Math.sin(angle) * radius;
-                    const rotation = `${(i * 15) - 30}deg`;
+                    const rotation = `${i * 15 - 30}deg`;
                     return (
                       <Animated.Image
                         key={i}
@@ -447,20 +502,13 @@ export default function OnboardingScreen() {
                         style={[
                           styles.collagePhoto,
                           {
-                            transform: [
-                              { translateX: offsetX },
-                              { translateY: offsetY },
-                              { rotate: rotation },
-                            ],
+                            transform: [{ translateX: offsetX }, { translateY: offsetY }, { rotate: rotation }],
                           },
                         ]}
                       />
                     );
                   })}
-                  <LinearGradient
-                    colors={[theme.coral, theme.pink]}
-                    style={styles.collageCenter}
-                  >
+                  <LinearGradient colors={[theme.coral, theme.pink]} style={styles.collageCenter}>
                     <Sparkles size={28} color="#fff" />
                   </LinearGradient>
                 </Animated.View>
@@ -476,9 +524,7 @@ export default function OnboardingScreen() {
                 >
                   Welcome to Blink
                 </Animated.Text>
-                <Animated.Text
-                  style={[styles.welcomeSubtitle, { opacity: subtitleOpacity }]}
-                >
+                <Animated.Text style={[styles.welcomeSubtitle, { opacity: subtitleOpacity }]}>
                   Be real. Be random.{'\n'}Your friends are waiting.
                 </Animated.Text>
 
@@ -565,18 +611,14 @@ export default function OnboardingScreen() {
                           }}
                         >
                           <Text style={styles.countryPickerLabel}>{c.label}</Text>
-                          {c.code === countryCode.code && (
-                            <Check size={16} color={theme.coral} />
-                          )}
+                          {c.code === countryCode.code && <Check size={16} color={theme.coral} />}
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
                   </View>
                 )}
 
-                <Text style={styles.phoneHelperText}>
-                  Standard SMS rates may apply
-                </Text>
+                <Text style={styles.phoneHelperText}>Standard SMS rates may apply</Text>
               </View>
             )}
 
@@ -594,11 +636,10 @@ export default function OnboardingScreen() {
                   {otpDigits.map((digit, index) => (
                     <TextInput
                       key={index}
-                      ref={(ref) => { otpInputRefs.current[index] = ref; }}
-                      style={[
-                        styles.otpBox,
-                        digit ? styles.otpBoxFilled : null,
-                      ]}
+                      ref={(ref) => {
+                        otpInputRefs.current[index] = ref;
+                      }}
+                      style={[styles.otpBox, digit ? styles.otpBoxFilled : null]}
                       value={digit}
                       onChangeText={(text) => handleOtpChange(text, index)}
                       onKeyPress={(e) => handleOtpKeyPress(e, index)}
@@ -618,15 +659,8 @@ export default function OnboardingScreen() {
                   disabled={resendCountdown > 0}
                   activeOpacity={0.6}
                 >
-                  <Text
-                    style={[
-                      styles.resendText,
-                      resendCountdown > 0 && styles.resendTextDisabled,
-                    ]}
-                  >
-                    {resendCountdown > 0
-                      ? `Resend code in ${resendCountdown}s`
-                      : 'Resend code'}
+                  <Text style={[styles.resendText, resendCountdown > 0 && styles.resendTextDisabled]}>
+                    {resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : 'Resend code'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -637,10 +671,7 @@ export default function OnboardingScreen() {
                 <Text style={styles.stepEmoji}>🎂</Text>
                 <Text style={styles.stepTitle}>Age Verification</Text>
                 <Text style={styles.stepSubtitle}>You must be at least 13 years old to use Blink</Text>
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setAgeConfirmed(!ageConfirmed)}
-                >
+                <TouchableOpacity style={styles.checkboxRow} onPress={() => setAgeConfirmed(!ageConfirmed)}>
                   <View style={[styles.checkbox, ageConfirmed && styles.checkboxChecked]}>
                     {ageConfirmed && <Check size={16} color={theme.white} />}
                   </View>
@@ -660,16 +691,16 @@ export default function OnboardingScreen() {
                     <Text style={styles.legalLinkText}>Terms of Service</Text>
                     <ChevronRight size={16} color={theme.textMuted} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.legalLink} onPress={() => Linking.openURL('https://blink.app/privacy')}>
+                  <TouchableOpacity
+                    style={styles.legalLink}
+                    onPress={() => Linking.openURL('https://blink.app/privacy')}
+                  >
                     <Shield size={18} color={theme.coral} />
                     <Text style={styles.legalLinkText}>Privacy Policy</Text>
                     <ChevronRight size={16} color={theme.textMuted} />
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setTermsAccepted(!termsAccepted)}
-                >
+                <TouchableOpacity style={styles.checkboxRow} onPress={() => setTermsAccepted(!termsAccepted)}>
                   <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
                     {termsAccepted && <Check size={16} color={theme.white} />}
                   </View>

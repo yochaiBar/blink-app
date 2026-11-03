@@ -65,10 +65,20 @@ export default function GroupStatsCard({ groupId }: GroupStatsCardProps) {
       ? { emoji: '\u{1F525}', label: 'Top Trigger', value: `${top_trigger.count}`, name: top_trigger.display_name }
       : null,
     longest_streak && longest_streak.streak > 0
-      ? { emoji: '\u{26A1}', label: 'Best Streak', value: `${longest_streak.streak}`, name: longest_streak.display_name }
+      ? {
+          emoji: '\u{26A1}',
+          label: 'Best Streak',
+          value: `${longest_streak.streak}`,
+          name: longest_streak.display_name,
+        }
       : null,
     fastest_responder
-      ? { emoji: '\u{1F3C3}', label: 'Fastest', value: formatAvgTime(fastest_responder.avg_ms), name: fastest_responder.display_name }
+      ? {
+          emoji: '\u{1F3C3}',
+          label: 'Fastest',
+          value: formatAvgTime(fastest_responder.avg_ms),
+          name: fastest_responder.display_name,
+        }
       : null,
   ].filter(Boolean) as Array<{ emoji: string; label: string; value: string; name: string }>;
 
@@ -81,7 +91,9 @@ export default function GroupStatsCard({ groupId }: GroupStatsCardProps) {
           <View key={stat.label} style={[styles.statItem, index < stats.length - 1 && styles.statItemBorder]}>
             <Text style={styles.statEmoji}>{stat.emoji}</Text>
             <Text style={styles.statValue}>{stat.value}</Text>
-            <Text style={styles.statName} numberOfLines={1}>{stat.name}</Text>
+            <Text style={styles.statName} numberOfLines={1}>
+              {stat.name}
+            </Text>
             <Text style={styles.statLabel}>{stat.label}</Text>
           </View>
         ))}

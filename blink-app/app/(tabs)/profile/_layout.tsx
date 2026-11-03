@@ -1,6 +1,6 @@
-import { Stack } from "expo-router";
-import React from "react";
-import { theme } from "@/constants/colors";
+import { Stack } from 'expo-router';
+import React from 'react';
+import { theme } from '@/constants/colors';
 
 export default function ProfileLayout() {
   return (
@@ -11,22 +11,10 @@ export default function ProfileLayout() {
         contentStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Stack.Screen
-        name="index"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="edit-profile"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="settings"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="help-faq"
-        options={{ headerShown: false }}
-      />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
+      <Stack.Screen name="help-faq" options={{ headerShown: false }} />
     </Stack>
   );
 }

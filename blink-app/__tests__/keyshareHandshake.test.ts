@@ -31,19 +31,13 @@ beforeEach(() => {
   ssA.clear();
   ssB.clear();
   currentSs = ssA;
-  (SecureStore.getItemAsync as jest.Mock).mockImplementation(
-    async (k: string) => currentSs.get(k) ?? null,
-  );
-  (SecureStore.setItemAsync as jest.Mock).mockImplementation(
-    async (k: string, v: string) => {
-      currentSs.set(k, v);
-    },
-  );
-  (SecureStore.deleteItemAsync as jest.Mock).mockImplementation(
-    async (k: string) => {
-      currentSs.delete(k);
-    },
-  );
+  (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (k: string) => currentSs.get(k) ?? null);
+  (SecureStore.setItemAsync as jest.Mock).mockImplementation(async (k: string, v: string) => {
+    currentSs.set(k, v);
+  });
+  (SecureStore.deleteItemAsync as jest.Mock).mockImplementation(async (k: string) => {
+    currentSs.delete(k);
+  });
 });
 
 describe('courier handshake — end-to-end across two simulated devices', () => {
@@ -75,15 +69,11 @@ describe('courier handshake — end-to-end across two simulated devices', () => 
 
     // Bob's role
     currentSs = ssB;
-    const recovered = joinerDecryptGroupKey(
-      bobDevice.privateScalar,
-      bobDevice.publicKey,
-      {
-        ephemeralPublicKey: b64ToBytes(wire.ephemeral_public_key_b64),
-        iv: b64ToBytes(wire.iv_b64),
-        ciphertext: b64ToBytes(wire.ciphertext_b64),
-      },
-    );
+    const recovered = joinerDecryptGroupKey(bobDevice.privateScalar, bobDevice.publicKey, {
+      ephemeralPublicKey: b64ToBytes(wire.ephemeral_public_key_b64),
+      iv: b64ToBytes(wire.iv_b64),
+      ciphertext: b64ToBytes(wire.ciphertext_b64),
+    });
 
     expect(recovered).toEqual(groupKey);
     // Sanity: Alice's device is unrelated to the recovery — Bob did it
@@ -105,16 +95,11 @@ describe('courier handshake — end-to-end across two simulated devices', () => 
     await clearDeviceKey();
     const attackerKeyMaterial = await getOrCreateDeviceKey();
 
-    const envelope = courierEncryptGroupKey(
-      attackerKeyMaterial.publicKey,
-      groupKey,
-    );
+    const envelope = courierEncryptGroupKey(attackerKeyMaterial.publicKey, groupKey);
 
     // Bob's device receives. Salt input uses HIS pub key, not the
     // attacker's. HKDF derives a different AEAD key. Decrypt throws.
-    expect(() =>
-      joinerDecryptGroupKey(bobDevice.privateScalar, bobDevice.publicKey, envelope),
-    ).toThrow();
+    expect(() => joinerDecryptGroupKey(bobDevice.privateScalar, bobDevice.publicKey, envelope)).toThrow();
   });
 
   it('rejects an envelope whose ciphertext was tampered in transit', async () => {

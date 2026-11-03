@@ -32,12 +32,7 @@ import {
   getOrCreateDeviceKey,
   loadGroupKey,
 } from '@/services/groupCrypto';
-import {
-  getReceivedPhoto,
-  getSenderPlaintext,
-  putReceivedPhoto,
-  putSenderPlaintext,
-} from '@/services/photoStore';
+import { getReceivedPhoto, getSenderPlaintext, putReceivedPhoto, putSenderPlaintext } from '@/services/photoStore';
 import { relayPhoto } from '@/services/api';
 import type {
   IncomingPhotoEnvelope,
@@ -83,15 +78,11 @@ export interface SendPhotoResult {
  */
 export async function sendPhoto(args: SendPhotoArgs): Promise<SendPhotoResult> {
   if (args.plaintext.length > MAX_PHOTO_BYTES) {
-    throw new Error(
-      `photoTransfer.sendPhoto: payload ${args.plaintext.length} bytes exceeds cap ${MAX_PHOTO_BYTES}`,
-    );
+    throw new Error(`photoTransfer.sendPhoto: payload ${args.plaintext.length} bytes exceeds cap ${MAX_PHOTO_BYTES}`);
   }
   const groupKey = await loadGroupKey(args.groupId);
   if (!groupKey) {
-    throw new Error(
-      `photoTransfer.sendPhoto: no group key for ${args.groupId}; handshake required`,
-    );
+    throw new Error(`photoTransfer.sendPhoto: no group key for ${args.groupId}; handshake required`);
   }
 
   const { device_id: senderDeviceId } = await getOrCreateDeviceKey();

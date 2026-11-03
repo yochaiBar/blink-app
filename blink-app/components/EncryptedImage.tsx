@@ -27,12 +27,7 @@ export interface EncryptedImageProps extends Omit<ImageProps, 'source'> {
  *      frame landing. useSocket invalidates ['localPhoto', responseId]
  *      on successful receive; this query re-runs and the Image swaps in.
  */
-export default function EncryptedImage({
-  uri,
-  responseId,
-  style,
-  ...imageProps
-}: EncryptedImageProps) {
+export default function EncryptedImage({ uri, responseId, style, ...imageProps }: EncryptedImageProps) {
   const localPhotoQuery = useQuery({
     queryKey: ['localPhoto', responseId],
     queryFn: () => (responseId ? getLocalPhotoUri(responseId) : null),

@@ -41,76 +41,57 @@ const app = createTestApp(authRouter, '/api/auth');
 // ─────────────────────────────────────────────────────────────────
 describe('POST /api/auth/request-otp', () => {
   it('should return OTP sent response for valid phone number (dev mode)', async () => {
-    const res = await request(app)
-      .post('/api/auth/request-otp')
-      .send({ phone_number: '+15551234567' });
+    const res = await request(app).post('/api/auth/request-otp').send({ phone_number: '+15551234567' });
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('OTP sent');
   });
 
   it('should accept phone number without + prefix and normalize it', async () => {
-    const res = await request(app)
-      .post('/api/auth/request-otp')
-      .send({ phone_number: '15551234567' });
+    const res = await request(app).post('/api/auth/request-otp').send({ phone_number: '15551234567' });
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('OTP sent');
   });
 
   it('should return 400 for missing phone_number', async () => {
-    const res = await request(app)
-      .post('/api/auth/request-otp')
-      .send({});
+    const res = await request(app).post('/api/auth/request-otp').send({});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Validation failed');
   });
 
   it('should return 400 for invalid phone number format', async () => {
-    const res = await request(app)
-      .post('/api/auth/request-otp')
-      .send({ phone_number: 'not-a-phone' });
+    const res = await request(app).post('/api/auth/request-otp').send({ phone_number: 'not-a-phone' });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Validation failed');
   });
 
   it('should return 400 for empty phone_number', async () => {
-    const res = await request(app)
-      .post('/api/auth/request-otp')
-      .send({ phone_number: '' });
+    const res = await request(app).post('/api/auth/request-otp').send({ phone_number: '' });
 
     expect(res.status).toBe(400);
   });
 
   it('should return 400 for phone number with letters', async () => {
-    const res = await request(app)
-      .post('/api/auth/request-otp')
-      .send({ phone_number: '+1555abc4567' });
+    const res = await request(app).post('/api/auth/request-otp').send({ phone_number: '+1555abc4567' });
 
     expect(res.status).toBe(400);
   });
 
   it('should return 400 for phone number that is too long', async () => {
-    const res = await request(app)
-      .post('/api/auth/request-otp')
-      .send({ phone_number: '+12345678901234567890' });
+    const res = await request(app).post('/api/auth/request-otp').send({ phone_number: '+12345678901234567890' });
 
     expect(res.status).toBe(400);
   });
 
   // Security: SQL injection attempts should be caught by validation
-  it.each(SQL_INJECTION_PAYLOADS)(
-    'should reject SQL injection payload: %s',
-    async (payload) => {
-      const res = await request(app)
-        .post('/api/auth/request-otp')
-        .send({ phone_number: payload });
+  it.each(SQL_INJECTION_PAYLOADS)('should reject SQL injection payload: %s', async (payload) => {
+    const res = await request(app).post('/api/auth/request-otp').send({ phone_number: payload });
 
-      expect(res.status).toBe(400);
-    }
-  );
+    expect(res.status).toBe(400);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────
@@ -121,18 +102,14 @@ describe('POST /api/auth/verify-otp', () => {
 
   beforeEach(async () => {
     // Request an OTP first so the in-memory store has the code
-    await request(app)
-      .post('/api/auth/request-otp')
-      .send({ phone_number: phone });
+    await request(app).post('/api/auth/request-otp').send({ phone_number: phone });
   });
 
   it('should verify correct OTP and return user + tokens (dev mode)', async () => {
     const user = makeUser({ phone_number: phone });
     mockQuery.mockResolvedValueOnce(queryResult([user]));
 
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: '123456' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: '123456' });
 
     expect(res.status).toBe(200);
     expect(res.body.user).toBeDefined();
@@ -146,9 +123,7 @@ describe('POST /api/auth/verify-otp', () => {
   });
 
   it('should return 401 for wrong OTP code', async () => {
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: '999999' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: '999999' });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Invalid or expired OTP');
@@ -159,46 +134,34 @@ describe('POST /api/auth/verify-otp', () => {
     mockQuery.mockResolvedValueOnce(queryResult([user]));
 
     // First verification succeeds
-    await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: '123456' });
+    await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: '123456' });
 
     // Second attempt with same OTP should fail
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: '123456' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: '123456' });
 
     expect(res.status).toBe(401);
   });
 
   it('should return 400 for missing phone_number and code', async () => {
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({});
+    const res = await request(app).post('/api/auth/verify-otp').send({});
 
     expect(res.status).toBe(400);
   });
 
   it('should return 400 for code that is not 6 digits', async () => {
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: '12345' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: '12345' });
 
     expect(res.status).toBe(400);
   });
 
   it('should return 400 for code with non-numeric characters', async () => {
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: 'abcdef' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: 'abcdef' });
 
     expect(res.status).toBe(400);
   });
 
   it('should return 401 for phone number that never requested an OTP', async () => {
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: '+19995550000', code: '123456' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: '+19995550000', code: '123456' });
 
     expect(res.status).toBe(401);
   });
@@ -206,9 +169,7 @@ describe('POST /api/auth/verify-otp', () => {
   it('should handle database error during user upsert gracefully', async () => {
     mockQuery.mockRejectedValueOnce(new Error('DB connection failed'));
 
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: '123456' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: '123456' });
 
     expect(res.status).toBe(500);
   });
@@ -221,9 +182,7 @@ describe('POST /api/auth/refresh', () => {
   it('should return a new access token for a valid refresh token', async () => {
     const refreshToken = generateRefreshToken(TEST_USER_ID);
 
-    const res = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken });
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken });
 
     expect(res.status).toBe(200);
     expect(res.body.accessToken).toBeDefined();
@@ -233,45 +192,33 @@ describe('POST /api/auth/refresh', () => {
   });
 
   it('should return 401 for expired refresh token', async () => {
-    const expiredToken = jwt.sign(
-      { userId: TEST_USER_ID },
-      process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: '0s' }
-    );
+    const expiredToken = jwt.sign({ userId: TEST_USER_ID }, process.env.JWT_REFRESH_SECRET!, { expiresIn: '0s' });
 
     // Small delay to ensure token is truly expired
     await new Promise((r) => setTimeout(r, 100));
 
-    const res = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken: expiredToken });
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken: expiredToken });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Invalid refresh token');
   });
 
   it('should return 401 for malformed refresh token', async () => {
-    const res = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken: 'not-a-real-token' });
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken: 'not-a-real-token' });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Invalid refresh token');
   });
 
   it('should return 400 for missing refreshToken field', async () => {
-    const res = await request(app)
-      .post('/api/auth/refresh')
-      .send({});
+    const res = await request(app).post('/api/auth/refresh').send({});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Validation failed');
   });
 
   it('should return 400 for empty refreshToken string', async () => {
-    const res = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken: '' });
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken: '' });
 
     expect(res.status).toBe(400);
   });
@@ -279,9 +226,7 @@ describe('POST /api/auth/refresh', () => {
   it('should return 401 for token signed with wrong secret', async () => {
     const wrongToken = jwt.sign({ userId: TEST_USER_ID }, 'wrong-secret', { expiresIn: '7d' });
 
-    const res = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken: wrongToken });
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken: wrongToken });
 
     expect(res.status).toBe(401);
   });
@@ -296,44 +241,12 @@ describe('GET /api/auth/me', () => {
     mockQuery.mockResolvedValueOnce(queryResult([user]));
 
     const token = generateAccessToken(TEST_USER_ID);
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(TEST_USER_ID);
     expect(res.body.phone_number).toBe(user.phone_number);
     expect(res.body.display_name).toBe(user.display_name);
-  });
-
-  it('returns feature_flags.photo_v2 (default true) — Phase 5 flag carrier', async () => {
-    const user = makeUser();
-    mockQuery.mockResolvedValueOnce(queryResult([user]));
-    delete process.env.PHOTO_V2_ENABLED;
-
-    const token = generateAccessToken(TEST_USER_ID);
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.feature_flags).toEqual({ photo_v2: true });
-  });
-
-  it('respects PHOTO_V2_ENABLED=false hot-rollback', async () => {
-    const user = makeUser();
-    mockQuery.mockResolvedValueOnce(queryResult([user]));
-    process.env.PHOTO_V2_ENABLED = 'false';
-
-    const token = generateAccessToken(TEST_USER_ID);
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.feature_flags.photo_v2).toBe(false);
-
-    delete process.env.PHOTO_V2_ENABLED;
   });
 
   it('should return 401 when no Authorization header is provided', async () => {
@@ -347,27 +260,21 @@ describe('GET /api/auth/me', () => {
     const expiredToken = generateExpiredToken(TEST_USER_ID);
     await new Promise((r) => setTimeout(r, 100));
 
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${expiredToken}`);
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${expiredToken}`);
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Invalid token');
   });
 
   it('should return 401 for malformed token', async () => {
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${generateMalformedToken()}`);
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${generateMalformedToken()}`);
 
     expect(res.status).toBe(401);
   });
 
   it('should return 401 for Authorization header without Bearer prefix', async () => {
     const token = generateAccessToken(TEST_USER_ID);
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', token);
+    const res = await request(app).get('/api/auth/me').set('Authorization', token);
 
     expect(res.status).toBe(401);
   });
@@ -376,9 +283,7 @@ describe('GET /api/auth/me', () => {
     mockQuery.mockResolvedValueOnce(queryResult([]));
 
     const token = generateAccessToken(TEST_USER_ID);
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('User not found');
@@ -388,9 +293,7 @@ describe('GET /api/auth/me', () => {
     mockQuery.mockRejectedValueOnce(new Error('Connection refused'));
 
     const token = generateAccessToken(TEST_USER_ID);
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(500);
   });
@@ -428,31 +331,6 @@ describe('PATCH /api/auth/profile', () => {
     expect(res.body.bio).toBe('My new bio');
   });
 
-  it('should update avatar_url successfully', async () => {
-    const s3Url = 'https://blinks3upload.s3.us-east-1.amazonaws.com/avatars/new-avatar.jpg';
-    const updatedUser = makeUser({ avatar_url: s3Url });
-    mockQuery.mockResolvedValueOnce(queryResult([updatedUser]));
-
-    const res = await request(app)
-      .patch('/api/auth/profile')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ avatar_url: s3Url });
-
-    expect(res.status).toBe(200);
-  });
-
-  it('should allow clearing avatar_url with empty string', async () => {
-    const updatedUser = makeUser({ avatar_url: null });
-    mockQuery.mockResolvedValueOnce(queryResult([updatedUser]));
-
-    const res = await request(app)
-      .patch('/api/auth/profile')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ avatar_url: '' });
-
-    expect(res.status).toBe(200);
-  });
-
   it('should update multiple fields at once', async () => {
     const updatedUser = makeUser({ display_name: 'Updated', bio: 'Updated bio' });
     mockQuery.mockResolvedValueOnce(queryResult([updatedUser]));
@@ -466,10 +344,7 @@ describe('PATCH /api/auth/profile', () => {
   });
 
   it('should return 400 when no fields provided', async () => {
-    const res = await request(app)
-      .patch('/api/auth/profile')
-      .set('Authorization', `Bearer ${token}`)
-      .send({});
+    const res = await request(app).patch('/api/auth/profile').set('Authorization', `Bearer ${token}`).send({});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Validation failed');
@@ -493,19 +368,8 @@ describe('PATCH /api/auth/profile', () => {
     expect(res.status).toBe(400);
   });
 
-  it('should return 400 for invalid avatar_url (not a URL)', async () => {
-    const res = await request(app)
-      .patch('/api/auth/profile')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ avatar_url: 'not-a-url' });
-
-    expect(res.status).toBe(400);
-  });
-
   it('should return 401 without authentication', async () => {
-    const res = await request(app)
-      .patch('/api/auth/profile')
-      .send({ display_name: 'Test' });
+    const res = await request(app).patch('/api/auth/profile').send({ display_name: 'Test' });
 
     expect(res.status).toBe(401);
   });
@@ -523,25 +387,22 @@ describe('PATCH /api/auth/profile', () => {
 
   // XSS payload testing - these should be stored as-is (parameterized queries prevent injection)
   // but the Zod schema validations still apply
-  it.each(XSS_PAYLOADS)(
-    'should handle XSS payload in display_name without crashing: %s',
-    async (payload) => {
-      // XSS strings are <= 50 chars, so they pass Zod validation
-      // The important thing is they don't crash the server
-      if (payload.length <= 50) {
-        const updatedUser = makeUser({ display_name: payload });
-        mockQuery.mockResolvedValueOnce(queryResult([updatedUser]));
+  it.each(XSS_PAYLOADS)('should handle XSS payload in display_name without crashing: %s', async (payload) => {
+    // XSS strings are <= 50 chars, so they pass Zod validation
+    // The important thing is they don't crash the server
+    if (payload.length <= 50) {
+      const updatedUser = makeUser({ display_name: payload });
+      mockQuery.mockResolvedValueOnce(queryResult([updatedUser]));
 
-        const res = await request(app)
-          .patch('/api/auth/profile')
-          .set('Authorization', `Bearer ${token}`)
-          .send({ display_name: payload });
+      const res = await request(app)
+        .patch('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ display_name: payload });
 
-        // Should not crash - either 200 (stored safely via parameterized query) or 400 (validation)
-        expect([200, 400]).toContain(res.status);
-      }
+      // Should not crash - either 200 (stored safely via parameterized query) or 400 (validation)
+      expect([200, 400]).toContain(res.status);
     }
-  );
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────
@@ -558,9 +419,7 @@ describe('DELETE /api/auth/delete-account', () => {
     // Third query: DELETE FROM users RETURNING id
     mockQuery.mockResolvedValueOnce(queryResult([{ id: TEST_USER_ID }]));
 
-    const res = await request(app)
-      .delete('/api/auth/delete-account')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).delete('/api/auth/delete-account').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('Account deleted successfully');
@@ -568,8 +427,7 @@ describe('DELETE /api/auth/delete-account', () => {
   });
 
   it('should return 401 without authentication', async () => {
-    const res = await request(app)
-      .delete('/api/auth/delete-account');
+    const res = await request(app).delete('/api/auth/delete-account');
 
     expect(res.status).toBe(401);
   });
@@ -579,9 +437,7 @@ describe('DELETE /api/auth/delete-account', () => {
     mockQuery.mockResolvedValueOnce(queryResult([])); // group_members delete
     mockQuery.mockResolvedValueOnce(queryResult([])); // users delete returns nothing
 
-    const res = await request(app)
-      .delete('/api/auth/delete-account')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).delete('/api/auth/delete-account').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('User not found');
@@ -590,9 +446,7 @@ describe('DELETE /api/auth/delete-account', () => {
   it('should handle database error during deletion', async () => {
     mockQuery.mockRejectedValueOnce(new Error('FK constraint violation'));
 
-    const res = await request(app)
-      .delete('/api/auth/delete-account')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).delete('/api/auth/delete-account').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(500);
   });

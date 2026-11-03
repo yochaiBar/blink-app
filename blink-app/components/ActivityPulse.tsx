@@ -34,8 +34,7 @@ export default function ActivityPulse({
   const respondedCount = respondedUsers.length;
   const notRespondedCount = totalMembers - respondedCount;
   const everyoneResponded = respondedCount >= totalMembers && totalMembers > 0;
-  const justUserLeft =
-    !hasResponded && notRespondedCount === 1 && totalMembers > 1;
+  const justUserLeft = !hasResponded && notRespondedCount === 1 && totalMembers > 1;
 
   useEffect(() => {
     if (!hasResponded && !everyoneResponded) {
@@ -51,7 +50,7 @@ export default function ActivityPulse({
             duration: 800,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
       const glowLoop = Animated.loop(
         Animated.sequence([
@@ -65,7 +64,7 @@ export default function ActivityPulse({
             duration: 800,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
       pulseLoop.start();
       glowLoop.start();
@@ -78,18 +77,16 @@ export default function ActivityPulse({
 
   // Build avatar list: responded users first, then placeholders
   const respondedVisible = respondedUsers.slice(0, MAX_VISIBLE);
-  const placeholderCount = Math.min(
-    notRespondedCount,
-    MAX_VISIBLE - respondedVisible.length
-  );
+  const placeholderCount = Math.min(notRespondedCount, MAX_VISIBLE - respondedVisible.length);
 
-  const statusText = challengeJustStarted && respondedCount === 0
-    ? 'Waiting for responses...'
-    : everyoneResponded
-    ? "Everyone's in!"
-    : justUserLeft
-    ? 'Just you left!'
-    : `${respondedCount}/${totalMembers} responded`;
+  const statusText =
+    challengeJustStarted && respondedCount === 0
+      ? 'Waiting for responses...'
+      : everyoneResponded
+        ? "Everyone's in!"
+        : justUserLeft
+          ? 'Just you left!'
+          : `${respondedCount}/${totalMembers} responded`;
 
   return (
     <View style={styles.container}>
@@ -97,16 +94,11 @@ export default function ActivityPulse({
         {respondedVisible.map((u, i) => (
           <View
             key={u.userId}
-            style={[
-              styles.avatarWrapper,
-              { marginLeft: i > 0 ? -OVERLAP : 0, zIndex: MAX_VISIBLE - i },
-            ]}
+            style={[styles.avatarWrapper, { marginLeft: i > 0 ? -OVERLAP : 0, zIndex: MAX_VISIBLE - i }]}
           >
             <Image
               source={{
-                uri:
-                  u.avatarUrl ||
-                  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
+                uri: u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
               }}
               style={styles.avatar}
               contentFit="cover"

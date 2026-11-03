@@ -87,10 +87,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   },
 
   hydrate: async () => {
-    const [tourValue, demoValue] = await Promise.all([
-      storage.get(STORAGE_KEY),
-      storage.get(DEMO_CHALLENGE_KEY),
-    ]);
+    const [tourValue, demoValue] = await Promise.all([storage.get(STORAGE_KEY), storage.get(DEMO_CHALLENGE_KEY)]);
     const updates: Partial<OnboardingState> = {};
     if (tourValue === 'true') {
       updates.tourComplete = true;

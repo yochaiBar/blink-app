@@ -52,7 +52,7 @@ describe('POST /api/photos/relay', () => {
     const alice = await createUser();
     const bob = await createUser();
     const group = await createGroup({ createdBy: alice, members: [bob] });
-    const challenge = await createChallenge({ groupId: group.id, triggeredBy: alice });
+    const challenge = await createChallenge({ groupId: group.id, createdBy: alice });
     const response = await createResponse({ challengeId: challenge.id, user: alice });
     const bobOnline = await onlineRecipient(bob);
 
@@ -72,7 +72,7 @@ describe('POST /api/photos/relay', () => {
     const alice = await createUser();
     const bob = await createUser();
     const group = await createGroup({ createdBy: alice, members: [bob] });
-    const challenge = await createChallenge({ groupId: group.id, triggeredBy: alice });
+    const challenge = await createChallenge({ groupId: group.id, createdBy: alice });
     const response = await createResponse({ challengeId: challenge.id, user: alice });
 
     const res = await server
@@ -84,10 +84,9 @@ describe('POST /api/photos/relay', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ v: 1, delivered_user_ids: [], queued_user_ids: [bob.id] });
     expect(
-      await countRows(
-        `SELECT COUNT(*) FROM pending_photo_pickups WHERE recipient_user_id = $1 AND state = 'pending'`,
-        [bob.id],
-      ),
+      await countRows(`SELECT COUNT(*) FROM pending_photo_pickups WHERE recipient_user_id = $1 AND state = 'pending'`, [
+        bob.id,
+      ]),
     ).toBe(1);
   });
 
@@ -99,7 +98,7 @@ describe('POST /api/photos/relay', () => {
     const bob = await createUser();
     const mallory = await createUser();
     const group = await createGroup({ createdBy: alice, members: [bob] });
-    const challenge = await createChallenge({ groupId: group.id, triggeredBy: alice });
+    const challenge = await createChallenge({ groupId: group.id, createdBy: alice });
     const response = await createResponse({ challengeId: challenge.id, user: alice });
     const bobOnline = await onlineRecipient(bob);
 

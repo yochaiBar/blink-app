@@ -43,10 +43,10 @@ async function loadResponseContext(responseId: string): Promise<ResponseContextR
 }
 
 async function isGroupMember(groupId: string, userId: string): Promise<boolean> {
-  const membership = await query<GroupMemberRow>(
-    `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
-    [groupId, userId],
-  );
+  const membership = await query<GroupMemberRow>(`SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`, [
+    groupId,
+    userId,
+  ]);
   return membership.rows.length > 0;
 }
 
@@ -123,36 +123,25 @@ router.post(
     // - Top-level comment: notify the photo owner.
     const commenterName = await getDisplayName(req.userId!);
     if (parent_comment_id) {
-      const parentAuthor = await query<{ user_id: string }>(
-        `SELECT user_id FROM response_comments WHERE id = $1`,
-        [parent_comment_id],
-      );
+      const parentAuthor = await query<{ user_id: string }>(`SELECT user_id FROM response_comments WHERE id = $1`, [
+        parent_comment_id,
+      ]);
       const parentAuthorId = parentAuthor.rows[0]?.user_id;
       if (parentAuthorId && parentAuthorId !== req.userId) {
-        sendPushToUser(
-          parentAuthorId,
-          'New reply',
-          `${commenterName} replied to your comment`,
-          {
-            type: 'comment_reply',
-            response_id: responseId,
-            comment_id: comment.id,
-            group_id: context.group_id,
-          },
-        ).catch(() => undefined);
-      }
-    } else if (context.response_user_id && context.response_user_id !== req.userId) {
-      sendPushToUser(
-        context.response_user_id,
-        'New comment',
-        `${commenterName} commented on your photo`,
-        {
-          type: 'comment',
+        sendPushToUser(parentAuthorId, 'New reply', `${commenterName} replied to your comment`, {
+          type: 'comment_reply',
           response_id: responseId,
           comment_id: comment.id,
           group_id: context.group_id,
-        },
-      ).catch(() => undefined);
+        }).catch(() => undefined);
+      }
+    } else if (context.response_user_id && context.response_user_id !== req.userId) {
+      sendPushToUser(context.response_user_id, 'New comment', `${commenterName} commented on your photo`, {
+        type: 'comment',
+        response_id: responseId,
+        comment_id: comment.id,
+        group_id: context.group_id,
+      }).catch(() => undefined);
     }
 
     logger.info('Comment created', {
@@ -188,7 +177,7 @@ router.get(
     const comments = await query(
       `SELECT rc.id, rc.response_id, rc.user_id, rc.parent_comment_id, rc.text,
               rc.created_at, rc.updated_at,
-              u.display_name, u.avatar_url
+              u.display_name
          FROM response_comments rc
          JOIN users u ON u.id = rc.user_id
         WHERE rc.response_id = $1 AND rc.deleted_at IS NULL
@@ -224,10 +213,9 @@ router.delete(
 
     if (update.rows.length === 0) {
       // Check whether the comment exists at all — gives a clearer 404 vs 403.
-      const exists = await query(
-        `SELECT user_id FROM response_comments WHERE id = $1 AND deleted_at IS NULL`,
-        [commentId],
-      );
+      const exists = await query(`SELECT user_id FROM response_comments WHERE id = $1 AND deleted_at IS NULL`, [
+        commentId,
+      ]);
       if (exists.rows.length === 0) {
         res.status(404).json({ error: 'Comment not found' });
       } else {

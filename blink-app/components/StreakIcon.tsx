@@ -36,7 +36,7 @@ export default function StreakIcon({ streak, size = 16 }: StreakIconProps) {
             duration: 600,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
       loop.start();
       return () => loop.stop();
@@ -57,7 +57,7 @@ export default function StreakIcon({ streak, size = 16 }: StreakIconProps) {
             duration: 1000,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
       loop.start();
       return () => loop.stop();

@@ -6,10 +6,7 @@ import { validateBody } from '../middleware/validate';
 import { registerDeviceKeySchema } from '../utils/schemas';
 import { query } from '../config/database';
 import logger from '../utils/logger';
-import type {
-  RegisterDeviceKeyRequest,
-  RegisterDeviceKeyResponse,
-} from '../shared/photoProtocol';
+import type { RegisterDeviceKeyRequest, RegisterDeviceKeyResponse } from '../shared/photoProtocol';
 
 // ─────────────────────────────────────────────────────────────────
 // E2E photo flow — device public key registration.
@@ -52,11 +49,7 @@ function extractBearerToken(authHeader: string | undefined): string | null {
   return authHeader.slice('Bearer '.length).trim() || null;
 }
 
-function verifyAttestation(
-  accessToken: string,
-  publicKeyB64: string,
-  providedAttestationB64: string,
-): boolean {
+function verifyAttestation(accessToken: string, publicKeyB64: string, providedAttestationB64: string): boolean {
   let providedBytes: Buffer;
   let publicKeyBytes: Buffer;
   try {
@@ -69,9 +62,7 @@ function verifyAttestation(
   if (providedBytes.length !== 32 || publicKeyBytes.length !== 32) {
     return false;
   }
-  const expected = createHmac('sha256', Buffer.from(accessToken, 'utf8'))
-    .update(publicKeyBytes)
-    .digest();
+  const expected = createHmac('sha256', Buffer.from(accessToken, 'utf8')).update(publicKeyBytes).digest();
   // timingSafeEqual requires equal-length buffers; we already checked length.
   return timingSafeEqual(expected, providedBytes);
 }
@@ -92,13 +83,7 @@ router.post(
       return;
     }
 
-    if (
-      !verifyAttestation(
-        accessToken,
-        body.x25519_public_key_b64,
-        body.attestation_b64,
-      )
-    ) {
+    if (!verifyAttestation(accessToken, body.x25519_public_key_b64, body.attestation_b64)) {
       logger.warn('Device key attestation rejected', {
         userId,
         deviceId: body.device_id,
@@ -130,12 +115,7 @@ router.post(
              last_seen         = NOW(),
              tombstoned_at     = NULL
        RETURNING device_id, key_version, registered_at`,
-      [
-        userId,
-        body.device_id,
-        body.x25519_public_key_b64,
-        body.attestation_b64,
-      ],
+      [userId, body.device_id, body.x25519_public_key_b64, body.attestation_b64],
     );
 
     // Tombstone any OTHER (different device_id) active rows for this user —

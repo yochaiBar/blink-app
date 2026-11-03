@@ -19,22 +19,28 @@ async function totalChallengesByUser(groupId: string): Promise<Record<string, nu
 }
 
 describe('GET /api/challenges/groups/:groupId/challenges/active — expiry', () => {
-  it('counts an expired challenge once and records skips for non-responders', async () => {
+  it('counts an expired challenge once and resets the streak of non-responders', async () => {
     const alice = await createUser();
     const bob = await createUser();
     const group = await createGroup({ createdBy: alice, members: [bob] });
-    const challenge = await createChallenge({ groupId: group.id, triggeredBy: alice, expiresInSeconds: -60 });
+    await query('UPDATE group_members SET current_streak = 4 WHERE group_id = $1', [group.id]);
+    const challenge = await createChallenge({ groupId: group.id, createdBy: alice, expiresInSeconds: -60 });
     await createResponse({ challengeId: challenge.id, user: alice });
 
     const res = await server.api().get(`/api/challenges/groups/${group.id}/challenges/active`).set(bearer(alice));
 
     expect(res.status).toBe(200);
     expect(await totalChallengesByUser(group.id)).toEqual({ [alice.id]: 1, [bob.id]: 1 });
-    const skips = await query(
-      `SELECT user_id FROM challenge_responses WHERE challenge_id = $1 AND response_type = 'skip'`,
-      [challenge.id],
+    const streaks = await query<{ user_id: string; current_streak: number }>(
+      'SELECT user_id, current_streak FROM group_members WHERE group_id = $1',
+      [group.id],
     );
-    expect(skips.rows).toEqual([{ user_id: bob.id }]);
+    expect(Object.fromEntries(streaks.rows.map((r) => [r.user_id, r.current_streak]))).toEqual({
+      [alice.id]: 5,
+      [bob.id]: 0,
+    });
+    const row = await query('SELECT status FROM challenges WHERE id = $1', [challenge.id]);
+    expect(row.rows[0].status).toBe('expired');
   });
 
   // KNOWN BUG (recovery plan Phase 2c): every concurrent request that reads the
@@ -45,16 +51,15 @@ describe('GET /api/challenges/groups/:groupId/challenges/active — expiry', () 
     const members = await Promise.all([createUser(), createUser(), createUser(), createUser()]);
     const [alice, ...others] = members;
     const group = await createGroup({ createdBy: alice, members: others });
-    await createChallenge({ groupId: group.id, triggeredBy: alice, expiresInSeconds: -60 });
+    await createChallenge({ groupId: group.id, createdBy: alice, expiresInSeconds: -60 });
 
     // Every request reads the expired row, then queues on its first write to
-    // challenges (today: the skip INSERT's FK check), so none can finalize first.
+    // challenges (today: the UPDATE ... SET status = 'expired' after settling
+    // stats), so none can finalize first.
     const requesters = [...members, ...members];
     const responses = await raceBehindLock('challenges', requesters.length, () =>
       Promise.all(
-        requesters.map((m) =>
-          server.api().get(`/api/challenges/groups/${group.id}/challenges/active`).set(bearer(m)),
-        ),
+        requesters.map((m) => server.api().get(`/api/challenges/groups/${group.id}/challenges/active`).set(bearer(m))),
       ),
     );
 

@@ -10,12 +10,37 @@ interface QuickActionCardsProps {
 }
 
 const CARDS = [
-  { key: 'invite', title: 'Invite Friends', subtitle: 'Grow your crew', bg: theme.blueMuted, iconColor: theme.blue, Icon: UserPlus },
-  { key: 'create', title: 'Create Group', subtitle: 'Start something new', bg: theme.greenMuted, iconColor: theme.green, Icon: Plus },
-  { key: 'join', title: 'Join Group', subtitle: 'Find your friends', bg: theme.purpleMuted, iconColor: theme.purple, Icon: Search },
+  {
+    key: 'invite',
+    title: 'Invite Friends',
+    subtitle: 'Grow your crew',
+    bg: theme.blueMuted,
+    iconColor: theme.blue,
+    Icon: UserPlus,
+  },
+  {
+    key: 'create',
+    title: 'Create Group',
+    subtitle: 'Start something new',
+    bg: theme.greenMuted,
+    iconColor: theme.green,
+    Icon: Plus,
+  },
+  {
+    key: 'join',
+    title: 'Join Group',
+    subtitle: 'Find your friends',
+    bg: theme.purpleMuted,
+    iconColor: theme.purple,
+    Icon: Search,
+  },
 ] as const;
 
-export default React.memo(function QuickActionCards({ onInviteFriends, onCreateGroup, onJoinGroup }: QuickActionCardsProps) {
+export default React.memo(function QuickActionCards({
+  onInviteFriends,
+  onCreateGroup,
+  onJoinGroup,
+}: QuickActionCardsProps) {
   const handlers = [onInviteFriends, onCreateGroup, onJoinGroup];
   const anims = [
     useRef(new Animated.Value(0)).current,
@@ -25,20 +50,26 @@ export default React.memo(function QuickActionCards({ onInviteFriends, onCreateG
 
   useEffect(() => {
     const animations = anims.map((a, i) =>
-      Animated.timing(a, { toValue: 1, duration: 350, delay: i * 100, useNativeDriver: true })
+      Animated.timing(a, { toValue: 1, duration: 350, delay: i * 100, useNativeDriver: true }),
     );
     Animated.stagger(100, animations).start();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.scroll}
-    >
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroll}>
       {CARDS.map((card, i) => (
-        <Animated.View key={card.key} style={{ opacity: anims[i], transform: [{ translateY: anims[i].interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
-          <TouchableOpacity style={[styles.card, { backgroundColor: card.bg }]} onPress={handlers[i]} activeOpacity={0.85}>
+        <Animated.View
+          key={card.key}
+          style={{
+            opacity: anims[i],
+            transform: [{ translateY: anims[i].interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+          }}
+        >
+          <TouchableOpacity
+            style={[styles.card, { backgroundColor: card.bg }]}
+            onPress={handlers[i]}
+            activeOpacity={0.85}
+          >
             <View style={styles.iconWrap}>
               <card.Icon size={22} color={card.iconColor} />
             </View>

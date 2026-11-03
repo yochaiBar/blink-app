@@ -44,16 +44,12 @@ describe('Button', () => {
   const noop = jest.fn();
 
   it('renders without crashing', () => {
-    const tree = createWithAct(
-      React.createElement(Button, { title: 'Click me', onPress: noop }),
-    );
+    const tree = createWithAct(React.createElement(Button, { title: 'Click me', onPress: noop }));
     expect(tree.toJSON()).toBeTruthy();
   });
 
   it('displays the title text', () => {
-    const tree = createWithAct(
-      React.createElement(Button, { title: 'Submit', onPress: noop }),
-    );
+    const tree = createWithAct(React.createElement(Button, { title: 'Submit', onPress: noop }));
     const output = JSON.stringify(tree.toJSON());
     expect(output).toContain('Submit');
   });
@@ -61,9 +57,7 @@ describe('Button', () => {
   it('renders with different variants without crashing', () => {
     const variants = ['primary', 'secondary', 'ghost', 'destructive'] as const;
     for (const variant of variants) {
-      const tree = createWithAct(
-        React.createElement(Button, { title: `Btn ${variant}`, onPress: noop, variant }),
-      );
+      const tree = createWithAct(React.createElement(Button, { title: `Btn ${variant}`, onPress: noop, variant }));
       expect(tree.toJSON()).toBeTruthy();
     }
   });
@@ -71,17 +65,13 @@ describe('Button', () => {
   it('renders with different sizes without crashing', () => {
     const sizes = ['sm', 'md', 'lg'] as const;
     for (const size of sizes) {
-      const tree = createWithAct(
-        React.createElement(Button, { title: `Btn ${size}`, onPress: noop, size }),
-      );
+      const tree = createWithAct(React.createElement(Button, { title: `Btn ${size}`, onPress: noop, size }));
       expect(tree.toJSON()).toBeTruthy();
     }
   });
 
   it('renders loading state without showing title', () => {
-    const tree = createWithAct(
-      React.createElement(Button, { title: 'Loading', onPress: noop, loading: true }),
-    );
+    const tree = createWithAct(React.createElement(Button, { title: 'Loading', onPress: noop, loading: true }));
     const output = JSON.stringify(tree.toJSON());
     // When loading, the title text should NOT appear; ActivityIndicator shown instead
     expect(output).not.toContain('"Loading"');
@@ -89,23 +79,17 @@ describe('Button', () => {
   });
 
   it('renders disabled state', () => {
-    const tree = createWithAct(
-      React.createElement(Button, { title: 'Disabled', onPress: noop, disabled: true }),
-    );
+    const tree = createWithAct(React.createElement(Button, { title: 'Disabled', onPress: noop, disabled: true }));
     expect(tree.toJSON()).toBeTruthy();
   });
 
   it('renders fullWidth variant', () => {
-    const tree = createWithAct(
-      React.createElement(Button, { title: 'Full', onPress: noop, fullWidth: true }),
-    );
+    const tree = createWithAct(React.createElement(Button, { title: 'Full', onPress: noop, fullWidth: true }));
     expect(tree.toJSON()).toBeTruthy();
   });
 
   it('generates correct testID from title', () => {
-    const tree = createWithAct(
-      React.createElement(Button, { title: 'Save Changes', onPress: noop }),
-    );
+    const tree = createWithAct(React.createElement(Button, { title: 'Save Changes', onPress: noop }));
     const root = tree.root;
     const touchables = root.findAllByType('TouchableOpacity' as any);
     expect(touchables.length).toBeGreaterThan(0);
@@ -174,60 +158,46 @@ describe('EmptyState', () => {
 
 describe('ErrorState', () => {
   it('renders without crashing with no props', () => {
-    const tree = createWithAct(
-      React.createElement(ErrorState),
-    );
+    const tree = createWithAct(React.createElement(ErrorState));
     expect(tree.toJSON()).toBeTruthy();
   });
 
   it('displays default error message', () => {
-    const tree = createWithAct(
-      React.createElement(ErrorState),
-    );
+    const tree = createWithAct(React.createElement(ErrorState));
     const output = JSON.stringify(tree.toJSON());
     expect(output).toContain('Something went wrong');
     expect(output).toContain('Oops!');
   });
 
   it('displays custom error message', () => {
-    const tree = createWithAct(
-      React.createElement(ErrorState, { message: 'Network error occurred' }),
-    );
+    const tree = createWithAct(React.createElement(ErrorState, { message: 'Network error occurred' }));
     const output = JSON.stringify(tree.toJSON());
     expect(output).toContain('Network error occurred');
   });
 
   it('renders retry button when onRetry is provided', () => {
     const onRetry = jest.fn();
-    const tree = createWithAct(
-      React.createElement(ErrorState, { onRetry }),
-    );
+    const tree = createWithAct(React.createElement(ErrorState, { onRetry }));
     const output = JSON.stringify(tree.toJSON());
     expect(output).toContain('Try Again');
   });
 
   it('does not render retry button when onRetry is not provided', () => {
-    const tree = createWithAct(
-      React.createElement(ErrorState),
-    );
+    const tree = createWithAct(React.createElement(ErrorState));
     const output = JSON.stringify(tree.toJSON());
     expect(output).not.toContain('Try Again');
   });
 
   it('renders compact variant', () => {
     const onRetry = jest.fn();
-    const tree = createWithAct(
-      React.createElement(ErrorState, { compact: true, onRetry }),
-    );
+    const tree = createWithAct(React.createElement(ErrorState, { compact: true, onRetry }));
     const output = JSON.stringify(tree.toJSON());
     expect(output).toContain('Retry');
     expect(output).toContain('Something went wrong');
   });
 
   it('does not show "Oops!" in compact mode', () => {
-    const tree = createWithAct(
-      React.createElement(ErrorState, { compact: true }),
-    );
+    const tree = createWithAct(React.createElement(ErrorState, { compact: true }));
     const output = JSON.stringify(tree.toJSON());
     expect(output).not.toContain('Oops!');
   });
@@ -237,24 +207,18 @@ describe('ErrorState', () => {
 
 describe('StatusDot', () => {
   it('renders without crashing with default props', () => {
-    const tree = createWithAct(
-      React.createElement(StatusDot),
-    );
+    const tree = createWithAct(React.createElement(StatusDot));
     expect(tree.toJSON()).toBeTruthy();
   });
 
   it('renders with custom color and size', () => {
-    const tree = createWithAct(
-      React.createElement(StatusDot, { color: '#FF0000', size: 12 }),
-    );
+    const tree = createWithAct(React.createElement(StatusDot, { color: '#FF0000', size: 12 }));
     const json = tree.toJSON() as any;
     expect(json).toBeTruthy();
   });
 
   it('renders with pulse prop without crashing', () => {
-    const tree = createWithAct(
-      React.createElement(StatusDot, { pulse: true }),
-    );
+    const tree = createWithAct(React.createElement(StatusDot, { pulse: true }));
     expect(tree.toJSON()).toBeTruthy();
   });
 });

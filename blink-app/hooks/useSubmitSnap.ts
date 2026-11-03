@@ -1,10 +1,7 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  readAsStringAsync,
-  EncodingType,
-} from 'expo-file-system/legacy';
+import { readAsStringAsync, EncodingType } from 'expo-file-system/legacy';
 import { api, requestKeyshare } from '@/services/api';
 import { isDemoGroup } from '@/constants/demoData';
 import { ApiChallenge } from '@/types/api';
@@ -70,10 +67,7 @@ export function useSubmitSnap() {
       queryClient.invalidateQueries({ queryKey: queryKeys.user.stats });
       // v2 path returned a response object with id — wake the sender's
       // own FeedItem so it picks up the just-cached local photo.
-      const responseId =
-        data && typeof data === 'object' && 'id' in data
-          ? (data as { id: string }).id
-          : null;
+      const responseId = data && typeof data === 'object' && 'id' in data ? (data as { id: string }).id : null;
       if (responseId) {
         queryClient.invalidateQueries({ queryKey: ['localPhoto', responseId] });
       }
@@ -143,16 +137,13 @@ async function submitV2(args: V2Args): Promise<RespondResponse> {
 
   // 2. POST /respond with has_photo: true. Bytes do NOT travel here.
   //    Returns the response object including its server-assigned id.
-  const response = await api<RespondResponse>(
-    `/challenges/${args.challengeId}/respond`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        has_photo: true,
-        response_time_ms: 5000,
-      }),
-    },
-  );
+  const response = await api<RespondResponse>(`/challenges/${args.challengeId}/respond`, {
+    method: 'POST',
+    body: JSON.stringify({
+      has_photo: true,
+      response_time_ms: 5000,
+    }),
+  });
 
   // 3. Fetch the current group members so we know who to encrypt for.
   //    Recipients = every member except us; the relay endpoint will also

@@ -89,9 +89,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { feature_flags, ...user } = me;
       set({
         user,
-        featureFlags: feature_flags
-          ? { ...DEFAULT_FLAGS, ...feature_flags }
-          : DEFAULT_FLAGS,
+        featureFlags: feature_flags ? { ...DEFAULT_FLAGS, ...feature_flags } : DEFAULT_FLAGS,
         isAuthenticated: true,
         isLoading: false,
       });

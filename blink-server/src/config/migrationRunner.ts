@@ -26,19 +26,35 @@ async function isApplied(client: PoolClient, file: string): Promise<boolean> {
   return result.rows.length > 0;
 }
 
+// A database that recorded a migration file we no longer ship was built by
+// a different migration history (e.g. the pre-baseline 001–016 files).
+// Running on top of it would leave a half-matching schema, so refuse.
+async function assertKnownHistory(client: PoolClient, files: string[]): Promise<void> {
+  const result = await client.query<{ filename: string }>('SELECT filename FROM schema_migrations ORDER BY id');
+  const unknown = result.rows.map((r) => r.filename).filter((f) => !files.includes(f));
+  if (unknown.length > 0) {
+    throw new Error(
+      `schema_migrations lists migration(s) not in migrations/: ${unknown.join(', ')}. ` +
+        'This database predates the current migration history (001_baseline.sql); point DATABASE_URL at a fresh database.',
+    );
+  }
+}
+
 // Run all pending migrations in order. Each file runs on a single
 // connection inside its own transaction (withTransaction), so a failing
 // migration rolls back completely and is not recorded.
 export async function runMigrations(): Promise<void> {
+  const migrationsDir = path.join(__dirname, 'migrations');
+  const files = fs
+    .readdirSync(migrationsDir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort(); // Alphabetical = chronological with NNN_ prefix
+
   await withTransaction(async (client) => {
     await client.query(MIGRATION_LOCK_SQL);
     await ensureMigrationsTable(client);
+    await assertKnownHistory(client, files);
   });
-
-  const migrationsDir = path.join(__dirname, 'migrations');
-  const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.endsWith('.sql'))
-    .sort(); // Alphabetical = chronological with NNN_ prefix
 
   let ranCount = 0;
 

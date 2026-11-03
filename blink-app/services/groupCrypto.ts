@@ -72,8 +72,8 @@ export function b64ToBytes(s: string): Uint8Array {
 
 export interface DeviceKeyMaterial {
   device_id: string;
-  publicKey: Uint8Array;       // 32 bytes
-  privateScalar: Uint8Array;   // 32 bytes (the X25519 seed)
+  publicKey: Uint8Array; // 32 bytes
+  privateScalar: Uint8Array; // 32 bytes (the X25519 seed)
 }
 
 /**
@@ -116,10 +116,7 @@ export async function getOrCreateDeviceKey(): Promise<DeviceKeyMaterial> {
  * the next `getOrCreateDeviceKey()` will generate a fresh one.
  */
 export async function clearDeviceKey(): Promise<void> {
-  await Promise.all([
-    SecureStore.deleteItemAsync(DEVICE_SEED_KEY),
-    SecureStore.deleteItemAsync(DEVICE_ID_KEY),
-  ]);
+  await Promise.all([SecureStore.deleteItemAsync(DEVICE_SEED_KEY), SecureStore.deleteItemAsync(DEVICE_ID_KEY)]);
 }
 
 /**
@@ -127,10 +124,7 @@ export async function clearDeviceKey(): Promise<void> {
  * the same and compares with timingSafeEqual (Plan H1). Bind the public-key
  * registration to the authenticated session so cross-user replay fails.
  */
-export function computeAttestation(
-  accessToken: string,
-  publicKey: Uint8Array,
-): Uint8Array {
+export function computeAttestation(accessToken: string, publicKey: Uint8Array): Uint8Array {
   return hmac(sha256, new TextEncoder().encode(accessToken), publicKey);
 }
 
@@ -152,11 +146,7 @@ export function newGroupKey(): Uint8Array {
  * the new key is stored under that higher number; the joiner-side receive
  * path uses "higher version wins" to resolve rotations (see loadGroupKeyVersion).
  */
-export async function storeGroupKey(
-  groupId: string,
-  key: Uint8Array,
-  version = 1,
-): Promise<void> {
+export async function storeGroupKey(groupId: string, key: Uint8Array, version = 1): Promise<void> {
   await Promise.all([
     SecureStore.setItemAsync(GROUP_KEY_PREFIX + groupId, bytesToB64(key)),
     SecureStore.setItemAsync(GROUP_KEY_VERSION_PREFIX + groupId, String(version)),
@@ -196,8 +186,8 @@ export async function deleteGroupKey(groupId: string): Promise<void> {
 // ── Symmetric encrypt/decrypt for photo bytes ─────────────────────
 
 export interface EncryptedBlob {
-  ciphertext: Uint8Array;  // includes the 16-byte GCM auth tag at the end
-  iv: Uint8Array;          // 12 bytes
+  ciphertext: Uint8Array; // includes the 16-byte GCM auth tag at the end
+  iv: Uint8Array; // 12 bytes
 }
 
 /**
@@ -210,10 +200,7 @@ export interface EncryptedBlob {
  * returned `ciphertext` length is `plaintext.length + 16`. The matching
  * `aesGcmDecrypt` expects the same shape.
  */
-export function aesGcmEncrypt(
-  key: Uint8Array,
-  plaintext: Uint8Array,
-): EncryptedBlob {
+export function aesGcmEncrypt(key: Uint8Array, plaintext: Uint8Array): EncryptedBlob {
   if (key.length !== KEY_BYTES) {
     throw new Error(`aesGcmEncrypt: key must be ${KEY_BYTES} bytes`);
   }
@@ -222,10 +209,7 @@ export function aesGcmEncrypt(
   return { ciphertext, iv };
 }
 
-export function aesGcmDecrypt(
-  key: Uint8Array,
-  blob: EncryptedBlob,
-): Uint8Array {
+export function aesGcmDecrypt(key: Uint8Array, blob: EncryptedBlob): Uint8Array {
   if (key.length !== KEY_BYTES) {
     throw new Error(`aesGcmDecrypt: key must be ${KEY_BYTES} bytes`);
   }
@@ -244,8 +228,8 @@ export function aesGcmDecrypt(
 
 export interface CourierEnvelope {
   ephemeralPublicKey: Uint8Array; // 32 bytes
-  iv: Uint8Array;                 // 12 bytes
-  ciphertext: Uint8Array;         // groupKey (32) + GCM tag (16) = 48 bytes
+  iv: Uint8Array; // 12 bytes
+  ciphertext: Uint8Array; // groupKey (32) + GCM tag (16) = 48 bytes
 }
 
 /**
@@ -263,10 +247,7 @@ export interface CourierEnvelope {
  * cross-handshake replay even though we don't have full forward secrecy on
  * the static device key.
  */
-export function courierEncryptGroupKey(
-  joinerStaticPublicKey: Uint8Array,
-  groupKey: Uint8Array,
-): CourierEnvelope {
+export function courierEncryptGroupKey(joinerStaticPublicKey: Uint8Array, groupKey: Uint8Array): CourierEnvelope {
   if (joinerStaticPublicKey.length !== KEY_BYTES) {
     throw new Error('courierEncryptGroupKey: joiner public key must be 32 bytes');
   }
@@ -308,14 +289,9 @@ export function joinerDecryptGroupKey(
     throw new Error('joinerDecryptGroupKey: private key must be 32 bytes');
   }
 
-  const sharedSecret = x25519.getSharedSecret(
-    joinerStaticPrivate,
-    envelope.ephemeralPublicKey,
-  );
+  const sharedSecret = x25519.getSharedSecret(joinerStaticPrivate, envelope.ephemeralPublicKey);
 
-  const salt = new Uint8Array(
-    envelope.ephemeralPublicKey.length + joinerStaticPublic.length,
-  );
+  const salt = new Uint8Array(envelope.ephemeralPublicKey.length + joinerStaticPublic.length);
   salt.set(envelope.ephemeralPublicKey, 0);
   salt.set(joinerStaticPublic, envelope.ephemeralPublicKey.length);
   const aeadKey = hkdf(sha256, sharedSecret, salt, HKDF_INFO_KEYSHARE, KEY_BYTES);

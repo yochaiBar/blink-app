@@ -67,8 +67,13 @@ describe('apiGroupListToGroup', () => {
 
   it('should map "friends" category to "close_friends"', () => {
     const apiItem: ApiGroupListItem = {
-      id: 'g1', name: 'G', icon: '', category: 'friends',
-      invite_code: 'X', member_count: 1, role: 'member',
+      id: 'g1',
+      name: 'G',
+      icon: '',
+      category: 'friends',
+      invite_code: 'X',
+      member_count: 1,
+      role: 'member',
       skip_penalty_type: 'none',
     };
 
@@ -77,8 +82,13 @@ describe('apiGroupListToGroup', () => {
 
   it('should keep "family" category as-is', () => {
     const apiItem: ApiGroupListItem = {
-      id: 'g1', name: 'G', icon: '', category: 'family',
-      invite_code: 'X', member_count: 1, role: 'member',
+      id: 'g1',
+      name: 'G',
+      icon: '',
+      category: 'family',
+      invite_code: 'X',
+      member_count: 1,
+      role: 'member',
       skip_penalty_type: 'none',
     };
 
@@ -88,8 +98,13 @@ describe('apiGroupListToGroup', () => {
   it('should handle active challenge with countdown', () => {
     const futureTime = new Date(Date.now() + 300000).toISOString();
     const apiItem: ApiGroupListItem = {
-      id: 'g1', name: 'G', icon: '📸', category: 'friends',
-      invite_code: 'X', member_count: 1, role: 'member',
+      id: 'g1',
+      name: 'G',
+      icon: '📸',
+      category: 'friends',
+      invite_code: 'X',
+      member_count: 1,
+      role: 'member',
       skip_penalty_type: 'none',
       has_active_challenge: true,
       challenge_expires_at: futureTime,
@@ -103,8 +118,13 @@ describe('apiGroupListToGroup', () => {
 
   it('should default icon to fire emoji when missing', () => {
     const apiItem: ApiGroupListItem = {
-      id: 'g1', name: 'G', icon: '', category: 'custom',
-      invite_code: 'X', member_count: 1, role: 'member',
+      id: 'g1',
+      name: 'G',
+      icon: '',
+      category: 'custom',
+      invite_code: 'X',
+      member_count: 1,
+      role: 'member',
       skip_penalty_type: 'none',
     };
 
@@ -113,8 +133,13 @@ describe('apiGroupListToGroup', () => {
 
   it('should handle undefined has_active_challenge', () => {
     const apiItem: ApiGroupListItem = {
-      id: 'g1', name: 'G', icon: '🔥', category: 'work',
-      invite_code: 'X', member_count: 1, role: 'member',
+      id: 'g1',
+      name: 'G',
+      icon: '🔥',
+      category: 'work',
+      invite_code: 'X',
+      member_count: 1,
+      role: 'member',
       skip_penalty_type: 'none',
     };
 
@@ -390,9 +415,36 @@ describe('apiResponseToSnap', () => {
 describe('apiMembersToLeaderboard', () => {
   it('should sort members by total_responses descending and assign ranks', () => {
     const members: ApiGroupMember[] = [
-      { user_id: 'u1', display_name: 'Alice', avatar_url: null, role: 'member', streak: 5, participation_rate: 80, total_responses: 10, joined_at: '' },
-      { user_id: 'u2', display_name: 'Bob', avatar_url: null, role: 'member', streak: 3, participation_rate: 60, total_responses: 25, joined_at: '' },
-      { user_id: 'u3', display_name: 'Charlie', avatar_url: null, role: 'admin', streak: 1, participation_rate: 40, total_responses: 15, joined_at: '' },
+      {
+        user_id: 'u1',
+        display_name: 'Alice',
+        avatar_url: null,
+        role: 'member',
+        streak: 5,
+        participation_rate: 80,
+        total_responses: 10,
+        joined_at: '',
+      },
+      {
+        user_id: 'u2',
+        display_name: 'Bob',
+        avatar_url: null,
+        role: 'member',
+        streak: 3,
+        participation_rate: 60,
+        total_responses: 25,
+        joined_at: '',
+      },
+      {
+        user_id: 'u3',
+        display_name: 'Charlie',
+        avatar_url: null,
+        role: 'admin',
+        streak: 1,
+        participation_rate: 40,
+        total_responses: 15,
+        joined_at: '',
+      },
     ];
 
     const result = apiMembersToLeaderboard(members);
@@ -414,7 +466,16 @@ describe('apiMembersToLeaderboard', () => {
 
   it('should handle single member', () => {
     const members: ApiGroupMember[] = [
-      { user_id: 'u1', display_name: 'Solo', avatar_url: null, role: 'admin', streak: 0, participation_rate: 0, total_responses: 0, joined_at: '' },
+      {
+        user_id: 'u1',
+        display_name: 'Solo',
+        avatar_url: null,
+        role: 'admin',
+        streak: 0,
+        participation_rate: 0,
+        total_responses: 0,
+        joined_at: '',
+      },
     ];
 
     const result = apiMembersToLeaderboard(members);
@@ -424,8 +485,26 @@ describe('apiMembersToLeaderboard', () => {
 
   it('should handle tied scores correctly', () => {
     const members: ApiGroupMember[] = [
-      { user_id: 'u1', display_name: 'A', avatar_url: null, role: 'member', streak: 0, participation_rate: 0, total_responses: 10, joined_at: '' },
-      { user_id: 'u2', display_name: 'B', avatar_url: null, role: 'member', streak: 0, participation_rate: 0, total_responses: 10, joined_at: '' },
+      {
+        user_id: 'u1',
+        display_name: 'A',
+        avatar_url: null,
+        role: 'member',
+        streak: 0,
+        participation_rate: 0,
+        total_responses: 10,
+        joined_at: '',
+      },
+      {
+        user_id: 'u2',
+        display_name: 'B',
+        avatar_url: null,
+        role: 'member',
+        streak: 0,
+        participation_rate: 0,
+        total_responses: 10,
+        joined_at: '',
+      },
     ];
 
     const result = apiMembersToLeaderboard(members);

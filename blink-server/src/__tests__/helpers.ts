@@ -68,7 +68,6 @@ export function makeUser(overrides: Record<string, any> = {}) {
     id: overrides.id ?? TEST_USER_ID,
     phone_number: overrides.phone_number ?? '+15551234567',
     display_name: overrides.display_name ?? 'Test User',
-    avatar_url: overrides.avatar_url ?? 'https://blinks3upload.s3.us-east-1.amazonaws.com/avatars/test.jpg',
     bio: overrides.bio ?? 'Test bio',
     created_at: overrides.created_at ?? new Date().toISOString(),
     last_active_at: overrides.last_active_at ?? new Date().toISOString(),
@@ -80,14 +79,12 @@ export function makeGroup(overrides: Record<string, any> = {}) {
     id: overrides.id ?? TEST_GROUP_ID,
     name: overrides.name ?? 'Test Group',
     icon: overrides.icon ?? '🔥',
-    category: overrides.category ?? 'friends',
     created_by: overrides.created_by ?? TEST_USER_ID,
     invite_code: overrides.invite_code ?? TEST_INVITE_CODE,
     max_members: overrides.max_members ?? 15,
     quiet_hours_start: overrides.quiet_hours_start ?? '22:00',
     quiet_hours_end: overrides.quiet_hours_end ?? '08:00',
-    skip_penalty_type: overrides.skip_penalty_type ?? 'wanted_poster',
-    ai_personality: overrides.ai_personality ?? 'funny',
+    group_key_version: overrides.group_key_version ?? 1,
     created_at: overrides.created_at ?? new Date().toISOString(),
   };
 }
@@ -108,14 +105,12 @@ export function makeChallenge(overrides: Record<string, any> = {}) {
   return {
     id: overrides.id ?? TEST_CHALLENGE_ID,
     group_id: overrides.group_id ?? TEST_GROUP_ID,
-    type: overrides.type ?? 'snap',
-    prompt_text: overrides.prompt_text ?? null,
-    options_json: overrides.options_json ?? null,
-    triggered_by: overrides.triggered_by ?? TEST_USER_ID,
-    triggered_at: overrides.triggered_at ?? new Date().toISOString(),
+    prompt: overrides.prompt ?? null,
+    created_by: overrides.created_by ?? TEST_USER_ID,
+    created_at: overrides.created_at ?? new Date().toISOString(),
     expires_at: overrides.expires_at ?? new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    countdown_seconds: overrides.countdown_seconds ?? 10,
     status: overrides.status ?? 'active',
+    is_auto_generated: overrides.is_auto_generated ?? false,
   };
 }
 
@@ -124,9 +119,7 @@ export function makeChallengeResponse(overrides: Record<string, any> = {}) {
     id: overrides.id ?? TEST_RESPONSE_ID,
     challenge_id: overrides.challenge_id ?? TEST_CHALLENGE_ID,
     user_id: overrides.user_id ?? TEST_USER_ID,
-    response_type: overrides.response_type ?? 'photo',
-    photo_url: overrides.photo_url ?? 'https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg',
-    answer_index: overrides.answer_index ?? null,
+    has_photo: overrides.has_photo ?? true,
     responded_at: overrides.responded_at ?? new Date().toISOString(),
     response_time_ms: overrides.response_time_ms ?? 3500,
   };

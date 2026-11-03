@@ -57,16 +57,14 @@ export default function ChallengeSection({
           </View>
         )}
         {!challengeTriggerInfo?.isAi && challengeTriggerInfo && (
-          <Text style={styles.humanTriggerText}>
-            {challengeTriggerInfo.name} started this
-          </Text>
+          <Text style={styles.humanTriggerText}>{challengeTriggerInfo.name} started this</Text>
         )}
 
         {/* Challenge prompt */}
         <Text style={styles.challengePrompt}>
-          {activeChallenge.prompt_text ?? activeChallenge.prompt ?? (
-            isQuizChallenge ? 'Quiz time!' : 'Snap Challenge!'
-          )}
+          {activeChallenge.prompt_text ??
+            activeChallenge.prompt ??
+            (isQuizChallenge ? 'Quiz time!' : 'Snap Challenge!')}
         </Text>
 
         {/* Timer row */}
@@ -93,11 +91,7 @@ export default function ChallengeSection({
             activeOpacity={0.85}
             testID="snap-challenge-btn"
           >
-            {isQuizChallenge ? (
-              <Zap size={18} color={theme.white} />
-            ) : (
-              <Camera size={18} color={theme.white} />
-            )}
+            {isQuizChallenge ? <Zap size={18} color={theme.white} /> : <Camera size={18} color={theme.white} />}
             <Text style={styles.respondBtnText}>Respond</Text>
           </TouchableOpacity>
         ) : (

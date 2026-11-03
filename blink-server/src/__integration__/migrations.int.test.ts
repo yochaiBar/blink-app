@@ -56,6 +56,15 @@ describe('runMigrations', () => {
     expect(new Set(rows.map((r) => r.filename)).size).toBe(rows.length);
   });
 
+  it('refuses to run on a database with migrations it does not know', async () => {
+    await query(`INSERT INTO schema_migrations (filename) VALUES ('009_encrypted_photos.sql')`);
+    try {
+      await expect(runMigrations()).rejects.toThrow(/009_encrypted_photos\.sql.*predates/);
+    } finally {
+      await query(`DELETE FROM schema_migrations WHERE filename = '009_encrypted_photos.sql'`);
+    }
+  });
+
   it('is a no-op when re-run, even by concurrent runners', async () => {
     const before = await appliedMigrations();
 

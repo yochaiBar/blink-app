@@ -1,7 +1,14 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
-  Platform, Alert, ActivityIndicator,
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,7 +33,8 @@ export default function EditProfileScreen() {
   const [avatar, setAvatar] = useState<string>(user.avatar);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  const hasChanges = name !== user.name || `@${username}` !== user.username || bio !== user.bio || avatar !== user.avatar;
+  const hasChanges =
+    name !== user.name || `@${username}` !== user.username || bio !== user.bio || avatar !== user.avatar;
 
   const handlePickImage = useCallback(async () => {
     try {
@@ -211,13 +219,7 @@ export default function EditProfileScreen() {
             disabled={!hasChanges || isSaving || isUploading}
             fullWidth
           />
-          <Button
-            title="Cancel"
-            onPress={() => router.back()}
-            variant="ghost"
-            size="md"
-            fullWidth
-          />
+          <Button title="Cancel" onPress={() => router.back()} variant="ghost" size="md" fullWidth />
         </View>
       </ScrollView>
     </View>

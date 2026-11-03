@@ -105,9 +105,15 @@ jest.mock('lucide-react-native', () => ({
 const localStorageStore: Record<string, string> = {};
 (global as any).localStorage = {
   getItem: jest.fn((key: string) => localStorageStore[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => { localStorageStore[key] = value; }),
-  removeItem: jest.fn((key: string) => { delete localStorageStore[key]; }),
-  clear: jest.fn(() => { Object.keys(localStorageStore).forEach(k => delete localStorageStore[k]); }),
+  setItem: jest.fn((key: string, value: string) => {
+    localStorageStore[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete localStorageStore[key];
+  }),
+  clear: jest.fn(() => {
+    Object.keys(localStorageStore).forEach((k) => delete localStorageStore[k]);
+  }),
 };
 
 // ── Setup fetch mock ──────────────────────────────────────────────

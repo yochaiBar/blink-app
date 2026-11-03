@@ -23,7 +23,12 @@ interface ActivityRowProps {
 
 export default React.memo(function ActivityRow({ item, onPress }: ActivityRowProps) {
   return (
-    <TouchableOpacity style={styles.container} testID={`activity-row-${item.id}`} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}>
+    <TouchableOpacity
+      style={styles.container}
+      testID={`activity-row-${item.id}`}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+    >
       <View style={styles.avatarArea}>
         <Image source={{ uri: item.userAvatar }} style={styles.avatar} contentFit="cover" />
         <Text style={styles.typeIcon}>{typeIcons[item.type] ?? '📌'}</Text>
@@ -31,8 +36,7 @@ export default React.memo(function ActivityRow({ item, onPress }: ActivityRowPro
 
       <View style={styles.content}>
         <Text style={styles.text} numberOfLines={2}>
-          <Text style={styles.userName}>{item.userName}</Text>
-          {' '}{item.message}
+          <Text style={styles.userName}>{item.userName}</Text> {item.message}
         </Text>
         <View style={styles.metaRow}>
           <Text style={styles.groupName}>{item.groupName}</Text>
@@ -41,9 +45,7 @@ export default React.memo(function ActivityRow({ item, onPress }: ActivityRowPro
         </View>
       </View>
 
-      {item.imageUrl && (
-        <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} contentFit="cover" />
-      )}
+      {item.imageUrl && <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} contentFit="cover" />}
     </TouchableOpacity>
   );
 });

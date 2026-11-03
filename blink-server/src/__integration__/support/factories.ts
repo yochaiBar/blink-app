@@ -26,10 +26,10 @@ export function bearer(user: { token: string }): { Authorization: string } {
 export async function createUser(overrides: { phone_number?: string; display_name?: string } = {}): Promise<TestUser> {
   phoneCounter += 1;
   const phone = overrides.phone_number ?? `+1555${String(phoneCounter).padStart(7, '0')}`;
-  const result = await query<UserRow>(
-    `INSERT INTO users (phone_number, display_name) VALUES ($1, $2) RETURNING *`,
-    [phone, overrides.display_name ?? `User ${phoneCounter}`],
-  );
+  const result = await query<UserRow>(`INSERT INTO users (phone_number, display_name) VALUES ($1, $2) RETURNING *`, [
+    phone,
+    overrides.display_name ?? `User ${phoneCounter}`,
+  ]);
   const user = result.rows[0];
   return { ...user, token: accessTokenFor(user.id) };
 }
@@ -61,24 +61,24 @@ export async function createGroup(opts: {
 }
 
 /**
- * A snap challenge that was triggered 5 minutes before it expires. Pass a
- * negative `expiresInSeconds` to arrange an expired-but-still-'active' one.
+ * A snap challenge created 5 minutes before it expires. Pass a negative
+ * `expiresInSeconds` to arrange an expired-but-still-'active' one.
  * Times are computed in SQL so they share the session clock with NOW().
  */
 export async function createChallenge(opts: {
   groupId: string;
-  triggeredBy: { id: string };
+  createdBy: { id: string };
   expiresInSeconds?: number;
   status?: 'active' | 'completed' | 'expired';
 }): Promise<ChallengeRow> {
   const result = await query<ChallengeRow>(
-    `INSERT INTO challenges (group_id, type, triggered_by, triggered_at, expires_at, status)
-     VALUES ($1, 'snap', $2,
+    `INSERT INTO challenges (group_id, created_by, created_at, expires_at, status)
+     VALUES ($1, $2,
              NOW() + make_interval(secs => $3) - INTERVAL '5 minutes',
              NOW() + make_interval(secs => $3),
              $4)
      RETURNING *`,
-    [opts.groupId, opts.triggeredBy.id, opts.expiresInSeconds ?? 300, opts.status ?? 'active'],
+    [opts.groupId, opts.createdBy.id, opts.expiresInSeconds ?? 300, opts.status ?? 'active'],
   );
   return result.rows[0];
 }
@@ -89,8 +89,8 @@ export async function createResponse(opts: {
   hasPhoto?: boolean;
 }): Promise<ChallengeResponseRow> {
   const result = await query<ChallengeResponseRow>(
-    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, has_photo, response_time_ms)
-     VALUES ($1, $2, 'photo', $3, 1500)
+    `INSERT INTO challenge_responses (challenge_id, user_id, has_photo, response_time_ms)
+     VALUES ($1, $2, $3, 1500)
      RETURNING *`,
     [opts.challengeId, opts.user.id, opts.hasPhoto ?? true],
   );

@@ -69,10 +69,7 @@ function senderPath(responseId: string): string {
 // ── Received store ────────────────────────────────────────────────
 
 /** Writes a decrypted photo to the received store. Idempotent on re-write. */
-export async function putReceivedPhoto(
-  responseId: string,
-  plaintext: Uint8Array,
-): Promise<void> {
+export async function putReceivedPhoto(responseId: string, plaintext: Uint8Array): Promise<void> {
   await ensureDirs();
   await writeAsStringAsync(receivedPath(responseId), bytesToB64(plaintext), {
     encoding: EncodingType.Base64,
@@ -82,9 +79,7 @@ export async function putReceivedPhoto(
 }
 
 /** Returns the decrypted bytes for a response photo, or null if not cached. */
-export async function getReceivedPhoto(
-  responseId: string,
-): Promise<Uint8Array | null> {
+export async function getReceivedPhoto(responseId: string): Promise<Uint8Array | null> {
   const path = receivedPath(responseId);
   const info = await getInfoAsync(path);
   if (!info.exists) return null;
@@ -99,9 +94,7 @@ export async function hasReceivedPhoto(responseId: string): Promise<boolean> {
 }
 
 /** Returns a file:// URI usable by Image components, or null. */
-export async function getReceivedPhotoUri(
-  responseId: string,
-): Promise<string | null> {
+export async function getReceivedPhotoUri(responseId: string): Promise<string | null> {
   const path = receivedPath(responseId);
   const info = await getInfoAsync(path);
   return info.exists ? path : null;
@@ -112,9 +105,7 @@ export async function getReceivedPhotoUri(
  * TTL. The sender never receives their own relay frame, so this is the only
  * on-device source for showing a user their own snap.
  */
-export async function getSenderPhotoUri(
-  responseId: string,
-): Promise<string | null> {
+export async function getSenderPhotoUri(responseId: string): Promise<string | null> {
   const path = senderPath(responseId);
   const info = await getInfoAsync(path);
   if (!info.exists) return null;
@@ -132,13 +123,8 @@ export async function getSenderPhotoUri(
  * copy. This is what every photo surface (feed, reveal, thumbnails) should
  * use so a user always sees their own snap, not just others'.
  */
-export async function getLocalPhotoUri(
-  responseId: string,
-): Promise<string | null> {
-  return (
-    (await getReceivedPhotoUri(responseId)) ??
-    (await getSenderPhotoUri(responseId))
-  );
+export async function getLocalPhotoUri(responseId: string): Promise<string | null> {
+  return (await getReceivedPhotoUri(responseId)) ?? (await getSenderPhotoUri(responseId));
 }
 
 // ── Sender plaintext cache ────────────────────────────────────────
@@ -147,10 +133,7 @@ export async function getLocalPhotoUri(
  * Writes the sender's plaintext for a photo we just sent. Kept for
  * SENDER_TTL_MS so we can re-encrypt for a recipient who comes online later.
  */
-export async function putSenderPlaintext(
-  responseId: string,
-  plaintext: Uint8Array,
-): Promise<void> {
+export async function putSenderPlaintext(responseId: string, plaintext: Uint8Array): Promise<void> {
   await ensureDirs();
   await writeAsStringAsync(senderPath(responseId), bytesToB64(plaintext), {
     encoding: EncodingType.Base64,
@@ -161,9 +144,7 @@ export async function putSenderPlaintext(
  * Reads the sender's cached plaintext for a response, if still present and
  * within TTL. Callers should expect null and handle "photo expired" gracefully.
  */
-export async function getSenderPlaintext(
-  responseId: string,
-): Promise<Uint8Array | null> {
+export async function getSenderPlaintext(responseId: string): Promise<Uint8Array | null> {
   const path = senderPath(responseId);
   const info = await getInfoAsync(path);
   if (!info.exists) return null;
@@ -234,10 +215,7 @@ async function evictIfNeeded(): Promise<void> {
   // Oldest first.
   metas.sort((a, b) => a.modificationTime - b.modificationTime);
   for (const m of metas) {
-    if (
-      metas.length - 1 < RECEIVED_MAX_COUNT &&
-      totalBytes - m.size <= RECEIVED_MAX_BYTES
-    ) {
+    if (metas.length - 1 < RECEIVED_MAX_COUNT && totalBytes - m.size <= RECEIVED_MAX_BYTES) {
       // hypothetical removal would satisfy both budgets — but only stop if
       // ALSO our current state already satisfies them.
       if (metas.length <= RECEIVED_MAX_COUNT && totalBytes <= RECEIVED_MAX_BYTES) {

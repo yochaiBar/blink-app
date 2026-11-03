@@ -165,20 +165,17 @@ export function useSocket() {
       // Re-encrypt from our local plaintext cache and POST to /relay.
       // If our cache has expired (TTL > 7d), respondToPickup returns null
       // and the server's TTL job will eventually expire the pending row.
-      socket.on(
-        'photo:pickup_request',
-        async (payload: PhotoPickupRequest) => {
-          if (__DEV__) console.log('[Socket] photo:pickup_request', payload);
-          try {
-            await respondToPickup({
-              ...payload,
-              challengeId: payload.challenge_id,
-            });
-          } catch (err) {
-            if (__DEV__) console.warn('[Socket] pickup respond failed', err);
-          }
-        },
-      );
+      socket.on('photo:pickup_request', async (payload: PhotoPickupRequest) => {
+        if (__DEV__) console.log('[Socket] photo:pickup_request', payload);
+        try {
+          await respondToPickup({
+            ...payload,
+            challengeId: payload.challenge_id,
+          });
+        } catch (err) {
+          if (__DEV__) console.warn('[Socket] pickup respond failed', err);
+        }
+      });
 
       // ── Group-key courier handshake (Phase 4) ───────────────
       // Courier path: server asks us to share the group key with a joiner.
@@ -213,9 +210,7 @@ export function useSocket() {
             from_device_id: fromDeviceId,
             ephemeral_public_key_b64: bytesToB64(envelope.ephemeralPublicKey),
             iv_b64: bytesToB64(envelope.iv),
-            auth_tag_b64: bytesToB64(
-              envelope.ciphertext.slice(envelope.ciphertext.length - 16),
-            ),
+            auth_tag_b64: bytesToB64(envelope.ciphertext.slice(envelope.ciphertext.length - 16)),
             ciphertext_b64: bytesToB64(envelope.ciphertext),
             group_key_version: groupKeyVersion > 0 ? groupKeyVersion : 1,
           });
@@ -229,61 +224,54 @@ export function useSocket() {
       // locally. Idempotent: if we already have the key, validate the new
       // one matches; otherwise newest wins per the key_version field on
       // the envelope (Phase 5+ will surface UX when these differ).
-      socket.on(
-        'group:keyshare_envelope',
-        async (envelope: KeyshareEnvelope) => {
-          if (__DEV__) console.log('[Socket] group:keyshare_envelope', envelope.group_id);
-          try {
-            const device = await getOrCreateDeviceKey();
-            const ephemeral = b64ToBytes(envelope.ephemeral_public_key_b64);
-            const iv = b64ToBytes(envelope.iv_b64);
-            const ciphertext = b64ToBytes(envelope.ciphertext_b64);
-            const groupKey = joinerDecryptGroupKey(
-              device.privateScalar,
-              device.publicKey,
-              { ephemeralPublicKey: ephemeral, iv, ciphertext },
-            );
-            const incomingVersion = envelope.group_key_version ?? 1;
-            const existing = await loadGroupKey(envelope.group_id);
-            if (existing) {
-              const same =
-                existing.length === groupKey.length &&
-                existing.every((b, i) => b === groupKey[i]);
-              if (same) {
-                // Idempotent duplicate — just make sure we've recorded the
-                // (possibly newer) version number and move on.
-                await storeGroupKey(envelope.group_id, groupKey, incomingVersion);
-                return;
-              }
-              // Different key. This is a rotation (admin regenerated) iff the
-              // incoming version is strictly higher — then it MUST win or the
-              // group would split-brain. A same-or-lower version with
-              // different bytes is a conflict we refuse (would silently brick
-              // photos encrypted under our current key).
-              const existingVersion = await loadGroupKeyVersion(envelope.group_id);
-              if (incomingVersion <= existingVersion) {
-                if (__DEV__) {
-                  console.warn(
-                    '[Socket] keyshare_envelope conflicts with existing key at same/older version; ignored',
-                  );
-                }
-                return;
-              }
-              if (__DEV__) {
-                console.log(
-                  '[Socket] keyshare_envelope rotates group key',
-                  envelope.group_id,
-                  `v${existingVersion}→v${incomingVersion}`,
-                );
-              }
+      socket.on('group:keyshare_envelope', async (envelope: KeyshareEnvelope) => {
+        if (__DEV__) console.log('[Socket] group:keyshare_envelope', envelope.group_id);
+        try {
+          const device = await getOrCreateDeviceKey();
+          const ephemeral = b64ToBytes(envelope.ephemeral_public_key_b64);
+          const iv = b64ToBytes(envelope.iv_b64);
+          const ciphertext = b64ToBytes(envelope.ciphertext_b64);
+          const groupKey = joinerDecryptGroupKey(device.privateScalar, device.publicKey, {
+            ephemeralPublicKey: ephemeral,
+            iv,
+            ciphertext,
+          });
+          const incomingVersion = envelope.group_key_version ?? 1;
+          const existing = await loadGroupKey(envelope.group_id);
+          if (existing) {
+            const same = existing.length === groupKey.length && existing.every((b, i) => b === groupKey[i]);
+            if (same) {
+              // Idempotent duplicate — just make sure we've recorded the
+              // (possibly newer) version number and move on.
+              await storeGroupKey(envelope.group_id, groupKey, incomingVersion);
+              return;
             }
-            await storeGroupKey(envelope.group_id, groupKey, incomingVersion);
-            queryClient.invalidateQueries({ queryKey: ['groups'] });
-          } catch (err) {
-            if (__DEV__) console.warn('[Socket] keyshare_envelope decrypt failed', err);
+            // Different key. This is a rotation (admin regenerated) iff the
+            // incoming version is strictly higher — then it MUST win or the
+            // group would split-brain. A same-or-lower version with
+            // different bytes is a conflict we refuse (would silently brick
+            // photos encrypted under our current key).
+            const existingVersion = await loadGroupKeyVersion(envelope.group_id);
+            if (incomingVersion <= existingVersion) {
+              if (__DEV__) {
+                console.warn('[Socket] keyshare_envelope conflicts with existing key at same/older version; ignored');
+              }
+              return;
+            }
+            if (__DEV__) {
+              console.log(
+                '[Socket] keyshare_envelope rotates group key',
+                envelope.group_id,
+                `v${existingVersion}→v${incomingVersion}`,
+              );
+            }
           }
-        },
-      );
+          await storeGroupKey(envelope.group_id, groupKey, incomingVersion);
+          queryClient.invalidateQueries({ queryKey: ['groups'] });
+        } catch (err) {
+          if (__DEV__) console.warn('[Socket] keyshare_envelope decrypt failed', err);
+        }
+      });
 
       // Loser of the courier race — server picked someone else. No-op.
       socket.on('group:keyshare_cancelled', () => {
@@ -294,21 +282,18 @@ export function useSocket() {
       // pull the new one via the recovery handshake. The admin's device
       // (which just minted the key) will courier it back and our
       // keyshare_envelope handler overwrites on higher version.
-      socket.on(
-        'group:key_rotated',
-        async (payload: { group_id: string; group_key_version: number }) => {
-          if (__DEV__) console.log('[Socket] group:key_rotated', payload);
-          try {
-            const localVersion = await loadGroupKeyVersion(payload.group_id);
-            if (payload.group_key_version > localVersion) {
-              const { device_id } = await getOrCreateDeviceKey();
-              await requestKeyshare({ group_id: payload.group_id, device_id });
-            }
-          } catch (err) {
-            if (__DEV__) console.warn('[Socket] key_rotated handling failed', err);
+      socket.on('group:key_rotated', async (payload: { group_id: string; group_key_version: number }) => {
+        if (__DEV__) console.log('[Socket] group:key_rotated', payload);
+        try {
+          const localVersion = await loadGroupKeyVersion(payload.group_id);
+          if (payload.group_key_version > localVersion) {
+            const { device_id } = await getOrCreateDeviceKey();
+            await requestKeyshare({ group_id: payload.group_id, device_id });
           }
-        },
-      );
+        } catch (err) {
+          if (__DEV__) console.warn('[Socket] key_rotated handling failed', err);
+        }
+      });
     }
 
     // Fetch user's groups and join the corresponding rooms

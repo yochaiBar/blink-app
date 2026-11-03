@@ -1,9 +1,5 @@
 import { useEffect, useRef } from 'react';
-import {
-  bytesToB64,
-  computeAttestation,
-  getOrCreateDeviceKey,
-} from '@/services/groupCrypto';
+import { bytesToB64, computeAttestation, getOrCreateDeviceKey } from '@/services/groupCrypto';
 import { getAccessToken, registerDeviceKey } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 

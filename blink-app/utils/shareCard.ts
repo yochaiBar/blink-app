@@ -9,9 +9,7 @@ import type { View } from 'react-native';
  * Captures the ShareCard component as a high-resolution PNG.
  * The ref should point to the View that wraps the ShareCard.
  */
-export async function captureShareCard(
-  viewRef: RefObject<View>,
-): Promise<string> {
+export async function captureShareCard(viewRef: RefObject<View>): Promise<string> {
   if (!viewRef.current) {
     throw new Error('Share card view ref is not available');
   }
@@ -52,10 +50,7 @@ export async function saveToCameraRoll(uri: string): Promise<boolean> {
   const { status } = await MediaLibrary.requestPermissionsAsync();
 
   if (status !== 'granted') {
-    Alert.alert(
-      'Permission Required',
-      'Please allow access to your photo library to save images.',
-    );
+    Alert.alert('Permission Required', 'Please allow access to your photo library to save images.');
     return false;
   }
 

@@ -24,10 +24,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundleIdentifier: 'com.yochaibar.blinks',
     associatedDomains: ['applinks:blink.app'],
     infoPlist: {
-      NSCameraUsageDescription:
-        'Blink needs camera access to capture snap challenges with your friends.',
-      NSPhotoLibraryUsageDescription:
-        'Blink needs photo library access to set your profile picture.',
+      NSCameraUsageDescription: 'Blink needs camera access to capture snap challenges with your friends.',
+      NSPhotoLibraryUsageDescription: 'Blink needs photo library access to set your profile picture.',
       ITSAppUsesNonExemptEncryption: false,
     },
     privacyManifests: {
@@ -54,33 +52,25 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypePhoneNumber',
           NSPrivacyCollectedDataTypeLinked: true,
           NSPrivacyCollectedDataTypeTracking: false,
-          NSPrivacyCollectedDataTypePurposes: [
-            'NSPrivacyCollectedDataTypePurposeAppFunctionality',
-          ],
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
         },
         {
           NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypePhotosOrVideos',
           NSPrivacyCollectedDataTypeLinked: true,
           NSPrivacyCollectedDataTypeTracking: false,
-          NSPrivacyCollectedDataTypePurposes: [
-            'NSPrivacyCollectedDataTypePurposeAppFunctionality',
-          ],
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
         },
         {
           NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypeOtherUserContent',
           NSPrivacyCollectedDataTypeLinked: true,
           NSPrivacyCollectedDataTypeTracking: false,
-          NSPrivacyCollectedDataTypePurposes: [
-            'NSPrivacyCollectedDataTypePurposeAppFunctionality',
-          ],
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
         },
         {
           NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypeDeviceID',
           NSPrivacyCollectedDataTypeLinked: false,
           NSPrivacyCollectedDataTypeTracking: false,
-          NSPrivacyCollectedDataTypePurposes: [
-            'NSPrivacyCollectedDataTypePurposeAppFunctionality',
-          ],
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
         },
       ],
       NSPrivacyTracking: false,
@@ -120,15 +110,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-camera',
       {
-        cameraPermission:
-          'Blink needs camera access to capture snap challenges with your friends.',
+        cameraPermission: 'Blink needs camera access to capture snap challenges with your friends.',
       },
     ],
     [
       'expo-image-picker',
       {
-        photosPermission:
-          'Blink needs photo library access to set your profile picture.',
+        photosPermission: 'Blink needs photo library access to set your profile picture.',
       },
     ],
     [

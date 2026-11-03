@@ -15,11 +15,7 @@ export interface BlurredPreviewCardProps {
   activityPulseProps?: ActivityPulseProps;
 }
 
-const PLACEHOLDER_COLORS = [
-  `${theme.coral}30`,
-  `${theme.purple}25`,
-  `${theme.blue}20`,
-];
+const PLACEHOLDER_COLORS = [`${theme.coral}30`, `${theme.purple}25`, `${theme.blue}20`];
 
 export default function BlurredPreviewCard({
   respondedCount,
@@ -53,7 +49,7 @@ export default function BlurredPreviewCard({
           duration: 2000,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     breatheLoop.start();
     return () => breatheLoop.stop();
@@ -86,11 +82,7 @@ export default function BlurredPreviewCard({
               styles.fakeCard,
               {
                 backgroundColor: color,
-                transform: [
-                  { translateY },
-                  { scale },
-                  { rotate: `${(i - 1) * 2}deg` },
-                ],
+                transform: [{ translateY }, { scale }, { rotate: `${(i - 1) * 2}deg` }],
                 zIndex: 3 - i,
                 top: i * 6,
                 left: i * 4,
@@ -122,36 +114,23 @@ export default function BlurredPreviewCard({
                 key={i}
                 source={{
                   uri:
-                    u.avatarUrl ||
-                    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
+                    u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
                 }}
-                style={[
-                  styles.respondedAvatar,
-                  { marginLeft: i > 0 ? -6 : 0, zIndex: 4 - i },
-                ]}
+                style={[styles.respondedAvatar, { marginLeft: i > 0 ? -6 : 0, zIndex: 4 - i }]}
                 contentFit="cover"
               />
             ))}
-            {respondedUsers.length > 4 && (
-              <Text style={styles.moreText}>
-                +{respondedUsers.length - 4}
-              </Text>
-            )}
+            {respondedUsers.length > 4 && <Text style={styles.moreText}>+{respondedUsers.length - 4}</Text>}
           </View>
         )}
 
         {totalReactions > 0 && (
           <Text style={styles.reactionsText}>
-            {totalReactions} reaction{totalReactions !== 1 ? 's' : ''} so far{' '}
-            {topReactionEmoji || '\uD83D\uDD25'}
+            {totalReactions} reaction{totalReactions !== 1 ? 's' : ''} so far {topReactionEmoji || '\uD83D\uDD25'}
           </Text>
         )}
 
-        <TouchableOpacity
-          style={styles.respondButton}
-          onPress={onRespond}
-          activeOpacity={0.85}
-        >
+        <TouchableOpacity style={styles.respondButton} onPress={onRespond} activeOpacity={0.85}>
           <Text style={styles.respondButtonText}>Respond to unlock</Text>
         </TouchableOpacity>
       </View>

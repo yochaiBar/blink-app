@@ -9,18 +9,21 @@ module.exports = {
   },
   clearMocks: true,
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
-      diagnostics: false,
-      tsconfig: {
-        jsx: 'react-jsx',
-        esModuleInterop: true,
-        strict: true,
-        moduleResolution: 'node',
-        paths: {
-          '@/*': ['./*'],
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        diagnostics: false,
+        tsconfig: {
+          jsx: 'react-jsx',
+          esModuleInterop: true,
+          strict: true,
+          moduleResolution: 'node',
+          paths: {
+            '@/*': ['./*'],
+          },
         },
       },
-    }],
+    ],
     '^.+\\.jsx?$': 'babel-jest',
   },
   transformIgnorePatterns: [
@@ -28,12 +31,7 @@ module.exports = {
     // that exercise the real crypto can import it.
     'node_modules/(?!(expo-.*|@expo/.*|react-native|@react-native|zustand|@noble)/)',
   ],
-  collectCoverageFrom: [
-    'utils/**/*.ts',
-    'services/**/*.ts',
-    'stores/**/*.ts',
-    '!**/*.d.ts',
-  ],
+  collectCoverageFrom: ['utils/**/*.ts', 'services/**/*.ts', 'stores/**/*.ts', '!**/*.d.ts'],
   coverageDirectory: 'coverage',
   verbose: true,
   testTimeout: 10000,

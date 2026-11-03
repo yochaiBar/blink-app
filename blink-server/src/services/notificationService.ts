@@ -8,7 +8,6 @@ import { UserDisplayNameRow } from '../types/db';
 interface UserSummaryRow {
   user_id: string;
   display_name: string;
-  avatar_url: string | null;
 }
 
 /**
@@ -18,11 +17,11 @@ export async function notifyUserOfResponse(
   triggeredBy: string,
   responderId: string,
   groupId: string,
-  challengeId: string
+  challengeId: string,
 ): Promise<void> {
   const responderUser = await query<UserDisplayNameRow>(
     `SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`,
-    [responderId]
+    [responderId],
   );
   const responderName = responderUser.rows[0]?.display_name || 'Someone';
 
@@ -32,42 +31,38 @@ export async function notifyUserOfResponse(
     'New Response!',
     `${responderName} responded to your challenge`,
     groupId,
-    responderId
+    responderId,
   );
 
   // Fire-and-forget push notification to challenge creator
-  sendPushToUser(
-    triggeredBy,
-    'New Response!',
-    `${responderName} responded to your challenge`,
-    { type: 'snap_received', groupId, challengeId }
-  ).catch(() => {});
+  sendPushToUser(triggeredBy, 'New Response!', `${responderName} responded to your challenge`, {
+    type: 'snap_received',
+    groupId,
+    challengeId,
+  }).catch(() => {});
 }
 
 /**
  * Social Obligation Loop: notify non-responders about who has already responded.
  * Emits a challenge:progress socket event and sends personalized push messages.
  */
-export async function notifySocialObligation(
-  challengeId: string,
-  groupId: string
-): Promise<void> {
+export async function notifySocialObligation(challengeId: string, groupId: string): Promise<void> {
   // Get all group members with names
   const allMembers = await query<UserSummaryRow>(
-    `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
+    `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name
      FROM group_members gm
      JOIN users u ON u.id = gm.user_id
      WHERE gm.group_id = $1`,
-    [groupId]
+    [groupId],
   );
 
-  // Get who has responded so far (non-skip)
+  // Get who has responded so far
   const allResponded = await query<UserSummaryRow>(
-    `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
+    `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
-     WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
-    [challengeId]
+     WHERE cr.challenge_id = $1`,
+    [challengeId],
   );
   const respondedUserIds = new Set(allResponded.rows.map((r) => r.user_id));
 
@@ -79,7 +74,6 @@ export async function notifySocialObligation(
     respondedUsers: allResponded.rows.map((r) => ({
       userId: r.user_id,
       displayName: r.display_name,
-      avatarUrl: r.avatar_url,
     })),
   });
 
@@ -98,33 +92,27 @@ export async function notifySocialObligation(
       pushBody = `${respondedNames[0]}, ${respondedNames[1]} and ${othersCount} other${othersCount > 1 ? 's' : ''} responded — you're the only ones left!`;
     }
 
-    sendPushToUser(
-      pending.user_id,
-      'Your friends are waiting!',
-      pushBody,
-      { type: 'social_obligation', groupId, challengeId }
-    ).catch(() => {});
+    sendPushToUser(pending.user_id, 'Your friends are waiting!', pushBody, {
+      type: 'social_obligation',
+      groupId,
+      challengeId,
+    }).catch(() => {});
   }
 }
 
 /**
  * Notify all group members (except the triggerer) about a new challenge.
  */
-export async function notifyGroupOfChallenge(
-  groupId: string,
-  challengeId: string,
-  challengeType: string,
-  triggeredBy: string
-): Promise<void> {
+export async function notifyGroupOfChallenge(groupId: string, challengeId: string, triggeredBy: string): Promise<void> {
   const groupMembers = await query(
     `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name FROM group_members gm
      JOIN users u ON u.id = gm.user_id
      WHERE gm.group_id = $1 AND gm.user_id != $2`,
-    [groupId, triggeredBy]
+    [groupId, triggeredBy],
   );
   const triggerUser = await query<UserDisplayNameRow>(
     `SELECT COALESCE(display_name, phone_number) AS display_name FROM users WHERE id = $1`,
-    [triggeredBy]
+    [triggeredBy],
   );
   const triggerName = triggerUser.rows[0]?.display_name || 'Someone';
   const groupInfo = await query<{ name: string }>(`SELECT name FROM groups WHERE id = $1`, [groupId]);
@@ -135,9 +123,9 @@ export async function notifyGroupOfChallenge(
       member.user_id,
       'challenge_started',
       'New Challenge!',
-      `${triggerName} started a ${challengeType} challenge in ${groupName}`,
+      `${triggerName} started a snap challenge in ${groupName}`,
       groupId,
-      triggeredBy
+      triggeredBy,
     );
   }
 
@@ -145,8 +133,8 @@ export async function notifyGroupOfChallenge(
   sendPushToGroup(
     groupId,
     'New Challenge!',
-    `${triggerName} started a ${challengeType} challenge in ${groupName}`,
-    { type: 'challenge_started', challengeId, groupId, challengeType, screen: 'challenge' },
-    triggeredBy
+    `${triggerName} started a snap challenge in ${groupName}`,
+    { type: 'challenge_started', challengeId, groupId, challengeType: 'snap', screen: 'challenge' },
+    triggeredBy,
   ).catch(() => {});
 }

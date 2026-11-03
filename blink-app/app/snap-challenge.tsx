@@ -88,16 +88,16 @@ function SnapChallengeScreen() {
   });
 
   const challengeData = challengeQuery.data;
-  const promptText =
-    challengeData?.prompt_text ?? challengeData?.prompt ?? null;
+  const promptText = challengeData?.prompt_text ?? challengeData?.prompt ?? null;
   const resolvedChallengeId = challengeId ?? challengeData?.id;
 
   // Check if the challenge has expired (skip for demo mode)
-  const isExpired = !isDemo && challengeData != null && (
-    challengeData.status === 'completed' ||
-    challengeData.status === 'expired' ||
-    (challengeData.expires_at != null && new Date(challengeData.expires_at).getTime() <= Date.now())
-  );
+  const isExpired =
+    !isDemo &&
+    challengeData != null &&
+    (challengeData.status === 'completed' ||
+      challengeData.status === 'expired' ||
+      (challengeData.expires_at != null && new Date(challengeData.expires_at).getTime() <= Date.now()));
 
   // Fetch progress (who has responded)
   const progressQuery = useQuery({
@@ -125,14 +125,10 @@ function SnapChallengeScreen() {
   // ── Camera permission ──
   useEffect(() => {
     if (!permission?.granted && permission?.canAskAgain) {
-      Alert.alert(
-        'Camera Access',
-        'Blink needs your camera to capture snap challenges with friends. Allow access?',
-        [
-          { text: 'Not Now', style: 'cancel' },
-          { text: 'Allow', onPress: () => requestPermission() },
-        ]
-      );
+      Alert.alert('Camera Access', 'Blink needs your camera to capture snap challenges with friends. Allow access?', [
+        { text: 'Not Now', style: 'cancel' },
+        { text: 'Allow', onPress: () => requestPermission() },
+      ]);
     }
   }, [permission]);
 
@@ -200,8 +196,7 @@ function SnapChallengeScreen() {
       captureTimerRef.current = setInterval(() => {
         setCaptureTimer((prev) => {
           if (prev <= 1) {
-            if (captureTimerRef.current)
-              clearInterval(captureTimerRef.current);
+            if (captureTimerRef.current) clearInterval(captureTimerRef.current);
             handleCapture();
             return 0;
           }
@@ -249,7 +244,7 @@ function SnapChallengeScreen() {
             duration: 300,
             useNativeDriver: false,
           }),
-        ])
+        ]),
       ).start();
 
       // Pulsing timer text
@@ -265,7 +260,7 @@ function SnapChallengeScreen() {
             duration: 300,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       ).start();
     } else {
       edgeGlowAnim.setValue(0);
@@ -412,20 +407,12 @@ function SnapChallengeScreen() {
     }
 
     return (
-      <LinearGradient
-        colors={['#1a1a2e', '#16213e', '#0f3460']}
-        style={styles.cameraGradient}
-      >
+      <LinearGradient colors={['#1a1a2e', '#16213e', '#0f3460']} style={styles.cameraGradient}>
         <Text style={styles.cameraEmoji}>📸</Text>
-        <Text style={styles.cameraText}>
-          {isWeb ? 'Camera not available on web' : 'Camera permission needed'}
-        </Text>
+        <Text style={styles.cameraText}>{isWeb ? 'Camera not available on web' : 'Camera permission needed'}</Text>
         <Text style={styles.cameraSubtext}>Tap the shutter to capture!</Text>
         {!isWeb && !permission?.granted && (
-          <TouchableOpacity
-            style={styles.permissionBtn}
-            onPress={requestPermission}
-          >
+          <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
             <Text style={styles.permissionBtnText}>Grant Permission</Text>
           </TouchableOpacity>
         )}
@@ -445,13 +432,9 @@ function SnapChallengeScreen() {
               key={r.user_id}
               source={{
                 uri:
-                  r.avatar_url ??
-                  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
+                  r.avatar_url ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
               }}
-              style={[
-                styles.progressAvatar,
-                { marginLeft: i > 0 ? -8 : 0, zIndex: 10 - i },
-              ]}
+              style={[styles.progressAvatar, { marginLeft: i > 0 ? -8 : 0, zIndex: 10 - i }]}
               contentFit="cover"
             />
           ))}
@@ -468,10 +451,7 @@ function SnapChallengeScreen() {
     if (!promptText) return null;
     return (
       <View style={styles.promptOverlay}>
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.7)']}
-          style={styles.promptGradient}
-        >
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)']} style={styles.promptGradient}>
           <Text style={styles.promptText}>{promptText}</Text>
         </LinearGradient>
       </View>
@@ -481,10 +461,7 @@ function SnapChallengeScreen() {
   if (isExpired) {
     return (
       <View style={styles.container}>
-        <LinearGradient
-          colors={['#0A0A0F', '#1a0a1e', '#0A0A0F']}
-          style={StyleSheet.absoluteFill}
-        />
+        <LinearGradient colors={['#0A0A0F', '#1a0a1e', '#0A0A0F']} style={StyleSheet.absoluteFill} />
         <View style={[styles.expiredContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <View style={styles.expiredContent}>
             <View style={styles.expiredIconCircle}>
@@ -510,10 +487,7 @@ function SnapChallengeScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#0A0A0F', '#1a0a1e', '#0A0A0F']}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={['#0A0A0F', '#1a0a1e', '#0A0A0F']} style={StyleSheet.absoluteFill} />
 
       {phase === 'countdown' && (
         <View style={[styles.countdownContainer, { paddingTop: insets.top }]}>
@@ -523,10 +497,7 @@ function SnapChallengeScreen() {
             <View style={styles.countdownCameraOverlay} />
           </View>
 
-          <TouchableOpacity
-            style={[styles.closeBtn, { top: insets.top + 10 }]}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={[styles.closeBtn, { top: insets.top + 10 }]} onPress={() => router.back()}>
             <X size={22} color={theme.text} />
           </TouchableOpacity>
 
@@ -568,18 +539,10 @@ function SnapChallengeScreen() {
           </Animated.View>
 
           {/* Edge glow for last 3 seconds */}
-          {isUrgent && (
-            <Animated.View
-              style={[styles.edgeGlow, { opacity: edgeGlowOpacity }]}
-              pointerEvents="none"
-            />
-          )}
+          {isUrgent && <Animated.View style={[styles.edgeGlow, { opacity: edgeGlowOpacity }]} pointerEvents="none" />}
 
           {/* Overlay UI on top of camera */}
-          <TouchableOpacity
-            style={[styles.closeBtn, { top: insets.top + 10 }]}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={[styles.closeBtn, { top: insets.top + 10 }]} onPress={() => router.back()}>
             <X size={22} color={theme.text} />
           </TouchableOpacity>
 
@@ -617,12 +580,7 @@ function SnapChallengeScreen() {
 
           <View style={{ flex: 1 }} />
 
-          <View
-            style={[
-              styles.captureControls,
-              { paddingBottom: insets.bottom + 20 },
-            ]}
-          >
+          <View style={[styles.captureControls, { paddingBottom: insets.bottom + 20 }]}>
             <View style={styles.captureControlsInner}>
               <View style={{ width: 50 }} />
               <TouchableOpacity
@@ -634,10 +592,7 @@ function SnapChallengeScreen() {
                 <View style={styles.shutterInner} />
               </TouchableOpacity>
               {hasCamera ? (
-                <TouchableOpacity
-                  style={styles.flipBtn}
-                  onPress={toggleFacing}
-                >
+                <TouchableOpacity style={styles.flipBtn} onPress={toggleFacing}>
                   <SwitchCamera size={22} color={theme.white} />
                 </TouchableOpacity>
               ) : (
@@ -653,16 +608,9 @@ function SnapChallengeScreen() {
           {/* Full-screen preview background */}
           <View style={styles.previewImageFullscreen}>
             {capturedUri ? (
-              <Image
-                source={{ uri: capturedUri }}
-                style={styles.previewPhoto}
-                contentFit="cover"
-              />
+              <Image source={{ uri: capturedUri }} style={styles.previewPhoto} contentFit="cover" />
             ) : (
-              <LinearGradient
-                colors={['#1a1a2e', '#16213e', '#0f3460']}
-                style={styles.previewGradient}
-              >
+              <LinearGradient colors={['#1a1a2e', '#16213e', '#0f3460']} style={styles.previewGradient}>
                 <Text style={styles.previewEmoji}>📸</Text>
                 <Text style={styles.previewText}>Snap captured!</Text>
               </LinearGradient>
@@ -671,12 +619,7 @@ function SnapChallengeScreen() {
 
           {/* Controls overlaid at the bottom */}
           <View style={{ flex: 1 }} />
-          <View
-            style={[
-              styles.previewControls,
-              { paddingBottom: insets.bottom + 20 },
-            ]}
-          >
+          <View style={[styles.previewControls, { paddingBottom: insets.bottom + 20 }]}>
             <TouchableOpacity style={styles.retakeBtn} onPress={handleRetake}>
               <RotateCcw size={20} color={theme.text} />
               <Text style={styles.retakeBtnText}>Retake</Text>
@@ -694,19 +637,13 @@ function SnapChallengeScreen() {
         </View>
       )}
 
-      <Animated.View
-        style={[styles.flash, { opacity: flashAnim }]}
-        pointerEvents="none"
-      />
+      <Animated.View style={[styles.flash, { opacity: flashAnim }]} pointerEvents="none" />
     </View>
   );
 }
 
 // Error boundary to catch crashes and show error instead of crashing
-class SnapErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { error: Error | null }
-> {
+class SnapErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
 
   static getDerivedStateFromError(error: Error) {
@@ -720,14 +657,24 @@ class SnapErrorBoundary extends React.Component<
   render() {
     if (this.state.error) {
       return (
-        <View style={{ flex: 1, backgroundColor: '#0A0A0F', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <Text style={{ color: '#FF6B4A', fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>Something went wrong</Text>
+        <View
+          style={{ flex: 1, backgroundColor: '#0A0A0F', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+        >
+          <Text style={{ color: '#FF6B4A', fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
+            Something went wrong
+          </Text>
           <ScrollView style={{ maxHeight: 200 }}>
             <Text style={{ color: '#fff', fontSize: 12 }}>{this.state.error.message}</Text>
             <Text style={{ color: '#888', fontSize: 10, marginTop: 5 }}>{this.state.error.stack?.slice(0, 500)}</Text>
           </ScrollView>
           <TouchableOpacity
-            style={{ marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: '#FF6B4A' }}
+            style={{
+              marginTop: 20,
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              borderRadius: 12,
+              backgroundColor: '#FF6B4A',
+            }}
             onPress={() => router.back()}
           >
             <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', textAlign: 'center' }}>Go Back</Text>

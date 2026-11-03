@@ -30,25 +30,14 @@ import {
 import './setup';
 
 import photoRelayRouter from '../routes/photos/relay';
-import {
-  dispatchPendingPickupsForUser,
-  expireStalePendingPickups,
-} from '../services/relayHub';
+import { dispatchPendingPickupsForUser, expireStalePendingPickups } from '../services/relayHub';
 import { query } from '../config/database';
-import {
-  emitToUserDevice,
-  emitToUserWithAck,
-  isUserOnline,
-} from '../socket';
+import { emitToUserDevice, emitToUserWithAck, isUserOnline } from '../socket';
 
 const mockQuery = query as jest.MockedFunction<typeof query>;
 const mockIsUserOnline = isUserOnline as jest.MockedFunction<typeof isUserOnline>;
-const mockEmitWithAck = emitToUserWithAck as jest.MockedFunction<
-  typeof emitToUserWithAck
->;
-const mockEmitToUserDevice = emitToUserDevice as jest.MockedFunction<
-  typeof emitToUserDevice
->;
+const mockEmitWithAck = emitToUserWithAck as jest.MockedFunction<typeof emitToUserWithAck>;
+const mockEmitToUserDevice = emitToUserDevice as jest.MockedFunction<typeof emitToUserDevice>;
 
 const app = createTestApp(photoRelayRouter, '/api/photos');
 
@@ -56,9 +45,9 @@ const TEST_DEVICE_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5e';
 
 // Canonical valid base64 strings of the right lengths. 12 bytes is divisible
 // by 3 so the encoding has NO padding; 16 bytes has 2 padding chars.
-const IV_B64 = 'AAAAAAAAAAAAAAAA';            // 16 chars (12 bytes, no padding)
+const IV_B64 = 'AAAAAAAAAAAAAAAA'; // 16 chars (12 bytes, no padding)
 const TAG_B64 = 'AAAAAAAAAAAAAAAAAAAAAA=='; // 22 chars + '==' (16 bytes)
-const CIPHERTEXT_B64 = 'YWJjZA==';            // "abcd" — any small valid base64 works
+const CIPHERTEXT_B64 = 'YWJjZA=='; // "abcd" — any small valid base64 works
 
 function validBody(overrides: Record<string, unknown> = {}) {
   return {
@@ -106,8 +95,9 @@ describe('POST /api/photos/relay — validation', () => {
   });
 
   it('rejects with 400 on too many recipients (>64)', async () => {
-    const many = Array.from({ length: 65 }, (_, i) =>
-      `00000000-0000-4000-8000-${(i + 1).toString().padStart(12, '0')}`,
+    const many = Array.from(
+      { length: 65 },
+      (_, i) => `00000000-0000-4000-8000-${(i + 1).toString().padStart(12, '0')}`,
     );
     const res = await request(app)
       .post('/api/photos/relay')
@@ -135,10 +125,7 @@ describe('POST /api/photos/relay — dispatch', () => {
     mockIsUserOnline.mockResolvedValueOnce(true);
     mockEmitWithAck.mockResolvedValueOnce({ acked: 1, nacked: 0, failed: 0 });
 
-    const res = await request(app)
-      .post('/api/photos/relay')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody());
+    const res = await request(app).post('/api/photos/relay').set('Authorization', `Bearer ${token}`).send(validBody());
 
     expect(res.status).toBe(200);
     expect(res.body.delivered_user_ids).toEqual([TEST_USER_ID_2]);
@@ -165,19 +152,14 @@ describe('POST /api/photos/relay — dispatch', () => {
       .mockResolvedValueOnce(queryResult([])); // INSERT pending row
     mockIsUserOnline.mockResolvedValueOnce(false);
 
-    const res = await request(app)
-      .post('/api/photos/relay')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody());
+    const res = await request(app).post('/api/photos/relay').set('Authorization', `Bearer ${token}`).send(validBody());
 
     expect(res.status).toBe(200);
     expect(res.body.delivered_user_ids).toEqual([]);
     expect(res.body.queued_user_ids).toEqual([TEST_USER_ID_2]);
     expect(mockEmitWithAck).not.toHaveBeenCalled();
     // Find the INSERT pending call (might be 3rd or 4th depending on ordering).
-    const insertCall = mockQuery.mock.calls.find((c) =>
-      String(c[0]).match(/INSERT INTO pending_photo_pickups/i),
-    );
+    const insertCall = mockQuery.mock.calls.find((c) => String(c[0]).match(/INSERT INTO pending_photo_pickups/i));
     expect(insertCall).toBeDefined();
     expect(insertCall![1]).toEqual([
       TEST_RESPONSE_ID,
@@ -197,10 +179,7 @@ describe('POST /api/photos/relay — dispatch', () => {
     mockIsUserOnline.mockResolvedValueOnce(true);
     mockEmitWithAck.mockResolvedValueOnce({ acked: 0, nacked: 1, failed: 0 });
 
-    const res = await request(app)
-      .post('/api/photos/relay')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody());
+    const res = await request(app).post('/api/photos/relay').set('Authorization', `Bearer ${token}`).send(validBody());
 
     expect(res.status).toBe(200);
     expect(res.body.delivered_user_ids).toEqual([]);
@@ -229,12 +208,7 @@ describe('POST /api/photos/relay — dispatch', () => {
 
   it('drops blocked recipients (symmetric: either direction)', async () => {
     mockQuery
-      .mockResolvedValueOnce(
-        queryResult([
-          { user_id: TEST_USER_ID_2 },
-          { user_id: TEST_USER_ID_3 },
-        ]),
-      )
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }, { user_id: TEST_USER_ID_3 }]))
       .mockResolvedValueOnce(
         // Sender blocked USER_3 → drop USER_3
         queryResult([{ blocker_id: TEST_USER_ID, blocked_id: TEST_USER_ID_3 }]),
@@ -253,9 +227,7 @@ describe('POST /api/photos/relay — dispatch', () => {
   });
 
   it('removes the sender from the recipient list (defensive)', async () => {
-    mockQuery
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }]))
-      .mockResolvedValueOnce(queryResult([]));
+    mockQuery.mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])).mockResolvedValueOnce(queryResult([]));
     mockIsUserOnline.mockResolvedValueOnce(true);
     mockEmitWithAck.mockResolvedValueOnce({ acked: 1, nacked: 0, failed: 0 });
 

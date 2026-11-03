@@ -26,7 +26,7 @@ export default React.memo(function SpotlightCard({ spotlight }: SpotlightCardPro
           duration: 2000,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     ).start();
   }, [shimmerAnim]);
 
@@ -52,11 +52,7 @@ export default React.memo(function SpotlightCard({ spotlight }: SpotlightCardPro
 
         <View style={styles.profileRow}>
           <View style={styles.avatarRing}>
-            <Image
-              source={{ uri: spotlight.userAvatar }}
-              style={styles.avatar}
-              contentFit="cover"
-            />
+            <Image source={{ uri: spotlight.userAvatar }} style={styles.avatar} contentFit="cover" />
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.name}>{spotlight.userName}</Text>

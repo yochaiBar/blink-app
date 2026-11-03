@@ -6,13 +6,7 @@
 import './setup';
 
 import * as SecureStore from 'expo-secure-store';
-import {
-  storeGroupKey,
-  loadGroupKey,
-  loadGroupKeyVersion,
-  deleteGroupKey,
-  newGroupKey,
-} from '../services/groupCrypto';
+import { storeGroupKey, loadGroupKey, loadGroupKeyVersion, deleteGroupKey, newGroupKey } from '../services/groupCrypto';
 
 const GROUP_ID = 'group-abc';
 

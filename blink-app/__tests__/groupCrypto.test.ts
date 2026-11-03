@@ -91,16 +91,14 @@ describe('groupCrypto — AES-256-GCM', () => {
   it('rejects keys of the wrong length', () => {
     const shortKey = new Uint8Array(16);
     expect(() => aesGcmEncrypt(shortKey, new Uint8Array([1]))).toThrow(/32 bytes/);
-    expect(() =>
-      aesGcmDecrypt(shortKey, { iv: new Uint8Array(12), ciphertext: new Uint8Array(17) }),
-    ).toThrow(/32 bytes/);
+    expect(() => aesGcmDecrypt(shortKey, { iv: new Uint8Array(12), ciphertext: new Uint8Array(17) })).toThrow(
+      /32 bytes/,
+    );
   });
 
   it('rejects ciphertext shorter than the GCM tag', () => {
     const key = newGroupKey();
-    expect(() =>
-      aesGcmDecrypt(key, { iv: new Uint8Array(12), ciphertext: new Uint8Array(8) }),
-    ).toThrow(/GCM tag/);
+    expect(() => aesGcmDecrypt(key, { iv: new Uint8Array(12), ciphertext: new Uint8Array(8) })).toThrow(/GCM tag/);
   });
 });
 
@@ -135,9 +133,7 @@ describe('groupCrypto — courier handshake', () => {
     const groupKey = newGroupKey();
 
     const envelope = courierEncryptGroupKey(joinerPub, groupKey);
-    expect(() =>
-      joinerDecryptGroupKey(attackerPriv, joinerPub, envelope),
-    ).toThrow();
+    expect(() => joinerDecryptGroupKey(attackerPriv, joinerPub, envelope)).toThrow();
   });
 
   it('fails closed when the salt is tampered (substituted joiner pub)', () => {
@@ -149,18 +145,12 @@ describe('groupCrypto — courier handshake', () => {
     const envelope = courierEncryptGroupKey(joinerPub, groupKey);
     // Joiner uses the WRONG public key as the salt input — HKDF derives a
     // different AEAD key and decryption must fail.
-    expect(() =>
-      joinerDecryptGroupKey(joinerPriv, fakePub, envelope),
-    ).toThrow();
+    expect(() => joinerDecryptGroupKey(joinerPriv, fakePub, envelope)).toThrow();
   });
 
   it('rejects mis-sized inputs', () => {
-    expect(() =>
-      courierEncryptGroupKey(new Uint8Array(31), newGroupKey()),
-    ).toThrow(/32 bytes/);
-    expect(() =>
-      courierEncryptGroupKey(new Uint8Array(32), new Uint8Array(31)),
-    ).toThrow(/32 bytes/);
+    expect(() => courierEncryptGroupKey(new Uint8Array(31), newGroupKey())).toThrow(/32 bytes/);
+    expect(() => courierEncryptGroupKey(new Uint8Array(32), new Uint8Array(31))).toThrow(/32 bytes/);
   });
 });
 
@@ -171,9 +161,7 @@ describe('groupCrypto — attestation', () => {
 
     const ours = computeAttestation(token, pub);
     // Recompute via Node stdlib (the path the server takes).
-    const theirs = createHmac('sha256', Buffer.from(token, 'utf8'))
-      .update(pub)
-      .digest();
+    const theirs = createHmac('sha256', Buffer.from(token, 'utf8')).update(pub).digest();
 
     expect(Buffer.from(ours)).toEqual(theirs);
   });
@@ -182,16 +170,12 @@ describe('groupCrypto — attestation', () => {
     const token = 'same-token';
     const pubA = x25519.getPublicKey(randomBytes(32));
     const pubB = x25519.getPublicKey(randomBytes(32));
-    expect(computeAttestation(token, pubA)).not.toEqual(
-      computeAttestation(token, pubB),
-    );
+    expect(computeAttestation(token, pubA)).not.toEqual(computeAttestation(token, pubB));
   });
 
   it('changes when the token changes', () => {
     const pub = x25519.getPublicKey(randomBytes(32));
-    expect(computeAttestation('token-a', pub)).not.toEqual(
-      computeAttestation('token-b', pub),
-    );
+    expect(computeAttestation('token-a', pub)).not.toEqual(computeAttestation('token-b', pub));
   });
 
   it('produces a 32-byte output', () => {
@@ -207,9 +191,7 @@ describe('groupCrypto — X25519 key derivation', () => {
   });
 
   it('derives different public keys from different seeds', () => {
-    expect(x25519.getPublicKey(randomBytes(32))).not.toEqual(
-      x25519.getPublicKey(randomBytes(32)),
-    );
+    expect(x25519.getPublicKey(randomBytes(32))).not.toEqual(x25519.getPublicKey(randomBytes(32)));
   });
 
   it('ECDH is commutative (alice→bob === bob→alice)', () => {
@@ -217,8 +199,6 @@ describe('groupCrypto — X25519 key derivation', () => {
     const b = randomBytes(32);
     const aPub = x25519.getPublicKey(a);
     const bPub = x25519.getPublicKey(b);
-    expect(x25519.getSharedSecret(a, bPub)).toEqual(
-      x25519.getSharedSecret(b, aPub),
-    );
+    expect(x25519.getSharedSecret(a, bPub)).toEqual(x25519.getSharedSecret(b, aPub));
   });
 });

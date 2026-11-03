@@ -1,5 +1,14 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList, Platform, KeyboardAvoidingView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  FlatList,
+  Platform,
+  KeyboardAvoidingView,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, MessageCircle } from 'lucide-react-native';
@@ -16,13 +25,13 @@ export default function GroupPromptScreen() {
   const router = useRouter();
   const { groups, respondToPrompt, getPromptResponses, user } = useApp();
 
-  const group = groups.find(g => g.id === groupId);
+  const group = groups.find((g) => g.id === groupId);
   const prompt = group?.activePrompt;
   const responses = getPromptResponses(prompt?.id ?? '');
 
   const [answer, setAnswer] = useState<string>('');
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const hasResponded = responses.some(r => r.userId === user.id);
+  const hasResponded = responses.some((r) => r.userId === user.id);
 
   const handleSubmitResponse = useCallback(() => {
     if (!prompt) return;
@@ -34,57 +43,69 @@ export default function GroupPromptScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
 
-    const answerText = prompt.type === 'open'
-      ? answer.trim()
-      : prompt.options?.[selectedOption ?? 0] ?? '';
+    const answerText = prompt.type === 'open' ? answer.trim() : (prompt.options?.[selectedOption ?? 0] ?? '');
 
     respondToPrompt(prompt.id, answerText, selectedOption ?? undefined);
     setAnswer('');
     setSelectedOption(null);
   }, [prompt, answer, selectedOption, respondToPrompt]);
 
-  const getOptionVotes = useCallback((optionIndex: number) => {
-    return responses.filter(r => r.selectedOption === optionIndex).length;
-  }, [responses]);
+  const getOptionVotes = useCallback(
+    (optionIndex: number) => {
+      return responses.filter((r) => r.selectedOption === optionIndex).length;
+    },
+    [responses],
+  );
 
-  const totalVotes = responses.filter(r => r.selectedOption !== undefined).length;
+  const totalVotes = responses.filter((r) => r.selectedOption !== undefined).length;
 
-  const renderResponse = useCallback(({ item }: { item: PromptResponse }) => (
-    <View style={styles.responseCard}>
-      <Image source={{ uri: item.userAvatar }} style={styles.responseAvatar} contentFit="cover" />
-      <View style={styles.responseContent}>
-        <View style={styles.responseHeader}>
-          <Text style={styles.responseName}>{item.userName}</Text>
-          <Text style={styles.responseTime}>{getRelativeTime(item.timestamp)}</Text>
+  const renderResponse = useCallback(
+    ({ item }: { item: PromptResponse }) => (
+      <View style={styles.responseCard}>
+        <Image source={{ uri: item.userAvatar }} style={styles.responseAvatar} contentFit="cover" />
+        <View style={styles.responseContent}>
+          <View style={styles.responseHeader}>
+            <Text style={styles.responseName}>{item.userName}</Text>
+            <Text style={styles.responseTime}>{getRelativeTime(item.timestamp)}</Text>
+          </View>
+          <Text style={styles.responseText}>{item.answer}</Text>
         </View>
-        <Text style={styles.responseText}>{item.answer}</Text>
       </View>
-    </View>
-  ), []);
+    ),
+    [],
+  );
 
   if (!group || !prompt) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={{ marginLeft: 20, marginTop: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' }}
+          style={{
+            marginLeft: 20,
+            marginTop: 10,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
         >
           <ArrowLeft size={22} color={theme.text} />
         </TouchableOpacity>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <Text style={{ fontSize: 48, marginBottom: 16 }}>😅</Text>
           <Text style={{ color: theme.text, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Prompt not found</Text>
-          <Text style={{ color: theme.textMuted, fontSize: 14, textAlign: 'center' }}>This prompt may have expired or been removed.</Text>
+          <Text style={{ color: theme.textMuted, fontSize: 14, textAlign: 'center' }}>
+            This prompt may have expired or been removed.
+          </Text>
         </View>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.inner, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -100,7 +121,9 @@ export default function GroupPromptScreen() {
         <View style={[styles.promptCard, { borderColor: `${group.color}40` }]}>
           <Text style={styles.promptQuestion}>{prompt.question}</Text>
           <View style={styles.promptMeta}>
-            <Text style={styles.promptGroup}>{group.emoji} {group.name}</Text>
+            <Text style={styles.promptGroup}>
+              {group.emoji} {group.name}
+            </Text>
             <Text style={styles.promptDot}>·</Text>
             <Text style={styles.promptCount}>{responses.length} responses</Text>
           </View>
@@ -137,14 +160,15 @@ export default function GroupPromptScreen() {
                     <View
                       style={[
                         styles.optionFill,
-                        { width: `${percentage}%`, backgroundColor: isCorrect ? `${theme.green}20` : `${group.color}15` },
+                        {
+                          width: `${percentage}%`,
+                          backgroundColor: isCorrect ? `${theme.green}20` : `${group.color}15`,
+                        },
                       ]}
                     />
                   )}
                   <Text style={[styles.optionText, isSelected && { color: group.color }]}>{option}</Text>
-                  {hasResponded && (
-                    <Text style={styles.optionPercent}>{Math.round(percentage)}%</Text>
-                  )}
+                  {hasResponded && <Text style={styles.optionPercent}>{Math.round(percentage)}%</Text>}
                 </TouchableOpacity>
               );
             })}
@@ -157,11 +181,7 @@ export default function GroupPromptScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.responsesList}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            responses.length > 0 ? (
-              <Text style={styles.responsesTitle}>Responses</Text>
-            ) : null
-          }
+          ListHeaderComponent={responses.length > 0 ? <Text style={styles.responsesTitle}>Responses</Text> : null}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>💬</Text>

@@ -28,29 +28,18 @@ export default function BottomActions({
   return (
     <View style={styles.bottomActions}>
       {!isDemo && groupStreak > 0 && (
-        <GroupStreakBanner
-          groupStreak={groupStreak}
-          longestGroupStreak={longestGroupStreak}
-        />
+        <GroupStreakBanner groupStreak={groupStreak} longestGroupStreak={longestGroupStreak} />
       )}
 
       {!isDemo && !hasActiveChallenge && (
-        <TouchableOpacity
-          style={styles.challengeNowBtn}
-          onPress={onChallengeNow}
-          activeOpacity={0.85}
-        >
+        <TouchableOpacity style={styles.challengeNowBtn} onPress={onChallengeNow} activeOpacity={0.85}>
           <Zap size={20} color={theme.white} />
           <Text style={styles.challengeNowText}>Challenge Now</Text>
         </TouchableOpacity>
       )}
 
       {!isDemo && leaderboardCount > 0 && (
-        <TouchableOpacity
-          style={styles.leaderboardLink}
-          onPress={onViewLeaderboard}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={styles.leaderboardLink} onPress={onViewLeaderboard} activeOpacity={0.7}>
           <Trophy size={16} color={theme.yellow} />
           <Text style={styles.leaderboardLinkText}>View Leaderboard</Text>
           <ChevronRight size={14} color={theme.textMuted} />

@@ -2,7 +2,7 @@
 // `crypto.getRandomValues` onto the global, which `@noble/*` requires. Without
 // it those libs silently fall back to an insecure RNG on React Native
 // (Plan §"Polyfill" / QA-finding).
-import "react-native-get-random-values";
+import 'react-native-get-random-values';
 // Startup self-test: confirm the polyfill is wired and the RNG returns
 // non-zero entropy. If this throws, the app fails fast at launch — far
 // preferable to a silent crypto downgrade in production.
@@ -18,40 +18,40 @@ import "react-native-get-random-values";
   }
   if (allZero) {
     throw new Error(
-      "CSPRNG self-test failed: crypto.getRandomValues returned all zeros. " +
-        "Check that 'react-native-get-random-values' is the first import in the bundle."
+      'CSPRNG self-test failed: crypto.getRandomValues returned all zeros. ' +
+        "Check that 'react-native-get-random-values' is the first import in the bundle.",
     );
   }
 })();
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useRouter, useSegments } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
-import { View, ActivityIndicator, StyleSheet, Platform } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { StatusBar } from "expo-status-bar";
-import * as Sentry from "@sentry/react-native";
-import { AppProvider } from "@/providers/AppProvider";
-import { useAuthStore } from "@/stores/authStore";
-import { useOnboardingStore } from "@/stores/onboardingStore";
-import { theme } from "@/constants/colors";
-import * as Notifications from "expo-notifications";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StatusBar } from 'expo-status-bar';
+import * as Sentry from '@sentry/react-native';
+import { AppProvider } from '@/providers/AppProvider';
+import { useAuthStore } from '@/stores/authStore';
+import { useOnboardingStore } from '@/stores/onboardingStore';
+import { theme } from '@/constants/colors';
+import * as Notifications from 'expo-notifications';
 import {
   sendPushTokenToServer,
   addNotificationListener,
   getNotificationRoute,
   setBadgeCount,
-} from "@/utils/notifications";
-import { OfflineBanner } from "@/components/ui";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import * as Linking from "expo-linking";
-import { useSocket } from "@/hooks/useSocket";
-import { useDeviceKeyRegistration } from "@/hooks/useDeviceKeyRegistration";
-import { api as apiCall } from "@/services/api";
+} from '@/utils/notifications';
+import { OfflineBanner } from '@/components/ui';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import * as Linking from 'expo-linking';
+import { useSocket } from '@/hooks/useSocket';
+import { useDeviceKeyRegistration } from '@/hooks/useDeviceKeyRegistration';
+import { api as apiCall } from '@/services/api';
 
 Sentry.init({
-  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "",
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || '',
   // Disable in dev to avoid noise
   enabled: !__DEV__,
   tracesSampleRate: 0.2,
@@ -86,7 +86,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Register push token once when user authenticates (not on every navigation)
   const pushTokenRegistered = React.useRef(false);
   useEffect(() => {
-    if (isAuthenticated && Platform.OS !== "web" && !pushTokenRegistered.current) {
+    if (isAuthenticated && Platform.OS !== 'web' && !pushTokenRegistered.current) {
       pushTokenRegistered.current = true;
       sendPushTokenToServer();
     }
@@ -99,27 +99,29 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
     SplashScreen.hideAsync().catch(() => {});
 
-    const inOnboarding = (segments[0] as string) === "onboarding";
+    const inOnboarding = (segments[0] as string) === 'onboarding';
 
     if (!isAuthenticated && !inOnboarding) {
-      router.replace("/onboarding" as never);
+      router.replace('/onboarding' as never);
     } else if (isAuthenticated && inOnboarding) {
       // New users who just verified their OTP have display_name=null and still
       // need to complete the name/avatar setup steps — don't redirect them yet.
       // Returning users already have a display_name and should go straight to the app.
       const { user } = useAuthStore.getState();
       if (user?.display_name) {
-        router.replace("/" as never);
+        router.replace('/' as never);
       }
     }
 
     // After auth is confirmed, check for pending challenges.
     if (isAuthenticated) {
-      apiCall("/challenges/pending").then(() => {
-        // Pending challenges are handled by the feed UI pills.
-      }).catch(() => {
-        // Non-critical: pending challenges check is supplementary; feed handles this
-      });
+      apiCall('/challenges/pending')
+        .then(() => {
+          // Pending challenges are handled by the feed UI pills.
+        })
+        .catch(() => {
+          // Non-critical: pending challenges check is supplementary; feed handles this
+        });
     }
   }, [isAuthenticated, isLoading, segments]);
 
@@ -133,9 +135,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     // Handle cold-start: app was killed and user tapped a notification to open it
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response) {
-        const data = response.notification.request.content.data as
-          | Record<string, string | undefined>
-          | undefined;
+        const data = response.notification.request.content.data as Record<string, string | undefined> | undefined;
         const route = getNotificationRoute(data);
         if (route) {
           router.push(route as never);
@@ -151,9 +151,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       },
       // onResponse: user tapped the notification
       (response) => {
-        const data = response.notification.request.content.data as
-          | Record<string, string | undefined>
-          | undefined;
+        const data = response.notification.request.content.data as Record<string, string | undefined> | undefined;
 
         const route = getNotificationRoute(data);
         if (route) {
@@ -175,10 +173,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const handleUrl = (event: { url: string }) => {
       const parsed = Linking.parse(event.url);
       // Match path like /join/ABCDEF
-      if (parsed.path?.startsWith("join/")) {
-        const code = parsed.path.replace("join/", "");
+      if (parsed.path?.startsWith('join/')) {
+        const code = parsed.path.replace('join/', '');
         if (code) {
-          router.push({ pathname: "/join-group" as never, params: { code } });
+          router.push({ pathname: '/join-group' as never, params: { code } });
         }
       }
     };
@@ -189,7 +187,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     });
 
     // Handle URLs while app is running
-    const subscription = Linking.addEventListener("url", handleUrl);
+    const subscription = Linking.addEventListener('url', handleUrl);
     return () => subscription.remove();
   }, [isAuthenticated, isLoading, router]);
 
@@ -209,7 +207,7 @@ function RootLayoutNav() {
     <AuthGate>
       <Stack
         screenOptions={{
-          headerBackTitle: "Back",
+          headerBackTitle: 'Back',
           headerStyle: { backgroundColor: theme.bg },
           headerTintColor: theme.text,
           contentStyle: { backgroundColor: theme.bg },
@@ -226,42 +224,42 @@ function RootLayoutNav() {
         <Stack.Screen
           name="create-group"
           options={{
-            presentation: "modal",
+            presentation: 'modal',
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="snap-challenge"
           options={{
-            presentation: "fullScreenModal",
+            presentation: 'fullScreenModal',
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="quiz-challenge"
           options={{
-            presentation: "fullScreenModal",
+            presentation: 'fullScreenModal',
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="challenge-reveal"
           options={{
-            presentation: "fullScreenModal",
+            presentation: 'fullScreenModal',
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="join-group"
           options={{
-            presentation: "modal",
+            presentation: 'modal',
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="invite-members"
           options={{
-            presentation: "modal",
+            presentation: 'modal',
             headerShown: false,
           }}
         />
@@ -299,8 +297,8 @@ export default Sentry.wrap(RootLayout);
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: theme.bg,
   },
 });

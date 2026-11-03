@@ -8,7 +8,10 @@ interface AiPersonalityPillProps {
 }
 
 const PERSONALITY_CONFIG: Record<AiPersonality, { emoji: string; description: string }> = {
-  family_friendly: { emoji: '\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66', description: 'challenges will have a family-friendly tone' },
+  family_friendly: {
+    emoji: '\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66',
+    description: 'challenges will have a family-friendly tone',
+  },
   funny: { emoji: '\ud83d\ude02', description: 'challenges will have a funny tone' },
   spicy: { emoji: '\ud83c\udf36\ufe0f', description: 'challenges will have a spicy tone' },
   sarcastic: { emoji: '\ud83d\ude0f', description: 'challenges will have a sarcastic tone' },

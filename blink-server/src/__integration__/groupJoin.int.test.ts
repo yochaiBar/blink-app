@@ -7,8 +7,7 @@ import { raceBehindLock } from './support/db';
 
 const server = useTestServer();
 
-const memberCount = (groupId: string) =>
-  countRows('SELECT COUNT(*) FROM group_members WHERE group_id = $1', [groupId]);
+const memberCount = (groupId: string) => countRows('SELECT COUNT(*) FROM group_members WHERE group_id = $1', [groupId]);
 
 describe('POST /api/groups/join — capacity', () => {
   it('rejects a join once the group is full', async () => {

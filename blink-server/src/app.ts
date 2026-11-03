@@ -13,9 +13,6 @@ import { query } from './config/database';
 import authRoutes from './routes/auth';
 import groupRoutes from './routes/groups';
 import challengeRoutes from './routes/challenges';
-import uploadRoutes from './routes/upload';
-import spotlightRoutes from './routes/spotlight';
-import activityRoutes from './routes/activity';
 import notificationRoutes from './routes/notifications';
 import moderationRoutes from './routes/moderation';
 import deviceKeysRoutes from './routes/deviceKeys';
@@ -30,10 +27,10 @@ import { RATE_LIMITS } from './utils/constants';
 // In Docker production: __dirname = /app/dist -> ../legal = /app/legal
 // We try both paths and use whichever exists
 const legalCandidates = [
-  path.resolve(__dirname, '../../legal'),   // dev: from src/ or dist/ in local monorepo
-  path.resolve(__dirname, '../legal'),       // docker: from /app/dist -> /app/legal
+  path.resolve(__dirname, '../../legal'), // dev: from src/ or dist/ in local monorepo
+  path.resolve(__dirname, '../legal'), // docker: from /app/dist -> /app/legal
 ];
-const legalDir = legalCandidates.find(d => fs.existsSync(d)) || legalCandidates[0];
+const legalDir = legalCandidates.find((d) => fs.existsSync(d)) || legalCandidates[0];
 
 // Compute SHA-256 hashes of inline <style> blocks at startup so we can use
 // hash-based CSP instead of 'unsafe-inline' (LOW-5 security fix).
@@ -78,10 +75,12 @@ export function createApp(): express.Express {
     logger.error('CORS_ORIGINS is required in production. Refusing to start.');
     process.exit(1);
   }
-  app.use(cors({
-    origin: corsOrigins || ['http://localhost:8081', 'http://localhost:19006'],
-    credentials: true,
-  }));
+  app.use(
+    cors({
+      origin: corsOrigins || ['http://localhost:8081', 'http://localhost:19006'],
+      credentials: true,
+    }),
+  );
   // Morgan hardening (Plan C2): the combined access log records the full
   // request line (path + IDs) and response size. For the photo flow routes
   // (Phase 3+) that's privacy-sensitive metadata in Railway log retention.
@@ -99,13 +98,15 @@ export function createApp(): express.Express {
   app.use(express.json({ limit: '15mb' }));
 
   // ── Global rate limit ──────────────────────────────────────────
-  app.use(rateLimit({
-    windowMs: RATE_LIMITS.GLOBAL.windowMs,
-    max: RATE_LIMITS.GLOBAL.max,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many requests, please try again later' },
-  }));
+  app.use(
+    rateLimit({
+      windowMs: RATE_LIMITS.GLOBAL.windowMs,
+      max: RATE_LIMITS.GLOBAL.max,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: 'Too many requests, please try again later' },
+    }),
+  );
 
   // ── Per-route rate limits ──────────────────────────────────────
   const otpLimiter = rateLimit({
@@ -114,14 +115,6 @@ export function createApp(): express.Express {
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many OTP requests, please try again later' },
-  });
-
-  const uploadLimiter = rateLimit({
-    windowMs: RATE_LIMITS.PHOTO_UPLOAD.windowMs,
-    max: RATE_LIMITS.PHOTO_UPLOAD.max,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many upload requests, please try again later' },
   });
 
   const groupCreationLimiter = rateLimit({
@@ -152,16 +145,12 @@ export function createApp(): express.Express {
   app.use('/api/auth/request-otp', otpLimiter);
   app.use('/api/auth/verify-otp', verifyOtpLimiter);
   app.use('/api/groups/join', joinGroupLimiter);
-  app.use('/api/upload', uploadLimiter);
   app.post('/api/groups', groupCreationLimiter);
 
   // Routes
   app.use('/api/auth', authRoutes);
   app.use('/api/groups', groupRoutes);
   app.use('/api/challenges', challengeRoutes);
-  app.use('/api/upload', uploadRoutes);
-  app.use('/api/spotlight', spotlightRoutes);
-  app.use('/api/activity', activityRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/moderation', moderationRoutes);
   app.use('/api/device-keys', deviceKeysRoutes);
@@ -178,15 +167,6 @@ export function createApp(): express.Express {
     res.sendFile(path.join(legalDir, 'terms-of-service.html'));
   });
 
-  // API routes that redirect to the HTML pages (useful for programmatic access)
-  app.get('/api/legal/privacy', (_req, res) => {
-    res.redirect('/privacy');
-  });
-
-  app.get('/api/legal/terms', (_req, res) => {
-    res.redirect('/terms');
-  });
-
   // Health check
   app.get('/api/health', async (_req, res) => {
     const checks: Record<string, string> = { server: 'ok' };
@@ -196,7 +176,7 @@ export function createApp(): express.Express {
     } catch {
       checks.database = 'error';
     }
-    const allOk = Object.values(checks).every(v => v === 'ok');
+    const allOk = Object.values(checks).every((v) => v === 'ok');
     res.status(allOk ? 200 : 503).json({ status: allOk ? 'ok' : 'degraded', checks });
   });
 
@@ -206,14 +186,17 @@ export function createApp(): express.Express {
   }
 
   // Error handler
-  app.use((err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    const statusCode = err.status || 500;
-    logger.error('Unhandled error', { error: err.message, stack: err.stack });
-    const message = statusCode >= 500 && env.NODE_ENV === 'production'
-      ? 'Internal server error'
-      : (err.message || 'Internal server error');
-    res.status(statusCode).json({ error: message });
-  });
+  app.use(
+    (err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      const statusCode = err.status || 500;
+      logger.error('Unhandled error', { error: err.message, stack: err.stack });
+      const message =
+        statusCode >= 500 && env.NODE_ENV === 'production'
+          ? 'Internal server error'
+          : err.message || 'Internal server error';
+      res.status(statusCode).json({ error: message });
+    },
+  );
 
   return app;
 }

@@ -53,57 +53,60 @@ export function useProfile(groupCount: number) {
 
   const displayName = userProfile.name?.split(' ')[0] || 'You';
 
-  const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
-    const authStore = useAuthStore.getState();
+  const updateProfile = useCallback(
+    async (updates: Partial<UserProfile>) => {
+      const authStore = useAuthStore.getState();
 
-    try {
-      const payload: Record<string, unknown> = {};
-      if (updates.name !== undefined) payload.display_name = updates.name;
-      if (updates.bio !== undefined) payload.bio = updates.bio;
+      try {
+        const payload: Record<string, unknown> = {};
+        if (updates.name !== undefined) payload.display_name = updates.name;
+        if (updates.bio !== undefined) payload.bio = updates.bio;
 
-      // Phase 6: avatar uploads removed. The Edit Profile screen no longer
-      // exposes an avatar picker; AvatarRing falls back to generated
-      // initials. If a caller still passes `updates.avatar` (legacy path),
-      // we silently ignore it rather than upload to a now-deleted endpoint.
+        // Phase 6: avatar uploads removed. The Edit Profile screen no longer
+        // exposes an avatar picker; AvatarRing falls back to generated
+        // initials. If a caller still passes `updates.avatar` (legacy path),
+        // we silently ignore it rather than upload to a now-deleted endpoint.
 
-      if (Object.keys(payload).length > 0) {
-        const updatedUser = await api<{
-          id: string;
-          phone_number: string;
-          display_name: string | null;
-          avatar_url: string | null;
-          bio: string | null;
-        }>('/auth/profile', {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        });
+        if (Object.keys(payload).length > 0) {
+          const updatedUser = await api<{
+            id: string;
+            phone_number: string;
+            display_name: string | null;
+            avatar_url: string | null;
+            bio: string | null;
+          }>('/auth/profile', {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          });
 
-        // Update local auth store with the server response
-        if (updatedUser) {
-          if (updatedUser.display_name !== undefined) {
-            authStore.updateName(updatedUser.display_name ?? '');
+          // Update local auth store with the server response
+          if (updatedUser) {
+            if (updatedUser.display_name !== undefined) {
+              authStore.updateName(updatedUser.display_name ?? '');
+            }
+            if (updatedUser.avatar_url !== undefined) {
+              authStore.updateAvatar(updatedUser.avatar_url ?? '');
+            }
+            if (updatedUser.bio !== undefined) {
+              authStore.updateBio(updatedUser.bio ?? '');
+            }
           }
-          if (updatedUser.avatar_url !== undefined) {
-            authStore.updateAvatar(updatedUser.avatar_url ?? '');
-          }
-          if (updatedUser.bio !== undefined) {
-            authStore.updateBio(updatedUser.bio ?? '');
-          }
+        } else if (updates.name && authStore.user) {
+          // Fallback: at least update name locally if no server call was needed
+          authStore.updateName(updates.name);
         }
-      } else if (updates.name && authStore.user) {
-        // Fallback: at least update name locally if no server call was needed
-        authStore.updateName(updates.name);
-      }
 
-      // Invalidate queries so avatar updates propagate everywhere
-      queryClient.invalidateQueries({ queryKey: queryKeys.user.stats });
-      queryClient.invalidateQueries({ queryKey: queryKeys.groups.all });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Could not save profile changes.';
-      Alert.alert('Profile Update Failed', message);
-      throw err;
-    }
-  }, [queryClient]);
+        // Invalidate queries so avatar updates propagate everywhere
+        queryClient.invalidateQueries({ queryKey: queryKeys.user.stats });
+        queryClient.invalidateQueries({ queryKey: queryKeys.groups.all });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Could not save profile changes.';
+        Alert.alert('Profile Update Failed', message);
+        throw err;
+      }
+    },
+    [queryClient],
+  );
 
   return {
     userProfile,

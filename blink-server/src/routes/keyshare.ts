@@ -2,16 +2,9 @@ import { Router, Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { validateBody } from '../middleware/validate';
-import {
-  keyshareDeliverSchema,
-  keyshareRequestSchema,
-  keyshareResetSchema,
-} from '../utils/schemas';
+import { keyshareDeliverSchema, keyshareRequestSchema, keyshareResetSchema } from '../utils/schemas';
 import { query } from '../config/database';
-import {
-  markKeyshareDelivered,
-  requestKeyshareRecovery,
-} from '../services/keyshareHub';
+import { markKeyshareDelivered, requestKeyshareRecovery } from '../services/keyshareHub';
 import { emitToGroup } from '../socket';
 import logger from '../utils/logger';
 import type { KeyshareEnvelope } from '../shared/photoProtocol';
@@ -92,10 +85,10 @@ router.post(
 
     // Verify the caller is a member of the group at NOW (not at row
     // creation) — handles leave-then-spoof scenarios.
-    const membership = await query(
-      `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
-      [body.group_id, callerUserId],
-    );
+    const membership = await query(`SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`, [
+      body.group_id,
+      callerUserId,
+    ]);
     if (membership.rows.length === 0) {
       res.status(403).json({ error: 'Not a member of this group' });
       return;
@@ -128,10 +121,10 @@ router.post(
     const { group_id, device_id } = req.body as { group_id: string; device_id: string };
     const callerUserId = req.userId!;
 
-    const membership = await query(
-      `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
-      [group_id, callerUserId],
-    );
+    const membership = await query(`SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`, [
+      group_id,
+      callerUserId,
+    ]);
     if (membership.rows.length === 0) {
       res.status(403).json({ error: 'Not a member of this group' });
       return;
