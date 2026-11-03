@@ -292,7 +292,7 @@ let registered = false;
 
 /**
  * Wire the pickup-on-connect listener. Idempotent — calling twice in test
- * setup or hot-reload is safe. Called once from server startup in index.ts.
+ * setup or hot-reload is safe. Called once from server startup in server.ts.
  */
 export function registerRelayHub(): void {
   if (registered) return;

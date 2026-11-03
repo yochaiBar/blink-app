@@ -19,13 +19,6 @@ import { verifyMembership, getGroupWithMembers, handleAdminLeave } from '../serv
 // (Legacy server-side group encryption removed in Phase 6 — group keys
 // now live exclusively on member devices and arrive via the courier
 // handshake at join.)
-import type { QueryResult } from 'pg';
-
-/** Minimal query interface compatible with both PoolClient and the pool query helper */
-interface TransactionQueryable {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query(text: string, params?: unknown[]): Promise<QueryResult<any>>;
-}
 
 const router = Router();
 const MAX_FREE_GROUPS = 3;
@@ -52,8 +45,8 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
 
   const inviteCode = generateInviteCode();
 
-  const createGroupQueries = async (q: TransactionQueryable) => {
-    const group = await q.query(
+  const newGroup = await withTransaction(async (client) => {
+    const group = await client.query<GroupRow>(
       `INSERT INTO groups (name, icon, category, created_by, invite_code, quiet_hours_start, quiet_hours_end, skip_penalty_type, ai_personality)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
@@ -71,17 +64,13 @@ router.post('/', validateBody(createGroupSchema), asyncHandler(async (req: AuthR
     );
 
     // Add creator as admin
-    await q.query(
+    await client.query(
       `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'admin')`,
       [group.rows[0].id, req.userId]
     );
 
-    return group.rows[0] as GroupRow;
-  };
-
-  const newGroup = typeof withTransaction === 'function'
-    ? await withTransaction(createGroupQueries)
-    : await createGroupQueries({ query });
+    return group.rows[0];
+  });
 
   // (Phase 6: no server-side key generation — creator's device generates
   // the group key locally via useGroups → newGroupKey + storeGroupKey.)

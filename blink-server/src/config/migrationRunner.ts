@@ -1,12 +1,18 @@
-import { query } from './database';
+import { withTransaction } from './database';
 import fs from 'fs';
 import path from 'path';
 import * as Sentry from '@sentry/node';
+import type { PoolClient } from 'pg';
 import logger from '../utils/logger';
 
+// Every runner (each booting replica, or a manual `npm run migrate`) takes
+// this transaction-scoped advisory lock before touching schema_migrations,
+// so two processes can never apply the same file at once.
+const MIGRATION_LOCK_SQL = `SELECT pg_advisory_xact_lock(hashtext('blink:schema_migrations'))`;
+
 // Create tracking table
-async function ensureMigrationsTable(): Promise<void> {
-  await query(`
+async function ensureMigrationsTable(client: PoolClient): Promise<void> {
+  await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id SERIAL PRIMARY KEY,
       filename VARCHAR(255) NOT NULL UNIQUE,
@@ -15,16 +21,19 @@ async function ensureMigrationsTable(): Promise<void> {
   `);
 }
 
-// Get list of already-applied migrations
-async function getAppliedMigrations(): Promise<string[]> {
-  const result = await query<{ filename: string }>('SELECT filename FROM schema_migrations ORDER BY id');
-  return result.rows.map(r => r.filename);
+async function isApplied(client: PoolClient, file: string): Promise<boolean> {
+  const result = await client.query('SELECT 1 FROM schema_migrations WHERE filename = $1', [file]);
+  return result.rows.length > 0;
 }
 
-// Run all pending migrations in order
+// Run all pending migrations in order. Each file runs on a single
+// connection inside its own transaction (withTransaction), so a failing
+// migration rolls back completely and is not recorded.
 export async function runMigrations(): Promise<void> {
-  await ensureMigrationsTable();
-  const applied = await getAppliedMigrations();
+  await withTransaction(async (client) => {
+    await client.query(MIGRATION_LOCK_SQL);
+    await ensureMigrationsTable(client);
+  });
 
   const migrationsDir = path.join(__dirname, 'migrations');
   const files = fs.readdirSync(migrationsDir)
@@ -34,23 +43,28 @@ export async function runMigrations(): Promise<void> {
   let ranCount = 0;
 
   for (const file of files) {
-    if (applied.includes(file)) {
-      logger.info(`Migration already applied: ${file}`);
-      continue;
-    }
-
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
-    logger.info(`Running migration: ${file}`);
 
-    await query('BEGIN');
     try {
-      await query(sql);
-      await query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
-      await query('COMMIT');
-      logger.info(`Migration complete: ${file}`);
-      ranCount++;
+      const ran = await withTransaction(async (client) => {
+        await client.query(MIGRATION_LOCK_SQL);
+        // Re-check under the lock: another runner may have applied it
+        // while we were waiting.
+        if (await isApplied(client, file)) return false;
+
+        logger.info(`Running migration: ${file}`);
+        await client.query(sql);
+        await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
+        return true;
+      });
+
+      if (ran) {
+        logger.info(`Migration complete: ${file}`);
+        ranCount++;
+      } else {
+        logger.info(`Migration already applied: ${file}`);
+      }
     } catch (err) {
-      await query('ROLLBACK');
       logger.error(`Migration failed: ${file}`, { error: (err as Error).message });
       throw err;
     }
@@ -67,7 +81,7 @@ export async function runMigrations(): Promise<void> {
 // or: node dist/config/migrationRunner.js
 if (require.main === module) {
   // Init Sentry locally so a startup-time crash (e.g. DB connect failure)
-  // gets reported. The main server in index.ts has its own Sentry.init.
+  // gets reported. The main server initializes its own in instrument.ts.
   if (process.env.SENTRY_DSN) {
     Sentry.init({
       dsn: process.env.SENTRY_DSN,

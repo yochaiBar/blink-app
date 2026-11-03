@@ -19,6 +19,10 @@ process.env.PORT = '0'; // Use random port for tests
 // ── Mock the database module ──────────────────────────────────────
 // Every test file can control what `query()` returns by setting up
 // mockResolvedValueOnce / mockImplementation on the mock.
+// withTransaction hands its callback a client whose query() is the same
+// mock, so transactional and non-transactional SQL share one queue of
+// mockResolvedValueOnce results. (Real transaction semantics — rollback,
+// locking — are only exercised by the integration suite.)
 jest.mock('../config/database', () => {
   const mockQuery = jest.fn().mockResolvedValue({ rows: [], rowCount: 0 });
   const withTransaction = async (fn: (client: any) => Promise<any>) => {

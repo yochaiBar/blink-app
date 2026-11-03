@@ -42,23 +42,12 @@ export const query = <T extends Record<string, any> = Record<string, any>>(
  * Automatically BEGINs, COMMITs on success, and ROLLBACKs on error.
  * The client is always released back to the pool.
  *
- * In test environments where pool.connect is not available (mock),
- * falls back to running queries through the pool directly without
- * transaction wrapping. This keeps existing test mocks working.
+ * Every query inside `fn` must go through `client` — `query()` would pick
+ * another pooled connection outside the transaction.
  */
 export async function withTransaction<T>(
   fn: (client: PoolClient) => Promise<T>
 ): Promise<T> {
-  // In test/mock environments, pool.connect may not exist.
-  // Fall back to a pseudo-client that delegates to pool.query.
-  if (typeof pool.connect !== 'function') {
-    const pseudoClient = {
-      query: pool.query.bind(pool),
-      release: () => {},
-    } as unknown as PoolClient;
-    return fn(pseudoClient);
-  }
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
