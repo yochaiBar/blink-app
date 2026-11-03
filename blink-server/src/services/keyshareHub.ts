@@ -235,24 +235,53 @@ export async function deliverKeyshare(callerUserId: string, body: KeyshareDelive
 
 // ── Confirm / reset ───────────────────────────────────────────────
 
+interface ConfirmContext {
+  group_key_version: number;
+  key_minted_by: string | null;
+  caller_role: string | null;
+  caller_holds: boolean;
+  others_hold: boolean;
+  minter_is_admin: boolean;
+}
+
 /**
  * The caller's device now holds the key at `keyVersion` (409 unless it's
- * current). Ends their pending join and makes them a courier. The first
- * holder of a version after a reset fans out `group:key_rotated`.
+ * current). Ends their pending join and makes them a courier.
+ *
+ * Introducing a version — being its first holder — is reserved for an
+ * admin: after a reset, the admin who reset (while still an admin);
+ * otherwise any admin (e.g. the creator at v1). Anyone else could only hold
+ * a key they minted themselves, which couriers would then spread. Once an
+ * admin holds it, members who received it confirm freely. The first holder
+ * of a version after a reset fans out `group:key_rotated`.
  */
 export async function confirmGroupKey(callerUserId: string, groupId: string, keyVersion: number): Promise<void> {
   const rotated = await withTransaction(async (client) => {
-    // Lock the group row so a concurrent reset can't slip between the
-    // version check and the update.
-    const group = await client.query<{ group_key_version: number }>(
-      `SELECT group_key_version FROM groups WHERE id = $1 FOR UPDATE`,
-      [groupId],
+    // Lock the group row so a concurrent reset or confirm can't slip
+    // between these checks and the update.
+    const result = await client.query<ConfirmContext>(
+      `SELECT g.group_key_version, g.key_minted_by,
+              (SELECT role FROM group_members WHERE group_id = g.id AND user_id = $2) AS caller_role,
+              EXISTS (SELECT 1 FROM group_members
+                       WHERE group_id = g.id AND user_id = $2 AND key_version = $3) AS caller_holds,
+              EXISTS (SELECT 1 FROM group_members
+                       WHERE group_id = g.id AND user_id <> $2 AND key_version = $3) AS others_hold,
+              EXISTS (SELECT 1 FROM group_members
+                       WHERE group_id = g.id AND user_id = g.key_minted_by AND role = 'admin') AS minter_is_admin
+         FROM groups g
+        WHERE g.id = $1
+          FOR UPDATE OF g`,
+      [groupId, callerUserId, keyVersion],
     );
-    if (group.rows[0]?.group_key_version !== keyVersion) throw new HttpError(409, 'Group key version mismatch');
-    const others = await client.query(
-      `SELECT 1 FROM group_members WHERE group_id = $1 AND key_version = $2 AND user_id <> $3 LIMIT 1`,
-      [groupId, keyVersion, callerUserId],
-    );
+    const ctx = result.rows[0];
+    if (ctx?.group_key_version !== keyVersion) throw new HttpError(409, 'Group key version mismatch');
+    const introducing = !ctx.caller_holds && !ctx.others_hold;
+    if (introducing) {
+      const minterOnly = ctx.minter_is_admin && ctx.key_minted_by !== callerUserId;
+      if (ctx.caller_role !== 'admin' || minterOnly) {
+        throw new HttpError(403, 'Only the admin who reset the key can introduce it');
+      }
+    }
     const changed = await client.query(
       `UPDATE group_members SET key_version = $3
         WHERE group_id = $1 AND user_id = $2 AND key_version IS DISTINCT FROM $3
@@ -263,7 +292,7 @@ export async function confirmGroupKey(callerUserId: string, groupId: string, key
       groupId,
       callerUserId,
     ]);
-    return keyVersion > 1 && changed.rows.length > 0 && others.rows.length === 0;
+    return keyVersion > 1 && changed.rows.length > 0 && introducing;
   });
 
   if (rotated) {
@@ -286,8 +315,10 @@ export async function resetGroupKey(callerUserId: string, groupId: string): Prom
     );
     if (role.rows[0]?.role !== 'admin') throw new HttpError(403, 'Only a group admin can reset the secure key');
     const bump = await client.query<{ group_key_version: number }>(
-      `UPDATE groups SET group_key_version = group_key_version + 1 WHERE id = $1 RETURNING group_key_version`,
-      [groupId],
+      `UPDATE groups SET group_key_version = group_key_version + 1, key_minted_by = $2
+        WHERE id = $1
+        RETURNING group_key_version`,
+      [groupId, callerUserId],
     );
     await client.query(`UPDATE pending_joins SET courier_user_id = NULL, lease_expires_at = NULL WHERE group_id = $1`, [
       groupId,
