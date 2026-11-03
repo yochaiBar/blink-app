@@ -84,9 +84,9 @@ export function useTestServer() {
      * Connect an authenticated Socket.io client; resolves once the server
      * has accepted it. Disconnected automatically after each test.
      */
-    async connectSocket(token: string): Promise<ClientSocket> {
+    async connectSocket(token: string, opts: { deviceId?: string } = {}): Promise<ClientSocket> {
       const socket = connectClient(current().baseUrl, {
-        auth: { token },
+        auth: { token, deviceId: opts.deviceId },
         transports: ['websocket'],
         forceNew: true,
         reconnection: false,
@@ -97,6 +97,10 @@ export function useTestServer() {
         socket.once('connect_error', reject);
       });
       return socket;
+    },
+    /** How many sockets are in a server-side room right now. */
+    async roomSize(room: string): Promise<number> {
+      return (await current().io.in(room).fetchSockets()).length;
     },
     /** Wait until `count` sockets have joined a server-side room. */
     async waitForRoomSize(room: string, count: number, timeoutMs = 2000): Promise<void> {

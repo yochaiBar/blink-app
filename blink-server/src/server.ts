@@ -8,7 +8,7 @@ import pool from './config/database';
 import { runMigrations } from './config/migrationRunner';
 import { createApp } from './app';
 import logger from './utils/logger';
-import { registerRelayHub, expireStalePendingPickups } from './services/relayHub';
+import { registerRelayHub, reapOldPickups } from './services/relayHub';
 import { registerKeyshareHub, expireStalePendingJoins } from './services/keyshareHub';
 import { OTP_RATE_LIMIT_PER_HOUR } from './utils/constants';
 import { initSocket } from './socket';
@@ -17,16 +17,15 @@ import { startDailyChallengeJob } from './jobs/dailyChallenge';
 
 const PORT = env.PORT;
 
-// Expire stale pending_photo_pickups + pending_joins every hour. Both
-// queries are single indexed UPDATEs; cheap enough to run frequently.
-// 7-day TTLs are enforced inside the expire* helpers.
+// Reap 7-day-old photo pickups and expire stale pending_joins every hour.
+// Both are single indexed statements; cheap enough to run frequently.
 const PENDING_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 function startPendingCleanup(): void {
   setInterval(() => {
-    expireStalePendingPickups()
+    reapOldPickups()
       .then((count) => {
-        if (count > 0) logger.info('expired stale pending pickups', { count });
+        if (count > 0) logger.info('reaped old pending pickups', { count });
       })
       .catch((err: unknown) => {
         logger.error('pending pickup cleanup failed', {

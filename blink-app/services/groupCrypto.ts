@@ -15,8 +15,10 @@
  *  • Device X25519 long-lived keypair: generate, persist seed, re-derive.
  *  • Per-device attestation HMAC for registering the public key.
  *  • Group key generation (256-bit random) + persistence per group.
- *  • Symmetric encrypt/decrypt for photo bytes (AES-256-GCM, fresh IV every call).
- *  • Asymmetric encrypt/decrypt for the courier handshake (X25519 → HKDF → AES-GCM).
+ *  • Symmetric encrypt/decrypt for photo bytes (AES-256-GCM, fresh IV every
+ *    call, bound to its context by associated data — see photoAad).
+ *  • Asymmetric encrypt/decrypt for the courier handshake (X25519 → HKDF → AES-GCM),
+ *    bound to one group, joiner device and key version (see keyshareAad).
  *
  * What this module does NOT own
  * ─────────────────────────────
@@ -34,6 +36,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { gcm } from '@noble/ciphers/aes.js';
 import { randomBytes } from '@noble/ciphers/utils.js';
+import { keyshareAad } from '@/shared/photoProtocol';
 
 // ── Constants ─────────────────────────────────────────────────────
 
@@ -46,11 +49,12 @@ export const KEY_BYTES = 32; // both X25519 keys and AES-256 keys
 export const GCM_IV_BYTES = 12;
 export const GCM_TAG_BYTES = 16;
 
-// HKDF info strings — bind derivation context so the same shared secret
-// can't accidentally be reused across protocols.
-const HKDF_INFO_KEYSHARE = new TextEncoder().encode('blink/v1/keyshare');
-
 // ── Encoding helpers ──────────────────────────────────────────────
+
+/** UTF-8 bytes of an associated-data string (photoAad / keyshareAad). */
+export function aadBytes(aad: string): Uint8Array {
+  return new TextEncoder().encode(aad);
+}
 
 export function bytesToB64(b: Uint8Array): string {
   // React Native's btoa expects a binary string, which we build manually
@@ -196,20 +200,24 @@ export interface EncryptedBlob {
  * break GCM's confidentiality and authenticity, so the API simply does not
  * give callers the rope to reuse one (Plan H2 guard).
  *
+ * `aad` (associated data) is authenticated but not encrypted: decryption
+ * fails unless the caller passes the exact same bytes, which is how a photo
+ * is bound to its group, response, sender and key version.
+ *
  * Note: `@noble/ciphers`' gcm appends the auth tag to the ciphertext, so the
  * returned `ciphertext` length is `plaintext.length + 16`. The matching
  * `aesGcmDecrypt` expects the same shape.
  */
-export function aesGcmEncrypt(key: Uint8Array, plaintext: Uint8Array): EncryptedBlob {
+export function aesGcmEncrypt(key: Uint8Array, plaintext: Uint8Array, aad: Uint8Array): EncryptedBlob {
   if (key.length !== KEY_BYTES) {
     throw new Error(`aesGcmEncrypt: key must be ${KEY_BYTES} bytes`);
   }
   const iv = randomBytes(GCM_IV_BYTES);
-  const ciphertext = gcm(key, iv).encrypt(plaintext);
+  const ciphertext = gcm(key, iv, aad).encrypt(plaintext);
   return { ciphertext, iv };
 }
 
-export function aesGcmDecrypt(key: Uint8Array, blob: EncryptedBlob): Uint8Array {
+export function aesGcmDecrypt(key: Uint8Array, blob: EncryptedBlob, aad: Uint8Array): Uint8Array {
   if (key.length !== KEY_BYTES) {
     throw new Error(`aesGcmDecrypt: key must be ${KEY_BYTES} bytes`);
   }
@@ -219,9 +227,9 @@ export function aesGcmDecrypt(key: Uint8Array, blob: EncryptedBlob): Uint8Array 
   if (blob.ciphertext.length < GCM_TAG_BYTES) {
     throw new Error('aesGcmDecrypt: ciphertext shorter than GCM tag');
   }
-  // gcm.decrypt throws on auth-tag failure → fail closed. Callers should
-  // treat the throw as AUTH_TAG_FAIL.
-  return gcm(key, blob.iv).decrypt(blob.ciphertext);
+  // gcm.decrypt throws on auth-tag failure (including mismatched associated
+  // data) → fail closed. Callers should treat the throw as AUTH_TAG_FAIL.
+  return gcm(key, blob.iv, aad).decrypt(blob.ciphertext);
 }
 
 // ── Courier handshake — encrypt the group key for a joiner's device ─
@@ -232,6 +240,14 @@ export interface CourierEnvelope {
   ciphertext: Uint8Array; // groupKey (32) + GCM tag (16) = 48 bytes
 }
 
+/** What a wrapped group key is bound to; both sides must agree on all of it. */
+export interface KeyshareContext {
+  groupId: string;
+  joinerUserId: string;
+  joinerDeviceId: string;
+  keyVersion: number;
+}
+
 /**
  * The courier (an online existing member of the group) encrypts the group
  * key to the joiner's static device public key.
@@ -239,15 +255,20 @@ export interface CourierEnvelope {
  * Protocol:
  *   1. Generate an ephemeral X25519 keypair on the courier side.
  *   2. ECDH(ephemeral_private, joiner_static_public) → 32-byte shared secret.
- *   3. HKDF-SHA256(salt=ephemeralPub||joinerPub, info=HKDF_INFO_KEYSHARE) → 32-byte AEAD key.
- *   4. AES-256-GCM encrypt the group key under the AEAD key with a fresh IV.
+ *   3. HKDF-SHA256(salt=ephemeralPub||joinerPub, info=keyshareAad(context)) → 32-byte AEAD key.
+ *   4. AES-256-GCM encrypt the group key under the AEAD key with a fresh IV,
+ *      with keyshareAad(context) as associated data.
  *   5. Send {ephemeralPub, iv, ciphertext} through the (blind) server.
  *
- * The salt binds the derived key to the specific handshake — preventing
- * cross-handshake replay even though we don't have full forward secrecy on
- * the static device key.
+ * The salt binds the derived key to the specific handshake, and the context
+ * binds the wrapped key to one group, joiner device and key version, so the
+ * server can't replay an envelope to another group, device or version.
  */
-export function courierEncryptGroupKey(joinerStaticPublicKey: Uint8Array, groupKey: Uint8Array): CourierEnvelope {
+export function courierEncryptGroupKey(
+  joinerStaticPublicKey: Uint8Array,
+  groupKey: Uint8Array,
+  context: KeyshareContext,
+): CourierEnvelope {
   if (joinerStaticPublicKey.length !== KEY_BYTES) {
     throw new Error('courierEncryptGroupKey: joiner public key must be 32 bytes');
   }
@@ -262,9 +283,10 @@ export function courierEncryptGroupKey(joinerStaticPublicKey: Uint8Array, groupK
   const salt = new Uint8Array(ephemeralPublic.length + joinerStaticPublicKey.length);
   salt.set(ephemeralPublic, 0);
   salt.set(joinerStaticPublicKey, ephemeralPublic.length);
-  const aeadKey = hkdf(sha256, sharedSecret, salt, HKDF_INFO_KEYSHARE, KEY_BYTES);
+  const aad = aadBytes(keyshareAad(context));
+  const aeadKey = hkdf(sha256, sharedSecret, salt, aad, KEY_BYTES);
 
-  const { ciphertext, iv } = aesGcmEncrypt(aeadKey, groupKey);
+  const { ciphertext, iv } = aesGcmEncrypt(aeadKey, groupKey, aad);
   return { ephemeralPublicKey: ephemeralPublic, iv, ciphertext };
 }
 
@@ -273,9 +295,10 @@ export function courierEncryptGroupKey(joinerStaticPublicKey: Uint8Array, groupK
  *
  *   1. ECDH(static_device_private, courier_ephemeral_public) → shared secret.
  *   2. Same HKDF as the courier (salt order: ephemeralPub||joinerPub).
- *   3. AES-256-GCM decrypt.
+ *   3. AES-256-GCM decrypt, with the joiner's own view of the context.
  *
- * Throws on auth-tag failure (wrong key, tampered ciphertext, or — the
+ * Throws on auth-tag failure (wrong key, tampered ciphertext, an envelope
+ * made for another group / device / key version, or — the
  * MITM scenario we WANT to detect — courier was tricked into encrypting to
  * a server-supplied substitute public key). Callers treat throw as a
  * handshake failure and surface to UX as "couldn't verify group access."
@@ -284,6 +307,7 @@ export function joinerDecryptGroupKey(
   joinerStaticPrivate: Uint8Array,
   joinerStaticPublic: Uint8Array,
   envelope: CourierEnvelope,
+  context: KeyshareContext,
 ): Uint8Array {
   if (joinerStaticPrivate.length !== KEY_BYTES) {
     throw new Error('joinerDecryptGroupKey: private key must be 32 bytes');
@@ -294,12 +318,10 @@ export function joinerDecryptGroupKey(
   const salt = new Uint8Array(envelope.ephemeralPublicKey.length + joinerStaticPublic.length);
   salt.set(envelope.ephemeralPublicKey, 0);
   salt.set(joinerStaticPublic, envelope.ephemeralPublicKey.length);
-  const aeadKey = hkdf(sha256, sharedSecret, salt, HKDF_INFO_KEYSHARE, KEY_BYTES);
+  const aad = aadBytes(keyshareAad(context));
+  const aeadKey = hkdf(sha256, sharedSecret, salt, aad, KEY_BYTES);
 
-  return aesGcmDecrypt(aeadKey, {
-    iv: envelope.iv,
-    ciphertext: envelope.ciphertext,
-  });
+  return aesGcmDecrypt(aeadKey, { iv: envelope.iv, ciphertext: envelope.ciphertext }, aad);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────

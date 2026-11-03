@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { API_URL, getAccessToken } from '@/services/api';
+import { getOrCreateDeviceKey } from '@/services/groupCrypto';
 
 // Derive the base server URL by stripping the /api suffix
 const SOCKET_URL = API_URL.replace(/\/api$/, '');
@@ -9,6 +10,11 @@ let socket: Socket | null = null;
 /**
  * Connect to the Socket.io server using the current JWT token.
  * Safe to call multiple times -- reconnects only if not already connected.
+ *
+ * The handshake also says which device this is, so the server can route
+ * pickup requests to the device holding a photo. It's rebuilt on every
+ * (re)connect, with the latest access token. The server puts the socket in
+ * its group rooms itself.
  */
 export function connectSocket(): Socket | null {
   const token = getAccessToken();
@@ -29,7 +35,12 @@ export function connectSocket(): Socket | null {
   }
 
   socket = io(SOCKET_URL, {
-    auth: { token },
+    auth: (cb) => {
+      const current = getAccessToken() ?? token;
+      getOrCreateDeviceKey()
+        .then(({ device_id }) => cb({ token: current, deviceId: device_id }))
+        .catch(() => cb({ token: current }));
+    },
     transports: ['websocket'],
     reconnection: true,
     reconnectionAttempts: Infinity,
@@ -60,16 +71,6 @@ export function disconnectSocket(): void {
     socket.disconnect();
     socket = null;
     if (__DEV__) console.log('[Socket] Manually disconnected');
-  }
-}
-
-/**
- * Join a set of group rooms so we receive group-specific events.
- */
-export function joinGroups(groupIds: string[]): void {
-  if (socket?.connected && groupIds.length > 0) {
-    socket.emit('join-groups', groupIds);
-    if (__DEV__) console.log('[Socket] Joined groups:', groupIds);
   }
 }
 
