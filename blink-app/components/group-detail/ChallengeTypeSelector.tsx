@@ -22,12 +22,7 @@ export interface ChallengeTypeSelectorProps {
   onSelect: (type: ChallengeType) => void;
 }
 
-export default function ChallengeTypeSelector({
-  visible,
-  isPending,
-  onClose,
-  onSelect,
-}: ChallengeTypeSelectorProps) {
+export default function ChallengeTypeSelector({ visible, isPending, onClose, onSelect }: ChallengeTypeSelectorProps) {
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.modalOverlay}>

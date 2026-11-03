@@ -31,9 +31,7 @@ export default function QuizResultsSection({
   return (
     <View style={styles.quizResultsContainer}>
       <GlassCard style={styles.quizHeaderCard}>
-        <Text style={[typography.headlineMedium, { color: theme.text }]}>
-          {promptText}
-        </Text>
+        <Text style={[typography.headlineMedium, { color: theme.text }]}>{promptText}</Text>
         <View style={styles.quizResponseCount}>
           <Users size={14} color={theme.textMuted} />
           <Text style={styles.quizResponseCountText}>
@@ -48,9 +46,7 @@ export default function QuizResultsSection({
           <View key={i} style={styles.quizResultRow}>
             <View style={styles.quizResultHeader}>
               <View style={styles.quizResultLabelRow}>
-                <Text style={[styles.quizResultLabel, isTopAnswer && { color: theme.coral }]}>
-                  {item.label}
-                </Text>
+                <Text style={[styles.quizResultLabel, isTopAnswer && { color: theme.coral }]}>{item.label}</Text>
                 {isMyPick && (
                   <View style={styles.quizMyPickBadge}>
                     <Text style={styles.quizMyPickText}>You</Text>
@@ -60,10 +56,12 @@ export default function QuizResultsSection({
               <Text style={styles.quizResultPercent}>{item.percentage}%</Text>
             </View>
             <View style={styles.quizProgressBg}>
-              <View style={[
-                styles.quizProgressFill,
-                { width: `${item.percentage}%`, backgroundColor: isTopAnswer ? theme.coral : theme.surfaceLight },
-              ]} />
+              <View
+                style={[
+                  styles.quizProgressFill,
+                  { width: `${item.percentage}%`, backgroundColor: isTopAnswer ? theme.coral : theme.surfaceLight },
+                ]}
+              />
             </View>
             {item.respondents.length > 0 && (
               <View style={styles.quizRespondentsRow}>

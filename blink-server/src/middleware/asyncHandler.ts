@@ -5,9 +5,7 @@ import { Request, Response, NextFunction } from 'express';
  * to the Express error handler, preventing unhandled promise rejections
  * from crashing the server.
  */
-export function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
-) {
+export function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };

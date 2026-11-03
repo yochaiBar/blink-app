@@ -1,5 +1,15 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Alert, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  Platform,
+  Alert,
+  Dimensions,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Check } from 'lucide-react-native';
@@ -44,7 +54,7 @@ export default function CreateGroupScreen() {
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [personality, setPersonality] = useState<AiPersonality>('funny');
 
-  const selectedCategoryOption = categoryOptions.find(c => c.key === category);
+  const selectedCategoryOption = categoryOptions.find((c) => c.key === category);
 
   const handleCreate = useCallback(async () => {
     if (!name.trim()) {
@@ -98,12 +108,17 @@ export default function CreateGroupScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.emojiPickerSection}>
-          <View style={[styles.selectedEmojiCircle, { backgroundColor: `${selectedCategoryOption?.color ?? theme.coral}20`, borderColor: `${selectedCategoryOption?.color ?? theme.coral}40` }]}>
+          <View
+            style={[
+              styles.selectedEmojiCircle,
+              {
+                backgroundColor: `${selectedCategoryOption?.color ?? theme.coral}20`,
+                borderColor: `${selectedCategoryOption?.color ?? theme.coral}40`,
+              },
+            ]}
+          >
             <Text style={styles.selectedEmoji}>{selectedEmoji}</Text>
           </View>
         </View>
@@ -126,7 +141,7 @@ export default function CreateGroupScreen() {
         <View style={styles.field}>
           <Text style={styles.label}>Category</Text>
           <View style={styles.categoryGrid}>
-            {categoryOptions.map(opt => (
+            {categoryOptions.map((opt) => (
               <TouchableOpacity
                 key={opt.key}
                 style={[
@@ -152,13 +167,10 @@ export default function CreateGroupScreen() {
         <View style={styles.field}>
           <Text style={styles.label}>Group Emoji</Text>
           <View style={styles.emojiGrid}>
-            {emojiOptions.map(emoji => (
+            {emojiOptions.map((emoji) => (
               <TouchableOpacity
                 key={emoji}
-                style={[
-                  styles.emojiOption,
-                  selectedEmoji === emoji && styles.emojiOptionSelected,
-                ]}
+                style={[styles.emojiOption, selectedEmoji === emoji && styles.emojiOptionSelected]}
                 onPress={() => {
                   setSelectedEmoji(emoji);
                   if (Platform.OS !== 'web') {
@@ -176,7 +188,7 @@ export default function CreateGroupScreen() {
           <Text style={styles.label}>AI Vibe</Text>
           <Text style={styles.fieldDesc}>Choose how your group's AI will talk</Text>
           <View style={styles.personalityGrid}>
-            {personalityOptions.map(opt => (
+            {personalityOptions.map((opt) => (
               <TouchableOpacity
                 key={opt.key}
                 style={[

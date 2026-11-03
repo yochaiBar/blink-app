@@ -22,11 +22,7 @@ import {
 import './setup';
 
 import keyshareRouter from '../routes/keyshare';
-import {
-  enqueueKeyshare,
-  dispatchPendingKeysharesForUser,
-  expireStalePendingJoins,
-} from '../services/keyshareHub';
+import { enqueueKeyshare, dispatchPendingKeysharesForUser, expireStalePendingJoins } from '../services/keyshareHub';
 import { query } from '../config/database';
 import { emitToUser } from '../socket';
 
@@ -63,11 +59,7 @@ describe('keyshareHub.enqueueKeyshare', () => {
     const sql = String(mockQuery.mock.calls[0][0]);
     expect(sql).toMatch(/INSERT INTO pending_joins/i);
     expect(sql).toMatch(/ON CONFLICT \(group_id, joiner_user_id, state\) DO UPDATE/i);
-    expect(mockQuery.mock.calls[0][1]).toEqual([
-      TEST_GROUP_ID,
-      TEST_USER_ID_2,
-      JOINER_DEVICE_ID,
-    ]);
+    expect(mockQuery.mock.calls[0][1]).toEqual([TEST_GROUP_ID, TEST_USER_ID_2, JOINER_DEVICE_ID]);
   });
 
   it('returns null when the upsert returns no row (defensive)', async () => {
@@ -94,9 +86,7 @@ describe('keyshareHub.dispatchPendingKeysharesForUser', () => {
     };
     mockQuery
       .mockResolvedValueOnce(queryResult([claimed])) // UPDATE … RETURNING
-      .mockResolvedValueOnce(
-        queryResult([{ device_id: JOINER_DEVICE_ID, x25519_public_key: PUBKEY_B64 }]),
-      ); // joiner pubkey lookup
+      .mockResolvedValueOnce(queryResult([{ device_id: JOINER_DEVICE_ID, x25519_public_key: PUBKEY_B64 }])); // joiner pubkey lookup
 
     const count = await dispatchPendingKeysharesForUser(TEST_USER_ID);
 
@@ -130,9 +120,7 @@ describe('keyshareHub.dispatchPendingKeysharesForUser', () => {
       joiner_user_id: TEST_USER_ID_2,
       joiner_device_id: JOINER_DEVICE_ID,
     };
-    mockQuery
-      .mockResolvedValueOnce(queryResult([claimed]))
-      .mockResolvedValueOnce(queryResult([])); // no active key
+    mockQuery.mockResolvedValueOnce(queryResult([claimed])).mockResolvedValueOnce(queryResult([])); // no active key
 
     const count = await dispatchPendingKeysharesForUser(TEST_USER_ID);
     expect(count).toBe(0);
@@ -178,9 +166,7 @@ describe('POST /api/keyshare/deliver', () => {
   it('forwards the envelope when caller is the from_user, group member, and row is active', async () => {
     mockQuery
       .mockResolvedValueOnce(
-        queryResult([
-          { joiner_user_id: TEST_USER_ID_2, group_id: TEST_GROUP_ID, state: 'in_flight' },
-        ]),
+        queryResult([{ joiner_user_id: TEST_USER_ID_2, group_id: TEST_GROUP_ID, state: 'in_flight' }]),
       ) // pending lookup
       .mockResolvedValueOnce(queryResult([{ '?column?': 1 }])) // membership ✓
       .mockResolvedValueOnce(queryResult([{ joiner_device_id: JOINER_DEVICE_ID }])); // markKeyshareDelivered UPDATE
@@ -281,10 +267,9 @@ describe('POST /api/keyshare/deliver', () => {
     expect(res1.body).toEqual({ v: 1, delivered: true });
 
     // Second call: row is now `delivered`, no emit.
-    mockQuery
-      .mockResolvedValueOnce(
-        queryResult([{ joiner_user_id: TEST_USER_ID_2, group_id: TEST_GROUP_ID, state: 'delivered' }]),
-      );
+    mockQuery.mockResolvedValueOnce(
+      queryResult([{ joiner_user_id: TEST_USER_ID_2, group_id: TEST_GROUP_ID, state: 'delivered' }]),
+    );
 
     const res2 = await request(app)
       .post('/api/keyshare/deliver')
@@ -313,9 +298,7 @@ describe('POST /api/keyshare/deliver', () => {
   });
 
   it('rejects 401 without JWT', async () => {
-    const res = await request(app)
-      .post('/api/keyshare/deliver')
-      .send(validBody());
+    const res = await request(app).post('/api/keyshare/deliver').send(validBody());
     expect(res.status).toBe(401);
   });
 });

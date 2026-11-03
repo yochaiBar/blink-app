@@ -1,13 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Send } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
@@ -38,10 +30,7 @@ export default function PhotoCommentsPreview({ responseId }: Props) {
   // Phase 2 displays top-level comments only. Replies live behind the future
   // sheet — counting them here would mislead the user about the "View all"
   // total. Once Phase 3 lands, swap the count to `comments.length`.
-  const topLevel = useMemo(
-    () => comments.filter((c) => c.parent_comment_id === null),
-    [comments],
-  );
+  const topLevel = useMemo(() => comments.filter((c) => c.parent_comment_id === null), [comments]);
 
   const visible = topLevel.slice(0, PREVIEW_LIMIT);
   const hiddenCount = Math.max(0, topLevel.length - PREVIEW_LIMIT);
@@ -76,13 +65,12 @@ export default function PhotoCommentsPreview({ responseId }: Props) {
             <View key={c.id} style={styles.commentRow}>
               <Text style={styles.commentName}>{c.display_name || 'Someone'}</Text>
               <Text style={styles.commentText} numberOfLines={3}>
-                {' '}{c.text}
+                {' '}
+                {c.text}
               </Text>
             </View>
           ))}
-          {hiddenCount > 0 ? (
-            <Text style={styles.viewAll}>View all {topLevel.length} comments</Text>
-          ) : null}
+          {hiddenCount > 0 ? <Text style={styles.viewAll}>View all {topLevel.length} comments</Text> : null}
         </>
       )}
 
@@ -99,9 +87,7 @@ export default function PhotoCommentsPreview({ responseId }: Props) {
           onSubmitEditing={handleSend}
           testID="comment-composer-input"
         />
-        {draft.length >= SHOW_CHAR_WARN_AT ? (
-          <Text style={styles.charCount}>{charsLeft}</Text>
-        ) : null}
+        {draft.length >= SHOW_CHAR_WARN_AT ? <Text style={styles.charCount}>{charsLeft}</Text> : null}
         <TouchableOpacity
           onPress={handleSend}
           disabled={!canSend}

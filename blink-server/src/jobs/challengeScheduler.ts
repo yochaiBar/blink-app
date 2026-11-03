@@ -56,7 +56,7 @@ function shouldFireThisTick(quietStart: string | null): boolean {
   const remainingSlots = Math.max(1, Math.floor(remainingMinutes / 15));
 
   // Probability = 1/remaining_slots (ensures it fires before quiet hours)
-  return Math.random() < (1 / remainingSlots);
+  return Math.random() < 1 / remainingSlots;
 }
 
 // Pick challenge type, avoiding recent repeats
@@ -96,7 +96,10 @@ async function runSchedulerTick(): Promise<void> {
 
       await createAutoChallenge(group);
     } catch (err: unknown) {
-      logger.error('Auto-challenge failed for group', { groupId: group.id, error: err instanceof Error ? err.message : String(err) });
+      logger.error('Auto-challenge failed for group', {
+        groupId: group.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 }
@@ -107,14 +110,14 @@ async function createAutoChallenge(group: SchedulerGroupRow): Promise<void> {
   // Fetch member names
   const membersResult = await query(
     `SELECT u.display_name FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = $1`,
-    [group.id]
+    [group.id],
   );
   const memberNames = membersResult.rows.map((r) => r.display_name as string);
 
   // Fetch recent challenge prompts
   const recentResult = await query(
     `SELECT type, prompt_text FROM challenges WHERE group_id = $1 ORDER BY triggered_at DESC LIMIT 5`,
-    [group.id]
+    [group.id],
   );
   const recentChallenges = recentResult.rows.map((r) => r.prompt_text as string | null).filter(Boolean) as string[];
   const recentTypes = recentResult.rows.map((r) => r.type as string);
@@ -130,7 +133,13 @@ async function createAutoChallenge(group: SchedulerGroupRow): Promise<void> {
     `INSERT INTO challenges (group_id, type, prompt_text, options_json, triggered_by, expires_at, countdown_seconds, status, is_auto_generated, ai_generated_prompt)
      VALUES ($1, $2, $3, $4, NULL, $5, 10, 'active', true, $3)
      RETURNING *`,
-    [group.id, aiChallenge.type, aiChallenge.prompt, aiChallenge.options?.length ? JSON.stringify(aiChallenge.options) : null, expiresAt]
+    [
+      group.id,
+      aiChallenge.type,
+      aiChallenge.prompt,
+      aiChallenge.options?.length ? JSON.stringify(aiChallenge.options) : null,
+      expiresAt,
+    ],
   );
 
   const challenge = result.rows[0];
@@ -140,7 +149,7 @@ async function createAutoChallenge(group: SchedulerGroupRow): Promise<void> {
     `INSERT INTO challenge_schedule (group_id, last_auto_challenge_at, updated_at)
      VALUES ($1, NOW(), NOW())
      ON CONFLICT (group_id) DO UPDATE SET last_auto_challenge_at = NOW(), updated_at = NOW()`,
-    [group.id]
+    [group.id],
   );
 
   // Emit socket event
@@ -149,25 +158,23 @@ async function createAutoChallenge(group: SchedulerGroupRow): Promise<void> {
   });
 
   // Send push to all members
-  sendPushToGroup(
-    group.id,
-    `${group.name}`,
-    aiChallenge.prompt || 'New challenge! Respond before time runs out!',
-    { type: 'challenge_started', challengeId: challenge.id, groupId: group.id, challengeType: aiChallenge.type, screen: 'challenge' }
-  ).catch(() => {});
+  sendPushToGroup(group.id, `${group.name}`, aiChallenge.prompt || 'New challenge! Respond before time runs out!', {
+    type: 'challenge_started',
+    challengeId: challenge.id,
+    groupId: group.id,
+    challengeType: aiChallenge.type,
+    screen: 'challenge',
+  }).catch(() => {});
 
   // Create notifications for all members
-  const allMembers = await query(
-    `SELECT user_id FROM group_members WHERE group_id = $1`,
-    [group.id]
-  );
+  const allMembers = await query(`SELECT user_id FROM group_members WHERE group_id = $1`, [group.id]);
   for (const member of allMembers.rows) {
     createNotification(
       member.user_id,
       'challenge_started',
       `${group.name}`,
       aiChallenge.prompt || 'New challenge!',
-      group.id
+      group.id,
     ).catch(() => {});
   }
 

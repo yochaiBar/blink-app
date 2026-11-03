@@ -74,24 +74,14 @@ function LivePill({ expiresAt }: { expiresAt?: string }) {
   return (
     <View style={[styles.statePill, styles.statePillLive]}>
       <Animated.View style={[styles.liveDot, { opacity: dotOpacity }]} />
-      <Text style={styles.statePillLiveText}>
-        LIVE{expiresAt ? ` · ${formatRemaining(remaining)}` : ''}
-      </Text>
+      <Text style={styles.statePillLiveText}>LIVE{expiresAt ? ` · ${formatRemaining(remaining)}` : ''}</Text>
     </View>
   );
 }
 
 // ── Response thumbnail (E2E local photo first, S3 fallback) ──
 
-function ResponseThumb({
-  responseId,
-  photoUrl,
-  overlay,
-}: {
-  responseId: string;
-  photoUrl?: string;
-  overlay?: string;
-}) {
+function ResponseThumb({ responseId, photoUrl, overlay }: { responseId: string; photoUrl?: string; overlay?: string }) {
   const localPhoto = useQuery({
     queryKey: ['localPhoto', responseId],
     queryFn: () => getLocalPhotoUri(responseId),

@@ -78,19 +78,8 @@ const ssMemory = new Map<string, string>();
 
 import * as SecureStore from 'expo-secure-store';
 
-import {
-  sendPhoto,
-  receivePhoto,
-  respondToPickup,
-  MAX_PHOTO_BYTES,
-} from '../services/photoTransfer';
-import {
-  newGroupKey,
-  storeGroupKey,
-  bytesToB64,
-  getOrCreateDeviceKey,
-  GCM_TAG_BYTES,
-} from '../services/groupCrypto';
+import { sendPhoto, receivePhoto, respondToPickup, MAX_PHOTO_BYTES } from '../services/photoTransfer';
+import { newGroupKey, storeGroupKey, bytesToB64, getOrCreateDeviceKey, GCM_TAG_BYTES } from '../services/groupCrypto';
 import { getReceivedPhoto, getSenderPlaintext } from '../services/photoStore';
 
 const GROUP_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5e';
@@ -105,19 +94,13 @@ beforeEach(() => {
   ssMemory.clear();
   mockRelayPhoto.mockReset();
   fsNow.value = Date.now();
-  (SecureStore.getItemAsync as jest.Mock).mockImplementation(
-    async (k: string) => ssMemory.get(k) ?? null,
-  );
-  (SecureStore.setItemAsync as jest.Mock).mockImplementation(
-    async (k: string, v: string) => {
-      ssMemory.set(k, v);
-    },
-  );
-  (SecureStore.deleteItemAsync as jest.Mock).mockImplementation(
-    async (k: string) => {
-      ssMemory.delete(k);
-    },
-  );
+  (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (k: string) => ssMemory.get(k) ?? null);
+  (SecureStore.setItemAsync as jest.Mock).mockImplementation(async (k: string, v: string) => {
+    ssMemory.set(k, v);
+  });
+  (SecureStore.deleteItemAsync as jest.Mock).mockImplementation(async (k: string) => {
+    ssMemory.delete(k);
+  });
 });
 
 describe('photoTransfer.sendPhoto', () => {
@@ -307,9 +290,7 @@ describe('photoTransfer.receivePhoto', () => {
 
     // Replace first base64 char with a different one — guaranteed to flip
     // at least one ciphertext bit.
-    const tamperedB64 =
-      (sentBody.ciphertext_b64.startsWith('A') ? 'B' : 'A') +
-      sentBody.ciphertext_b64.slice(1);
+    const tamperedB64 = (sentBody.ciphertext_b64.startsWith('A') ? 'B' : 'A') + sentBody.ciphertext_b64.slice(1);
 
     const ack = await receivePhoto({
       v: 1,

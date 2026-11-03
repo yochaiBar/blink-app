@@ -113,11 +113,7 @@ function FeedSkeleton() {
 
 // ── Animated Feed Item Wrapper ──
 
-const AnimatedFeedItem = React.memo(function AnimatedFeedItem({
-  item,
-}: {
-  item: FeedItemData;
-}) {
+const AnimatedFeedItem = React.memo(function AnimatedFeedItem({ item }: { item: FeedItemData }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -184,10 +180,13 @@ export default function BlinksScreen() {
       const groupsWithChallenge = groups.filter((g) => g.hasActiveChallenge && !isDemoGroup(g.id));
       const fetches = groupsWithChallenge.map(async (group) => {
         try {
-          const challenge: ApiChallenge = await api(
-            `/challenges/groups/${group.id}/challenges/active`,
-          );
-          if (challenge && !challenge.user_has_responded && challenge.expires_at && new Date(challenge.expires_at).getTime() > Date.now()) {
+          const challenge: ApiChallenge = await api(`/challenges/groups/${group.id}/challenges/active`);
+          if (
+            challenge &&
+            !challenge.user_has_responded &&
+            challenge.expires_at &&
+            new Date(challenge.expires_at).getTime() > Date.now()
+          ) {
             // Only show active challenges that haven't expired yet
             let responses: ApiChallengeResponse[] = [];
             try {
@@ -235,9 +234,7 @@ export default function BlinksScreen() {
             if (challenge.user_responded) {
               // User responded -- try to get individual responses (photos)
               try {
-                const responses: ApiChallengeResponse[] = await api(
-                  `/challenges/${challenge.id}/responses`,
-                );
+                const responses: ApiChallengeResponse[] = await api(`/challenges/${challenge.id}/responses`);
                 if (Array.isArray(responses) && responses.length > 0) {
                   // Create a feed item for each individual response
                   for (const resp of responses) {
@@ -257,10 +254,7 @@ export default function BlinksScreen() {
                         timestamp: resp.responded_at || resp.created_at,
                         reactions: [], // Will be enriched separately if needed
                       });
-                    } else if (
-                      challenge.type !== 'snap' &&
-                      (resp.answer_text || resp.answer_index !== null)
-                    ) {
+                    } else if (challenge.type !== 'snap' && (resp.answer_text || resp.answer_index !== null)) {
                       // Quiz responses are aggregated per challenge, not per response
                       // We handle them below
                     }
@@ -441,7 +435,6 @@ export default function BlinksScreen() {
     [],
   );
 
-
   // ── Socket listeners ──
   useEffect(() => {
     const socket = getSocket();
@@ -490,9 +483,7 @@ export default function BlinksScreen() {
             challengeId: challenge.id,
             type: challenge.type,
             promptText: challenge.prompt_text ?? challenge.prompt ?? '',
-            optionsJson: JSON.stringify(
-              challenge.options_json ?? challenge.options ?? [],
-            ),
+            optionsJson: JSON.stringify(challenge.options_json ?? challenge.options ?? []),
             expiresAt: challenge.expires_at,
           },
         });
@@ -529,9 +520,7 @@ export default function BlinksScreen() {
       }
 
       // Find matching pending challenge
-      const pending = pendingChallenges.find(
-        (pc) => pc.group.id === item.groupId,
-      );
+      const pending = pendingChallenges.find((pc) => pc.group.id === item.groupId);
       if (pending) {
         navigateToChallenge(pending.group, pending.challenge);
       } else {
@@ -598,34 +587,29 @@ export default function BlinksScreen() {
 
   // ── Render ──
 
-  const renderItem = useCallback(
-    ({ item }: { item: FeedItemData }) => {
-      if (item.type === 'challenge_card') {
-        return (
-          <Animated.View>
-            <ChallengeCard item={item} />
-          </Animated.View>
-        );
-      }
-      if (item.type === 'lane_empty') {
-        return <LaneEmpty item={item} />;
-      }
-      return <AnimatedFeedItem item={item} />;
-    },
-    [],
-  );
+  const renderItem = useCallback(({ item }: { item: FeedItemData }) => {
+    if (item.type === 'challenge_card') {
+      return (
+        <Animated.View>
+          <ChallengeCard item={item} />
+        </Animated.View>
+      );
+    }
+    if (item.type === 'lane_empty') {
+      return <LaneEmpty item={item} />;
+    }
+    return <AnimatedFeedItem item={item} />;
+  }, []);
 
   const keyExtractor = useCallback((item: FeedItemData) => item.id, []);
 
-  const isLoading =
-    isGroupsLoading || (groups.length > 0 && feedQuery.isLoading);
+  const isLoading = isGroupsLoading || (groups.length > 0 && feedQuery.isLoading);
   // "User has no real feed content of their own" — true when not loading AND
   // either no groups or groups with no activity yet. Worldwide items don't
   // count toward "real content" so they aren't checked here.
   const hasNoGroups = !isGroupsLoading && groups.length === 0;
   const hasNoUserContent =
-    !isLoading &&
-    (hasNoGroups || (groups.length > 0 && feedQuery.isFetched && (feedQuery.data ?? []).length === 0));
+    !isLoading && (hasNoGroups || (groups.length > 0 && feedQuery.isFetched && (feedQuery.data ?? []).length === 0));
 
   // ── List Header ──
   // Groups lane only: the no-content / no-groups CTA. Other lanes carry their
@@ -637,9 +621,7 @@ export default function BlinksScreen() {
         <View style={styles.emptyIconContainer}>
           <Zap size={48} color={theme.coral} fill={theme.coral} />
         </View>
-        <Text style={styles.emptyTitle}>
-          {hasNoGroups ? 'Welcome to Blink' : 'No challenges yet'}
-        </Text>
+        <Text style={styles.emptyTitle}>{hasNoGroups ? 'Welcome to Blink' : 'No challenges yet'}</Text>
         <Text style={styles.emptySubtitle}>
           {hasNoGroups
             ? 'Capture moments with your closest crew via daily snap challenges. Join a group to start, or swipe to World to see what people are sharing.'
@@ -660,9 +642,7 @@ export default function BlinksScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.emptyActionGradient}
           >
-            <Text style={styles.emptyActionText}>
-              {hasNoGroups ? 'Create or Join a Group' : 'Go to Groups'}
-            </Text>
+            <Text style={styles.emptyActionText}>{hasNoGroups ? 'Create or Join a Group' : 'Go to Groups'}</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -679,10 +659,7 @@ export default function BlinksScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Demo challenge alert overlay */}
-      <DemoChallengeAlert
-        visible={showDemoAlert}
-        onDismiss={() => setDemoDismissed(true)}
-      />
+      <DemoChallengeAlert visible={showDemoAlert} onDismiss={() => setDemoDismissed(true)} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -691,18 +668,12 @@ export default function BlinksScreen() {
           <Zap size={20} color={theme.coral} fill={theme.coral} />
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.notifBtn}
-            onPress={handleNotifications}
-            testID="notifications-btn"
-          >
+          <TouchableOpacity style={styles.notifBtn} onPress={handleNotifications} testID="notifications-btn">
             <Bell size={20} color={theme.text} />
             {unreadNotificationCount > 0 && (
               <View style={styles.notifBadge}>
                 <Text style={styles.notifBadgeText}>
-                  {unreadNotificationCount > 9
-                    ? '9+'
-                    : unreadNotificationCount}
+                  {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
                 </Text>
               </View>
             )}
@@ -715,14 +686,7 @@ export default function BlinksScreen() {
               router.push('/(tabs)/profile' as never);
             }}
           >
-            <AvatarRing
-              uri={user.avatar}
-              name={user.name}
-              size={34}
-              ringColor={theme.coral}
-              showStatus
-              hasResponded
-            />
+            <AvatarRing uri={user.avatar} name={user.name} size={34} ringColor={theme.coral} showStatus hasResponded />
           </TouchableOpacity>
         </View>
       </View>
@@ -731,10 +695,7 @@ export default function BlinksScreen() {
       <LaneTabs active={activeLane} onChange={goToLane} />
 
       {/* Horizontally-paged lanes — swipe L/R to switch, ↑/↓ within a lane */}
-      <View
-        style={styles.pager}
-        onLayout={(e) => setPagerHeight(e.nativeEvent.layout.height)}
-      >
+      <View style={styles.pager} onLayout={(e) => setPagerHeight(e.nativeEvent.layout.height)}>
         <ScrollView
           ref={pagerRef}
           horizontal
@@ -758,11 +719,7 @@ export default function BlinksScreen() {
               ListEmptyComponent={ListEmpty}
               ListFooterComponent={ListFooter}
               refreshControl={
-                <RefreshControl
-                  refreshing={isRefreshing}
-                  onRefresh={handleRefresh}
-                  tintColor={theme.coral}
-                />
+                <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.coral} />
               }
               removeClippedSubviews={Platform.OS !== 'web'}
               maxToRenderPerBatch={5}
@@ -812,10 +769,7 @@ function buildQuizResults(
     const tally = new Map<string, number>();
     for (const resp of responses) {
       if (resp.answer_index !== null && resp.answer_index !== undefined) {
-        const label =
-          challenge.options[resp.answer_index] ||
-          resp.display_name ||
-          'Unknown';
+        const label = challenge.options[resp.answer_index] || resp.display_name || 'Unknown';
         tally.set(label, (tally.get(label) || 0) + 1);
       } else if (resp.answer_text) {
         tally.set(resp.answer_text, (tally.get(resp.answer_text) || 0) + 1);
@@ -847,11 +801,7 @@ function buildQuizResults(
     }));
 }
 
-function createFallbackItem(
-  items: FeedItemData[],
-  challenge: ChallengeHistoryItem,
-  group: Group,
-) {
+function createFallbackItem(items: FeedItemData[], challenge: ChallengeHistoryItem, group: Group) {
   // Create a simple quiz result item as fallback
   items.push({
     id: `fallback_${challenge.id}`,

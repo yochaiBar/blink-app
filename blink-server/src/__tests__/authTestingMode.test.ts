@@ -34,9 +34,7 @@ describe('verify-otp — TESTING_MODE bypass', () => {
     const user = makeUser({ phone_number: phone });
     mockQuery.mockResolvedValueOnce(queryResult([user])); // user upsert
 
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: '123456' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: '123456' });
 
     expect(res.status).toBe(200);
     expect(res.body.user.phone_number).toBe(phone);
@@ -49,9 +47,7 @@ describe('verify-otp — TESTING_MODE bypass', () => {
   it('still rejects a wrong code when TESTING_MODE is on (no stored OTP → 401)', async () => {
     (env as unknown as Record<string, unknown>).TESTING_MODE = 'true';
 
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: '999999' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: '999999' });
 
     expect(res.status).toBe(401);
   });
@@ -59,9 +55,7 @@ describe('verify-otp — TESTING_MODE bypass', () => {
   it('does NOT accept 123456 without a stored OTP when TESTING_MODE is off', async () => {
     // TESTING_MODE unset (default). No request-otp was issued, so there is
     // no pending code for this phone → normal path returns 401.
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ phone_number: phone, code: '123456' });
+    const res = await request(app).post('/api/auth/verify-otp').send({ phone_number: phone, code: '123456' });
 
     expect(res.status).toBe(401);
   });

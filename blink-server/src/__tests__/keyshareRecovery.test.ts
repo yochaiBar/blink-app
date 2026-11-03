@@ -55,9 +55,7 @@ describe('keyshareHub.requestKeyshareRecovery', () => {
       // enqueueKeyshare INSERT … RETURNING id
       .mockResolvedValueOnce(queryResult([{ id: PENDING_JOIN_ID }]))
       // other-members lookup
-      .mockResolvedValueOnce(
-        queryResult([{ user_id: TEST_USER_ID_2 }, { user_id: TEST_USER_ID_3 }]),
-      )
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }, { user_id: TEST_USER_ID_3 }]))
       // dispatchPendingKeysharesForUser(user2): claim UPDATE … RETURNING
       .mockResolvedValueOnce(
         queryResult([
@@ -70,9 +68,7 @@ describe('keyshareHub.requestKeyshareRecovery', () => {
         ]),
       )
       // dispatch: joiner pubkey lookup
-      .mockResolvedValueOnce(
-        queryResult([{ device_id: JOINER_DEVICE_ID, x25519_public_key: PUBKEY_B64 }]),
-      );
+      .mockResolvedValueOnce(queryResult([{ device_id: JOINER_DEVICE_ID, x25519_public_key: PUBKEY_B64 }]));
 
     // user2 online, user3 offline
     mockIsUserOnline.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
@@ -89,11 +85,7 @@ describe('keyshareHub.requestKeyshareRecovery', () => {
     // enqueue used the requester as the joiner
     const enqueueSql = String(mockQuery.mock.calls[0][0]);
     expect(enqueueSql).toMatch(/INSERT INTO pending_joins/i);
-    expect(mockQuery.mock.calls[0][1]).toEqual([
-      TEST_GROUP_ID,
-      TEST_USER_ID,
-      REQUESTER_DEVICE_ID,
-    ]);
+    expect(mockQuery.mock.calls[0][1]).toEqual([TEST_GROUP_ID, TEST_USER_ID, REQUESTER_DEVICE_ID]);
 
     // other-members lookup excludes the requester
     const membersSql = String(mockQuery.mock.calls[1][0]);

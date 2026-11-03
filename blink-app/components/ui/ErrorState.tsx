@@ -19,10 +19,10 @@ export default React.memo(function ErrorState({
     return (
       <View style={styles.compactContainer}>
         <AlertTriangle size={18} color={theme.red} />
-        <Text style={styles.compactMessage} numberOfLines={2}>{message}</Text>
-        {onRetry && (
-          <Button title="Retry" onPress={onRetry} variant="ghost" size="sm" />
-        )}
+        <Text style={styles.compactMessage} numberOfLines={2}>
+          {message}
+        </Text>
+        {onRetry && <Button title="Retry" onPress={onRetry} variant="ghost" size="sm" />}
       </View>
     );
   }

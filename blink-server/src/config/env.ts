@@ -54,9 +54,7 @@ export type Env = z.infer<typeof envSchema>;
 function parseEnv(): Env {
   const result = envSchema.safeParse(process.env);
   if (!result.success) {
-    const formatted = result.error.issues
-      .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
-      .join('\n');
+    const formatted = result.error.issues.map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`).join('\n');
     const message = `Environment validation failed:\n${formatted}`;
 
     // In test environment, throw so the test runner shows a clear error.

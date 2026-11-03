@@ -116,7 +116,9 @@ export default function DemoChallengeAlert({ visible, onDismiss }: Props) {
             </View>
             <View style={styles.textContainer}>
               <Text style={styles.title}>Welcome Crew</Text>
-              <Text style={styles.prompt} numberOfLines={1}>{promptText}</Text>
+              <Text style={styles.prompt} numberOfLines={1}>
+                {promptText}
+              </Text>
               <Text style={styles.subtitle}>Tap to respond</Text>
             </View>
             <TouchableOpacity

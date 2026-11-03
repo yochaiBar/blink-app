@@ -37,7 +37,10 @@ export default function JoinGroupScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
         Alert.alert('Joined!', `You're now a member of ${result.groupName}`, [
-          { text: 'View Group', onPress: () => router.replace({ pathname: '/group-detail' as never, params: { id: result.groupId } }) },
+          {
+            text: 'View Group',
+            onPress: () => router.replace({ pathname: '/group-detail' as never, params: { id: result.groupId } }),
+          },
           { text: 'OK', onPress: () => router.back() },
         ]);
       } else {
@@ -65,16 +68,11 @@ export default function JoinGroupScreen() {
 
       <View style={styles.content}>
         <View style={styles.iconSection}>
-          <LinearGradient
-            colors={[`${theme.coral}20`, `${theme.coral}08`]}
-            style={styles.iconCircle}
-          >
+          <LinearGradient colors={[`${theme.coral}20`, `${theme.coral}08`]} style={styles.iconCircle}>
             <UserPlus size={36} color={theme.coral} />
           </LinearGradient>
           <Text style={styles.title}>Enter Invite Code</Text>
-          <Text style={styles.subtitle}>
-            Ask a friend for their group code to join
-          </Text>
+          <Text style={styles.subtitle}>Ask a friend for their group code to join</Text>
         </View>
 
         <View style={styles.inputSection}>

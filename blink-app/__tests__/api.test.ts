@@ -79,7 +79,7 @@ describe('Token Management', () => {
         headers: expect.objectContaining({
           Authorization: 'Bearer test-token-123',
         }),
-      })
+      }),
     );
   });
 
@@ -120,7 +120,7 @@ describe('api()', () => {
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
         }),
-      })
+      }),
     );
   });
 
@@ -137,7 +137,7 @@ describe('api()', () => {
         headers: expect.objectContaining({
           Authorization: 'Bearer my-token',
         }),
-      })
+      }),
     );
   });
 
@@ -156,7 +156,7 @@ describe('api()', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify(body),
-      })
+      }),
     );
   });
 
@@ -230,7 +230,7 @@ describe('api()', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ refreshToken: 'valid-refresh-token' }),
-      })
+      }),
     );
   });
 
@@ -340,7 +340,7 @@ describe('markNotificationsRead()', () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('/notifications/read'),
-      expect.objectContaining({ method: 'PATCH' })
+      expect.objectContaining({ method: 'PATCH' }),
     );
   });
 });
@@ -364,7 +364,7 @@ describe('Reactions', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ emoji: '🔥' }),
-      })
+      }),
     );
   });
 
@@ -375,7 +375,7 @@ describe('Reactions', () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('/challenges/responses/response-1/reactions/%F0%9F%94%A5'),
-      expect.objectContaining({ method: 'DELETE' })
+      expect.objectContaining({ method: 'DELETE' }),
     );
   });
 });
@@ -389,9 +389,7 @@ describe('Comments', () => {
   });
 
   it('fetches the comment list for a response', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse(200, [{ id: 'c1', text: 'nice', parent_comment_id: null }]),
-    );
+    mockFetch.mockResolvedValueOnce(mockResponse(200, [{ id: 'c1', text: 'nice', parent_comment_id: null }]));
 
     const list = await fetchComments('response-1');
 
@@ -463,7 +461,7 @@ describe('Moderation', () => {
     expect(result.id).toBe('report-1');
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('/moderation/report'),
-      expect.objectContaining({ method: 'POST' })
+      expect.objectContaining({ method: 'POST' }),
     );
   });
 
@@ -477,7 +475,7 @@ describe('Moderation', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ blocked_id: 'user-to-block' }),
-      })
+      }),
     );
   });
 
@@ -488,7 +486,7 @@ describe('Moderation', () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('/moderation/blocks/user-to-unblock'),
-      expect.objectContaining({ method: 'DELETE' })
+      expect.objectContaining({ method: 'DELETE' }),
     );
   });
 

@@ -9,27 +9,29 @@ const router = Router();
 router.use(authenticate);
 
 // GET /api/activity — Recent activity across all user's groups
-router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const before = req.query.before as string | undefined;
+router.get(
+  '/',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const before = req.query.before as string | undefined;
 
-  const params: unknown[] = [req.userId];
-  let timestampFilter = '';
+    const params: unknown[] = [req.userId];
+    let timestampFilter = '';
 
-  if (before) {
-    const parsed = Date.parse(before);
-    if (isNaN(parsed)) {
-      res.status(400).json({ error: 'Invalid "before" parameter: must be a valid date string' });
-      return;
+    if (before) {
+      const parsed = Date.parse(before);
+      if (isNaN(parsed)) {
+        res.status(400).json({ error: 'Invalid "before" parameter: must be a valid date string' });
+        return;
+      }
+      params.push(before);
+      timestampFilter = `AND sub.timestamp < $2`;
     }
-    params.push(before);
-    timestampFilter = `AND sub.timestamp < $2`;
-  }
 
-  const limitParam = params.length + 1;
-  params.push(50);
+    const limitParam = params.length + 1;
+    params.push(50);
 
-  const result = await query(
-    `SELECT * FROM (
+    const result = await query(
+      `SELECT * FROM (
       -- Photo/answer responses (snap)
       SELECT
         CASE WHEN cr.response_type = 'photo' THEN 'snap' ELSE 'quiz' END as type,
@@ -90,11 +92,12 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
     WHERE 1=1 ${timestampFilter}
     ORDER BY sub.timestamp DESC
     LIMIT $${limitParam}`,
-    params
-  );
+      params,
+    );
 
-  logger.debug('Activity feed fetched', { userId: req.userId, count: result.rows.length });
-  res.json(result.rows);
-}));
+    logger.debug('Activity feed fetched', { userId: req.userId, count: result.rows.length });
+    res.json(result.rows);
+  }),
+);
 
 export default router;

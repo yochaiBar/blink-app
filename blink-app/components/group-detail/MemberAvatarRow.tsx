@@ -52,15 +52,8 @@ const AnimatedMemberAvatar = React.memo(function AnimatedMemberAvatar({
   }, [onPress, springScale]);
 
   return (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={1}
-      style={styles.memberRingItem}
-    >
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.memberTooltip, { opacity: tooltipOpacity }]}
-      >
+    <TouchableOpacity onPress={handlePress} activeOpacity={1} style={styles.memberRingItem}>
+      <Animated.View pointerEvents="none" style={[styles.memberTooltip, { opacity: tooltipOpacity }]}>
         <Text style={styles.memberTooltipText} numberOfLines={1}>
           {member.name}
         </Text>
@@ -117,9 +110,7 @@ export default function MemberAvatarRow({
   // Filter out the current user from the avatar row
   const visibleMembers = currentUserId ? members.filter((m) => m.id !== currentUserId) : members;
 
-  const respondedCount = hasActiveChallenge
-    ? members.filter((m) => respondedUserIds.has(m.id)).length
-    : 0;
+  const respondedCount = hasActiveChallenge ? members.filter((m) => respondedUserIds.has(m.id)).length : 0;
 
   const handleMemberPress = useCallback((memberId: string) => {
     setSelectedMemberId((prev) => (prev === memberId ? null : memberId));
@@ -127,11 +118,7 @@ export default function MemberAvatarRow({
 
   return (
     <View style={styles.memberRingSection}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.memberRingRow}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberRingRow}>
         {visibleMembers.map((member) => {
           const hasResponded = respondedUserIds.has(member.id);
           return (

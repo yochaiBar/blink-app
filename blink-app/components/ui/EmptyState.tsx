@@ -11,13 +11,7 @@ interface EmptyStateProps {
   onAction?: () => void;
 }
 
-export default React.memo(function EmptyState({
-  emoji,
-  title,
-  subtitle,
-  actionLabel,
-  onAction,
-}: EmptyStateProps) {
+export default React.memo(function EmptyState({ emoji, title, subtitle, actionLabel, onAction }: EmptyStateProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.emoji}>{emoji}</Text>

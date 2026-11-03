@@ -1,5 +1,16 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, RefreshControl, Alert, Share, Animated, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  RefreshControl,
+  Alert,
+  Share,
+  Animated,
+  Dimensions,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
@@ -96,7 +107,7 @@ export default function GroupDetailScreen() {
     queryKey: ['group', id],
     queryFn: async () => {
       if (isDemo) return DEMO_GROUP_DETAIL;
-      return await api(`/groups/${id}`) as ApiGroupDetail;
+      return (await api(`/groups/${id}`)) as ApiGroupDetail;
     },
     enabled: !!id,
     staleTime: isDemo ? Infinity : 15_000,
@@ -106,7 +117,7 @@ export default function GroupDetailScreen() {
     queryKey: ['challenge', id],
     queryFn: async () => {
       if (isDemo) return { ...DEMO_CHALLENGE, expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString() };
-      return await api(`/challenges/groups/${id}/challenges/active`) as ApiChallenge;
+      return (await api(`/challenges/groups/${id}/challenges/active`)) as ApiChallenge;
     },
     enabled: !!id,
     retry: false,
@@ -120,7 +131,7 @@ export default function GroupDetailScreen() {
     queryFn: async () => {
       if (isDemo) return DEMO_RESPONSES;
       if (!activeChallenge?.id) return [];
-      return await api(`/challenges/${activeChallenge.id}/responses`) as ApiChallengeResponse[];
+      return (await api(`/challenges/${activeChallenge.id}/responses`)) as ApiChallengeResponse[];
     },
     enabled: isDemo ? !!id : !!activeChallenge?.id,
     staleTime: isDemo ? Infinity : undefined,
@@ -128,7 +139,7 @@ export default function GroupDetailScreen() {
 
   const photosQuery = useQuery({
     queryKey: ['group-photos', id],
-    queryFn: async () => (await api(`/challenges/groups/${id}/photos?limit=30`) ?? []) as GroupPhoto[],
+    queryFn: async () => ((await api(`/challenges/groups/${id}/photos?limit=30`)) ?? []) as GroupPhoto[],
     enabled: !!id && !isDemo,
     staleTime: 60_000,
     retry: false,
@@ -136,7 +147,7 @@ export default function GroupDetailScreen() {
 
   const spotlightQuery = useQuery({
     queryKey: ['spotlight', id],
-    queryFn: async () => await getSpotlight(id!) as ApiSpotlight | null,
+    queryFn: async () => (await getSpotlight(id!)) as ApiSpotlight | null,
     enabled: !!id && !isDemo,
     staleTime: 60_000,
     retry: false,
@@ -148,10 +159,9 @@ export default function GroupDetailScreen() {
   const groupPhotos: GroupPhoto[] = photosQuery.data ?? [];
   const spotlight = spotlightQuery.data ? apiSpotlightToUI(spotlightQuery.data, id) : null;
   const snaps = (responsesQuery.data ?? []).map((r) => ({ ...apiResponseToSnap(r), groupId: id ?? '' }));
-  const hasSubmittedToday = isDemo ? false : (
-    snaps.some((s) => s.userId === user.id) ||
-    (responsesQuery.data ?? []).some((r) => r.user_id === user.id)
-  );
+  const hasSubmittedToday = isDemo
+    ? false
+    : snaps.some((s) => s.userId === user.id) || (responsesQuery.data ?? []).some((r) => r.user_id === user.id);
   const isQuizChallenge = !!(activeChallenge?.type && activeChallenge.type !== 'snap');
 
   const challengeTriggerInfo = React.useMemo(() => {
@@ -164,7 +174,13 @@ export default function GroupDetailScreen() {
   const quizOptions: string[] = React.useMemo(() => {
     if (!isQuizChallenge || !activeChallenge) return [];
     const opts = activeChallenge.options_json ?? activeChallenge.options ?? [];
-    if (typeof opts === 'string') { try { return JSON.parse(opts); } catch { return []; /* Malformed JSON */ } }
+    if (typeof opts === 'string') {
+      try {
+        return JSON.parse(opts);
+      } catch {
+        return []; /* Malformed JSON */
+      }
+    }
     return Array.isArray(opts) ? opts : [];
   }, [activeChallenge, isQuizChallenge]);
 
@@ -185,7 +201,8 @@ export default function GroupDetailScreen() {
     }
     const total = counts.reduce((a, b) => a + b, 0);
     return quizOptions.map((opt: string, i: number) => ({
-      label: opt, count: counts[i],
+      label: opt,
+      count: counts[i],
       percentage: total > 0 ? Math.round((counts[i] / total) * 100) : 0,
       respondents: respondents[i] ?? [],
     }));
@@ -203,9 +220,9 @@ export default function GroupDetailScreen() {
     : false;
 
   const groupStreak = group
-    ? group.members.reduce((min, m) => Math.min(min, m.streak), group.members[0]?.streak ?? 0) : 0;
-  const longestGroupStreak = group
-    ? Math.max(...group.members.map((m) => m.streak), 0) : 0;
+    ? group.members.reduce((min, m) => Math.min(min, m.streak), group.members[0]?.streak ?? 0)
+    : 0;
+  const longestGroupStreak = group ? Math.max(...group.members.map((m) => m.streak), 0) : 0;
 
   // ── Side effects: fetch progress, preview, socket listeners ──
   useEffect(() => {
@@ -213,14 +230,21 @@ export default function GroupDetailScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const data = await api<{ responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>; totalMembers?: number }>(`/challenges/${activeChallenge.id}/progress`);
+        const data = await api<{
+          responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>;
+          totalMembers?: number;
+        }>(`/challenges/${activeChallenge.id}/progress`);
         if (!cancelled && data) {
           setProgressData({ responded: data.responded ?? [], totalMembers: data.totalMembers ?? 0 });
           setChallengeJustTriggered(false);
         }
-      } catch { /* endpoint may not exist */ }
+      } catch {
+        /* endpoint may not exist */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeChallenge?.id, isDemo]);
 
   useEffect(() => {
@@ -228,21 +252,37 @@ export default function GroupDetailScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const data = await api<{ respondedCount?: number; totalMembers?: number; totalReactions?: number; topReactionEmoji?: string; respondedUsers?: Array<{ userId: string; displayName: string; avatarUrl?: string }> }>(`/challenges/${activeChallenge.id}/preview`);
-        if (!cancelled && data) setPreviewData({
-          respondedCount: data.respondedCount ?? 0, totalMembers: data.totalMembers ?? 0,
-          totalReactions: data.totalReactions ?? 0, topReactionEmoji: data.topReactionEmoji,
-          respondedUsers: data.respondedUsers ?? [],
-        });
-      } catch { /* endpoint may not exist */ }
+        const data = await api<{
+          respondedCount?: number;
+          totalMembers?: number;
+          totalReactions?: number;
+          topReactionEmoji?: string;
+          respondedUsers?: Array<{ userId: string; displayName: string; avatarUrl?: string }>;
+        }>(`/challenges/${activeChallenge.id}/preview`);
+        if (!cancelled && data)
+          setPreviewData({
+            respondedCount: data.respondedCount ?? 0,
+            totalMembers: data.totalMembers ?? 0,
+            totalReactions: data.totalReactions ?? 0,
+            topReactionEmoji: data.topReactionEmoji,
+            respondedUsers: data.respondedUsers ?? [],
+          });
+      } catch {
+        /* endpoint may not exist */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeChallenge?.id, isDemo]);
 
   useEffect(() => {
     const socket = getSocket();
     if (!socket || isDemo) return;
-    const handleProgress = (data: { responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>; totalMembers?: number }) => {
+    const handleProgress = (data: {
+      responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>;
+      totalMembers?: number;
+    }) => {
       if (data.responded && data.totalMembers) {
         setProgressData({ responded: data.responded, totalMembers: data.totalMembers });
         setChallengeJustTriggered(false);
@@ -251,9 +291,13 @@ export default function GroupDetailScreen() {
     const handleResponse = () => {
       if (activeChallenge?.id) {
         responsesQuery.refetch();
-        api<{ responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>; totalMembers?: number }>(`/challenges/${activeChallenge.id}/progress`).then((data) => {
-          if (data) setProgressData({ responded: data.responded ?? [], totalMembers: data.totalMembers ?? 0 });
-        }).catch(() => {}); // Non-critical: progress refresh is best-effort
+        api<{ responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>; totalMembers?: number }>(
+          `/challenges/${activeChallenge.id}/progress`,
+        )
+          .then((data) => {
+            if (data) setProgressData({ responded: data.responded ?? [], totalMembers: data.totalMembers ?? 0 });
+          })
+          .catch(() => {}); // Non-critical: progress refresh is best-effort
       }
     };
     const handleStreak = (data: { userName?: string; streakDays?: number }) => {
@@ -263,7 +307,8 @@ export default function GroupDetailScreen() {
       }
     };
     const handleCommentary = (data: { challengeId?: string; commentary?: string }) => {
-      if (data.challengeId && data.commentary) setAiCommentary({ challengeId: data.challengeId, commentary: data.commentary });
+      if (data.challengeId && data.commentary)
+        setAiCommentary({ challengeId: data.challengeId, commentary: data.commentary });
     };
     socket.on('challenge:progress', handleProgress);
     socket.on('challenge:response', handleResponse);
@@ -280,7 +325,14 @@ export default function GroupDetailScreen() {
   // ── Mutations ──
   const ringMutation = useMutation({
     mutationFn: async (type: ChallengeType) => {
-      return api<{ id?: string; prompt_text?: string; prompt?: string; options_json?: string[]; options?: string[]; expires_at?: string }>(`/challenges/groups/${id}/challenges`, { method: 'POST', body: JSON.stringify({ type }) });
+      return api<{
+        id?: string;
+        prompt_text?: string;
+        prompt?: string;
+        options_json?: string[];
+        options?: string[];
+        expires_at?: string;
+      }>(`/challenges/groups/${id}/challenges`, { method: 'POST', body: JSON.stringify({ type }) });
     },
     onSuccess: (data, type) => {
       queryClient.invalidateQueries({ queryKey: ['challenge', id] });
@@ -304,7 +356,17 @@ export default function GroupDetailScreen() {
       if (type === 'snap') {
         router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
       } else if (type === 'quiz_food' || type === 'quiz_most_likely' || type === 'quiz_rate_day') {
-        router.push({ pathname: '/quiz-challenge' as never, params: { groupId: id, challengeId: data?.id ?? '', type, promptText: data?.prompt_text ?? data?.prompt ?? '', optionsJson: JSON.stringify(data?.options_json ?? data?.options ?? []), expiresAt: data?.expires_at ?? '' } });
+        router.push({
+          pathname: '/quiz-challenge' as never,
+          params: {
+            groupId: id,
+            challengeId: data?.id ?? '',
+            type,
+            promptText: data?.prompt_text ?? data?.prompt ?? '',
+            optionsJson: JSON.stringify(data?.options_json ?? data?.options ?? []),
+            expiresAt: data?.expires_at ?? '',
+          },
+        });
       } else {
         router.push({ pathname: '/group-prompt' as never, params: { groupId: id } });
       }
@@ -313,7 +375,9 @@ export default function GroupDetailScreen() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async () => { await api(`/groups/${id}`, { method: 'DELETE' }); },
+    mutationFn: async () => {
+      await api(`/groups/${id}`, { method: 'DELETE' });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       queryClient.removeQueries({ queryKey: ['group', id] });
@@ -332,8 +396,23 @@ export default function GroupDetailScreen() {
     }
     if (activeChallenge?.type === 'snap') {
       router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
-    } else if (activeChallenge?.type === 'quiz' || activeChallenge?.type === 'quiz_food' || activeChallenge?.type === 'quiz_most_likely' || activeChallenge?.type === 'quiz_rate_day') {
-      router.push({ pathname: '/quiz-challenge' as never, params: { groupId: id, challengeId: activeChallenge.id, type: activeChallenge.type, promptText: activeChallenge.prompt_text ?? activeChallenge.prompt ?? '', optionsJson: JSON.stringify(activeChallenge.options_json ?? activeChallenge.options ?? []), expiresAt: activeChallenge.expires_at } });
+    } else if (
+      activeChallenge?.type === 'quiz' ||
+      activeChallenge?.type === 'quiz_food' ||
+      activeChallenge?.type === 'quiz_most_likely' ||
+      activeChallenge?.type === 'quiz_rate_day'
+    ) {
+      router.push({
+        pathname: '/quiz-challenge' as never,
+        params: {
+          groupId: id,
+          challengeId: activeChallenge.id,
+          type: activeChallenge.type,
+          promptText: activeChallenge.prompt_text ?? activeChallenge.prompt ?? '',
+          optionsJson: JSON.stringify(activeChallenge.options_json ?? activeChallenge.options ?? []),
+          expiresAt: activeChallenge.expires_at,
+        },
+      });
     } else {
       router.push({ pathname: '/group-prompt' as never, params: { groupId: id } });
     }
@@ -346,29 +425,40 @@ export default function GroupDetailScreen() {
     setShowReportModal(true);
   }, []);
 
-  const handleBlockUser = useCallback((userId: string, userName: string) => {
-    const doBlock = async () => {
-      try {
-        await blockUser(userId);
-        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Blocked', `${userName} has been blocked. You won't see their content anymore.`);
-        responsesQuery.refetch();
-      } catch { Alert.alert('Error', 'Could not block user. Please try again.'); }
-    };
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Block ${userName}?\n\nYou won't see their content and they won't see yours.`)) doBlock();
-    } else {
-      Alert.alert(`Block ${userName}?`, "You won't see their content and they won't see yours.", [
-        { text: 'Cancel', style: 'cancel' }, { text: 'Block', style: 'destructive', onPress: doBlock },
-      ]);
-    }
-  }, [responsesQuery]);
+  const handleBlockUser = useCallback(
+    (userId: string, userName: string) => {
+      const doBlock = async () => {
+        try {
+          await blockUser(userId);
+          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Alert.alert('Blocked', `${userName} has been blocked. You won't see their content anymore.`);
+          responsesQuery.refetch();
+        } catch {
+          Alert.alert('Error', 'Could not block user. Please try again.');
+        }
+      };
+      if (Platform.OS === 'web') {
+        if (window.confirm(`Block ${userName}?\n\nYou won't see their content and they won't see yours.`)) doBlock();
+      } else {
+        Alert.alert(`Block ${userName}?`, "You won't see their content and they won't see yours.", [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Block', style: 'destructive', onPress: doBlock },
+        ]);
+      }
+    },
+    [responsesQuery],
+  );
 
   const handleDeleteGroup = useCallback(() => {
     setShowGroupMenu(false);
     setTimeout(() => {
       if (Platform.OS === 'web') {
-        if (window.confirm('Delete Group?\n\nAre you sure? This action cannot be undone and all members will lose access.')) deleteMutation.mutate();
+        if (
+          window.confirm(
+            'Delete Group?\n\nAre you sure? This action cannot be undone and all members will lose access.',
+          )
+        )
+          deleteMutation.mutate();
       } else {
         Alert.alert('Delete Group', 'Are you sure? This action cannot be undone and all members will lose access.', [
           { text: 'Cancel', style: 'cancel' },
@@ -391,8 +481,14 @@ export default function GroupDetailScreen() {
       }
     };
     setTimeout(() => {
-      if (Platform.OS === 'web') { if (window.confirm('Leave Group?\n\nAre you sure? You will need an invite to rejoin.')) doLeave(); }
-      else { Alert.alert('Leave Group', 'Are you sure? You will need an invite to rejoin.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Leave', style: 'destructive', onPress: doLeave }]); }
+      if (Platform.OS === 'web') {
+        if (window.confirm('Leave Group?\n\nAre you sure? You will need an invite to rejoin.')) doLeave();
+      } else {
+        Alert.alert('Leave Group', 'Are you sure? You will need an invite to rejoin.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Leave', style: 'destructive', onPress: doLeave },
+        ]);
+      }
     }, 300);
   }, [id, queryClient, router]);
 
@@ -419,8 +515,14 @@ export default function GroupDetailScreen() {
     const msg =
       'This fixes "no group key" errors by generating a brand-new secure key for the group. Photos sent under the old key can no longer be opened. Continue?';
     setTimeout(() => {
-      if (Platform.OS === 'web') { if (window.confirm(`Reset Secure Key?\n\n${msg}`)) doReset(); }
-      else { Alert.alert('Reset Secure Key', msg, [{ text: 'Cancel', style: 'cancel' }, { text: 'Reset', style: 'destructive', onPress: doReset }]); }
+      if (Platform.OS === 'web') {
+        if (window.confirm(`Reset Secure Key?\n\n${msg}`)) doReset();
+      } else {
+        Alert.alert('Reset Secure Key', msg, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Reset', style: 'destructive', onPress: doReset },
+        ]);
+      }
     }, 300);
   }, [id, queryClient]);
 
@@ -431,7 +533,9 @@ export default function GroupDetailScreen() {
 
   const onRefresh = useCallback(() => {
     if (isDemo) return;
-    groupQuery.refetch(); challengeQuery.refetch(); spotlightQuery.refetch();
+    groupQuery.refetch();
+    challengeQuery.refetch();
+    spotlightQuery.refetch();
     if (activeChallenge?.id) responsesQuery.refetch();
   }, [groupQuery, challengeQuery, responsesQuery, spotlightQuery, activeChallenge, isDemo]);
 
@@ -463,7 +567,8 @@ export default function GroupDetailScreen() {
 
   const handleGroupDetailTourNext = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    advanceTour('fab'); router.back();
+    advanceTour('fab');
+    router.back();
   }, [advanceTour, router]);
 
   // ── Loading / Error / Empty states ──
@@ -471,13 +576,19 @@ export default function GroupDetailScreen() {
     return (
       <View style={[s.container, { paddingTop: insets.top }]}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}><ArrowLeft size={22} color={theme.text} /></TouchableOpacity>
-          <View style={s.headerCenter}><Skeleton variant="text" width={120} height={20} /></View>
+          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+            <ArrowLeft size={22} color={theme.text} />
+          </TouchableOpacity>
+          <View style={s.headerCenter}>
+            <Skeleton variant="text" width={120} height={20} />
+          </View>
           <View style={{ width: 36 }} />
         </View>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.lg }}>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} variant="circle" width={50} height={50} />)}
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} variant="circle" width={50} height={50} />
+            ))}
           </View>
           <Skeleton variant="text" width={SCREEN_WIDTH - 64} height={100} borderRadius={20} />
           <SnapCardSkeleton />
@@ -490,7 +601,9 @@ export default function GroupDetailScreen() {
     return (
       <View style={[s.container, { paddingTop: insets.top }]}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}><ArrowLeft size={22} color={theme.text} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+            <ArrowLeft size={22} color={theme.text} />
+          </TouchableOpacity>
         </View>
         <ErrorState message="Failed to load group details" onRetry={() => groupQuery.refetch()} />
       </View>
@@ -501,9 +614,15 @@ export default function GroupDetailScreen() {
     return (
       <View style={[s.container, { paddingTop: insets.top }]}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}><ArrowLeft size={22} color={theme.text} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+            <ArrowLeft size={22} color={theme.text} />
+          </TouchableOpacity>
         </View>
-        <EmptyState emoji={"\u{1F605}"} title="Group not found" subtitle="It may have been deleted or you lost access." />
+        <EmptyState
+          emoji={'\u{1F605}'}
+          title="Group not found"
+          subtitle="It may have been deleted or you lost access."
+        />
       </View>
     );
   }
@@ -515,9 +634,19 @@ export default function GroupDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn} testID="back-btn">
           <ArrowLeft size={22} color={theme.text} />
         </TouchableOpacity>
-        <TouchableOpacity style={s.headerCenter} activeOpacity={0.7} onPress={() => { if (!isDemo) { /* navigate to group settings */ } }}>
+        <TouchableOpacity
+          style={s.headerCenter}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (!isDemo) {
+              /* navigate to group settings */
+            }
+          }}
+        >
           <Text style={s.headerEmoji}>{group.emoji}</Text>
-          <Text style={s.headerTitle} numberOfLines={1}>{group.name}</Text>
+          <Text style={s.headerTitle} numberOfLines={1}>
+            {group.name}
+          </Text>
         </TouchableOpacity>
         <View style={s.headerRight}>
           {!isDemo && (
@@ -534,10 +663,20 @@ export default function GroupDetailScreen() {
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
         scrollEventThrottle={16}
-        refreshControl={<RefreshControl refreshing={!isDemo && groupQuery.isRefetching} onRefresh={onRefresh} tintColor={theme.coral} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={!isDemo && groupQuery.isRefetching}
+            onRefresh={onRefresh}
+            tintColor={theme.coral}
+          />
+        }
       >
         <MemberAvatarRow
-          members={(groupQuery.data?.members ?? []).map((m) => ({ id: m.user_id, name: m.display_name ?? 'User', avatar: m.avatar_url ?? '' }))}
+          members={(groupQuery.data?.members ?? []).map((m) => ({
+            id: m.user_id,
+            name: m.display_name ?? 'User',
+            avatar: m.avatar_url ?? '',
+          }))}
           respondedUserIds={respondedUserIds}
           hasActiveChallenge={group.hasActiveChallenge}
           currentUserId={user.id}
@@ -546,7 +685,9 @@ export default function GroupDetailScreen() {
         {!isDemo && id && <GroupStatsCard groupId={id} />}
 
         {group.aiPersonality && (
-          <View style={s.personalityRow}><AiPersonalityPill personality={group.aiPersonality} /></View>
+          <View style={s.personalityRow}>
+            <AiPersonalityPill personality={group.aiPersonality} />
+          </View>
         )}
 
         {activeChallenge && (
@@ -590,13 +731,7 @@ export default function GroupDetailScreen() {
           onBlock={handleBlockUser}
         />
 
-        {!isDemo && (
-          <GroupMiniFeed
-            groupId={id ?? ''}
-            groupName={group.name}
-            groupEmoji={group.emoji}
-          />
-        )}
+        {!isDemo && <GroupMiniFeed groupId={id ?? ''} groupName={group.name} groupEmoji={group.emoji} />}
 
         <BottomActions
           isDemo={isDemo}
@@ -639,12 +774,19 @@ export default function GroupDetailScreen() {
         groupId={id ?? ''}
         isAdmin={isAdmin}
         onClose={() => setShowGroupMenu(false)}
-        onInviteMembers={() => { setShowGroupMenu(false); router.push({ pathname: '/invite-members' as never, params: { groupId: id } }); }}
+        onInviteMembers={() => {
+          setShowGroupMenu(false);
+          router.push({ pathname: '/invite-members' as never, params: { groupId: id } });
+        }}
         onShareGroup={handleShareGroup}
         onDeleteGroup={handleDeleteGroup}
         onLeaveGroup={handleLeaveGroup}
         onResetKey={handleResetKey}
-        onReportGroup={() => { setShowGroupMenu(false); setReportTarget({ contentType: 'group', reportedContentId: id }); setShowReportModal(true); }}
+        onReportGroup={() => {
+          setShowGroupMenu(false);
+          setReportTarget({ contentType: 'group', reportedContentId: id });
+          setShowReportModal(true);
+        }}
       />
 
       <ReportModal
@@ -667,13 +809,40 @@ export default function GroupDetailScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: theme.bgCard, justifyContent: 'center', alignItems: 'center' },
-  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginHorizontal: spacing.sm },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: theme.bgCard,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.sm,
+  },
   headerEmoji: { fontSize: 24 },
   headerTitle: { ...typography.headlineLarge, color: theme.text, maxWidth: 180 },
   headerRight: { width: 38, alignItems: 'flex-end' },
-  menuBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: theme.bgCard, justifyContent: 'center', alignItems: 'center' },
+  menuBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: theme.bgCard,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
   personalityRow: { flexDirection: 'row', marginBottom: spacing.md },

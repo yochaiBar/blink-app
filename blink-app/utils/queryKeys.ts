@@ -11,8 +11,7 @@ export const queryKeys = {
   },
   challenges: {
     active: (groupId: string) => ['challenge', groupId] as const,
-    activeForSnap: (groupId: string, challengeId?: string) =>
-      ['active-challenge', groupId, challengeId] as const,
+    activeForSnap: (groupId: string, challengeId?: string) => ['active-challenge', groupId, challengeId] as const,
     responses: (challengeId: string | undefined) => ['responses', challengeId] as const,
     history: (groupId: string) => ['challenge-history', groupId] as const,
     progress: (challengeId: string | undefined) => ['challenge-progress', challengeId] as const,

@@ -10,7 +10,7 @@ const isS3Url = (url: string) =>
 
 const phoneNumberSchema = z
   .string()
-  .transform((val) => val.startsWith('+') ? val : `+${val}`)
+  .transform((val) => (val.startsWith('+') ? val : `+${val}`))
   .pipe(z.string().regex(/^\+[1-9]\d{1,14}$/, 'Invalid phone number format. Use E.164 format (e.g. +15551234567)'));
 
 export const requestOtpSchema = z.object({
@@ -19,9 +19,7 @@ export const requestOtpSchema = z.object({
 
 export const verifyOtpSchema = z.object({
   phone_number: phoneNumberSchema,
-  code: z
-    .string()
-    .regex(/^\d{6}$/, 'OTP code must be exactly 6 digits'),
+  code: z.string().regex(/^\d{6}$/, 'OTP code must be exactly 6 digits'),
 });
 
 export const refreshTokenSchema = z.object({
@@ -30,23 +28,35 @@ export const refreshTokenSchema = z.object({
 
 // ── Profile schemas ───────────────────────────────────────────
 
-export const updateProfileSchema = z.object({
-  display_name: z.string().trim().min(1, 'Display name is required').max(50, 'Display name too long').optional(),
-  avatar_url: z.string().url().refine(isS3Url, { message: 'avatar_url must be from the allowed S3 bucket' }).or(z.literal('')).optional(),
-  bio: z
-    .string()
-    .max(200, 'Bio must be at most 200 characters')
-    .optional(),
-}).refine(
-  (data) => data.display_name !== undefined || data.avatar_url !== undefined || data.bio !== undefined,
-  { message: 'At least one field (display_name, avatar_url, or bio) must be provided' }
-);
+export const updateProfileSchema = z
+  .object({
+    display_name: z.string().trim().min(1, 'Display name is required').max(50, 'Display name too long').optional(),
+    avatar_url: z
+      .string()
+      .url()
+      .refine(isS3Url, { message: 'avatar_url must be from the allowed S3 bucket' })
+      .or(z.literal(''))
+      .optional(),
+    bio: z.string().max(200, 'Bio must be at most 200 characters').optional(),
+  })
+  .refine((data) => data.display_name !== undefined || data.avatar_url !== undefined || data.bio !== undefined, {
+    message: 'At least one field (display_name, avatar_url, or bio) must be provided',
+  });
 
 // ── Group schemas ─────────────────────────────────────────────
 
 const groupCategoryEnum = z.enum(['friends', 'family', 'students', 'work', 'custom']);
 const penaltyTypeEnum = z.enum(['wanted_poster', 'avatar_change', 'servant', 'none']);
-const aiPersonalityEnum = z.enum(['family_friendly', 'funny', 'spicy', 'sarcastic', 'motivational', 'extreme', 'sexy', 'no_filter']);
+const aiPersonalityEnum = z.enum([
+  'family_friendly',
+  'funny',
+  'spicy',
+  'sarcastic',
+  'motivational',
+  'extreme',
+  'sexy',
+  'no_filter',
+]);
 
 export const createGroupSchema = z.object({
   name: z
@@ -73,27 +83,32 @@ export const joinGroupSchema = z.object({
 
 const challengeTypeEnum = z.enum(['snap', 'quiz_food', 'quiz_most_likely', 'quiz_rate_day', 'prompt']);
 
-export const createChallengeSchema = z.object({
-  type: challengeTypeEnum.optional(),
-  prompt_text: z.string().min(1).max(500).optional(),
-  options: z.array(z.string().max(200)).max(10).optional(),
-  correct_answer: z.number().int().min(0).optional(),
-}).refine(
-  (data) => {
-    if (data.type === 'prompt' && !data.prompt_text) return false;
-    return true;
-  },
-  { message: 'prompt_text is required when type is prompt' }
-);
+export const createChallengeSchema = z
+  .object({
+    type: challengeTypeEnum.optional(),
+    prompt_text: z.string().min(1).max(500).optional(),
+    options: z.array(z.string().max(200)).max(10).optional(),
+    correct_answer: z.number().int().min(0).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.type === 'prompt' && !data.prompt_text) return false;
+      return true;
+    },
+    { message: 'prompt_text is required when type is prompt' },
+  );
 
 export const respondChallengeSchema = z.object({
   // v1 photo_url accepted only for backwards compat during the v2 cutover.
   // New v1 traffic gets HTTP 426 from /upload/* so this branch is dead in
   // practice; we'll drop the field entirely once telemetry confirms it.
-  photo_url: z.string().url().refine(
-    (url) => isS3Url(url) || url.startsWith('data:image/'),
-    { message: 'photo_url must be from the allowed S3 bucket or a data URI' }
-  ).optional(),
+  photo_url: z
+    .string()
+    .url()
+    .refine((url) => isS3Url(url) || url.startsWith('data:image/'), {
+      message: 'photo_url must be from the allowed S3 bucket or a data URI',
+    })
+    .optional(),
   // v2 photo flow flag: client tells us "I will relay the actual bytes
   // via /api/photos/relay separately." Server records the response row
   // with has_photo=true but no photo_url. Recipients render from their
@@ -107,20 +122,13 @@ export const respondChallengeSchema = z.object({
 // ── Reaction schemas ─────────────────────────────────────────
 
 export const addReactionSchema = z.object({
-  emoji: z
-    .string()
-    .min(1, 'Emoji is required')
-    .max(10, 'Emoji must be at most 10 characters'),
+  emoji: z.string().min(1, 'Emoji is required').max(10, 'Emoji must be at most 10 characters'),
 });
 
 // ── Comment schemas ─────────────────────────────────────────
 
 export const createCommentSchema = z.object({
-  text: z
-    .string()
-    .trim()
-    .min(1, 'Comment cannot be empty')
-    .max(280, 'Comment must be at most 280 characters'),
+  text: z.string().trim().min(1, 'Comment cannot be empty').max(280, 'Comment must be at most 280 characters'),
   parent_comment_id: z.string().uuid().optional(),
 });
 
@@ -240,7 +248,7 @@ export const pushTokenSchema = z.object({
     .min(1, 'push_token is required')
     .refine(
       (val) => val.startsWith('ExponentPushToken['),
-      'push_token must be a valid Expo push token (starts with "ExponentPushToken[")'
+      'push_token must be a valid Expo push token (starts with "ExponentPushToken[")',
     ),
 });
 

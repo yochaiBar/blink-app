@@ -8,10 +8,7 @@ export interface GroupStreakBannerProps {
   longestGroupStreak: number;
 }
 
-export default function GroupStreakBanner({
-  groupStreak,
-  longestGroupStreak,
-}: GroupStreakBannerProps) {
+export default function GroupStreakBanner({ groupStreak, longestGroupStreak }: GroupStreakBannerProps) {
   const slideAnim = useRef(new Animated.Value(-30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -56,9 +53,7 @@ export default function GroupStreakBanner({
           )}
         </>
       ) : (
-        <Text style={styles.inactiveText}>
-          Start a group streak — get everyone to respond!
-        </Text>
+        <Text style={styles.inactiveText}>Start a group streak — get everyone to respond!</Text>
       )}
     </Animated.View>
   );

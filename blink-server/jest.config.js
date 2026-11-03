@@ -11,14 +11,15 @@ const base = {
   },
   clearMocks: true,
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
-      diagnostics: false,
-    }],
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        diagnostics: false,
+      },
+    ],
   },
   // Allow transforming ESM packages
-  transformIgnorePatterns: [
-    'node_modules/(?!(uuid|zod)/)',
-  ],
+  transformIgnorePatterns: ['node_modules/(?!(uuid|zod)/)'],
 };
 
 /** @type {import('ts-jest').JestConfigWithTsJest} */
@@ -41,12 +42,7 @@ module.exports = {
       setupFilesAfterEnv: ['<rootDir>/src/__integration__/support/perTest.ts'],
     },
   ],
-  collectCoverageFrom: [
-    'src/routes/**/*.ts',
-    'src/middleware/**/*.ts',
-    'src/utils/**/*.ts',
-    '!src/**/*.d.ts',
-  ],
+  collectCoverageFrom: ['src/routes/**/*.ts', 'src/middleware/**/*.ts', 'src/utils/**/*.ts', '!src/**/*.d.ts'],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'clover'],
   coverageThreshold: {

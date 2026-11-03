@@ -36,13 +36,8 @@ function NotificationSkeleton() {
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const {
-    notifications,
-    markNotificationsRead,
-    isNotificationsLoading,
-    isNotificationsError,
-    refetchNotifications,
-  } = useNotifications();
+  const { notifications, markNotificationsRead, isNotificationsLoading, isNotificationsError, refetchNotifications } =
+    useNotifications();
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -62,54 +57,59 @@ export default function NotificationsScreen() {
     return () => clearTimeout(timer);
   }, [markNotificationsRead]);
 
-  const renderNotification = useCallback(({ item }: { item: NotificationItem }) => {
-    const config = notifIcons[item.type] ?? { icon: Bell, color: theme.textMuted };
-    const IconComp = config.icon;
+  const renderNotification = useCallback(
+    ({ item }: { item: NotificationItem }) => {
+      const config = notifIcons[item.type] ?? { icon: Bell, color: theme.textMuted };
+      const IconComp = config.icon;
 
-    return (
-      <TouchableOpacity
-        style={[styles.notifRow, !item.read && styles.notifUnread]}
-        activeOpacity={0.7}
-        onPress={() => {
-          if (item.groupId) {
-            router.push({ pathname: '/group-detail' as never, params: { id: item.groupId } });
-          }
-        }}
-        testID={`notif-${item.id}`}
-      >
-        <View style={styles.notifLeft}>
-          {item.fromUserAvatar ? (
-            <View style={styles.avatarWithBadge}>
-              <Image source={{ uri: item.fromUserAvatar }} style={styles.avatar} contentFit="cover" />
-              <View style={[styles.typeBadge, { backgroundColor: config.color }]}>
-                <IconComp size={10} color={theme.white} />
+      return (
+        <TouchableOpacity
+          style={[styles.notifRow, !item.read && styles.notifUnread]}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (item.groupId) {
+              router.push({ pathname: '/group-detail' as never, params: { id: item.groupId } });
+            }
+          }}
+          testID={`notif-${item.id}`}
+        >
+          <View style={styles.notifLeft}>
+            {item.fromUserAvatar ? (
+              <View style={styles.avatarWithBadge}>
+                <Image source={{ uri: item.fromUserAvatar }} style={styles.avatar} contentFit="cover" />
+                <View style={[styles.typeBadge, { backgroundColor: config.color }]}>
+                  <IconComp size={10} color={theme.white} />
+                </View>
               </View>
-            </View>
-          ) : (
-            <View style={[styles.iconCircle, { backgroundColor: `${config.color}18` }]}>
-              <IconComp size={20} color={config.color} />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.notifContent}>
-          <Text style={styles.notifTitle}>{item.title}</Text>
-          <Text style={styles.notifBody} numberOfLines={2}>{item.body}</Text>
-          <View style={styles.notifMeta}>
-            {item.groupName && (
-              <>
-                <Text style={styles.notifGroup}>{item.groupName}</Text>
-                <Text style={styles.notifDot}>{'\u00B7'}</Text>
-              </>
+            ) : (
+              <View style={[styles.iconCircle, { backgroundColor: `${config.color}18` }]}>
+                <IconComp size={20} color={config.color} />
+              </View>
             )}
-            <Text style={styles.notifTime}>{getRelativeTime(item.timestamp)}</Text>
           </View>
-        </View>
 
-        {!item.read && <View style={styles.unreadDot} />}
-      </TouchableOpacity>
-    );
-  }, [router]);
+          <View style={styles.notifContent}>
+            <Text style={styles.notifTitle}>{item.title}</Text>
+            <Text style={styles.notifBody} numberOfLines={2}>
+              {item.body}
+            </Text>
+            <View style={styles.notifMeta}>
+              {item.groupName && (
+                <>
+                  <Text style={styles.notifGroup}>{item.groupName}</Text>
+                  <Text style={styles.notifDot}>{'\u00B7'}</Text>
+                </>
+              )}
+              <Text style={styles.notifTime}>{getRelativeTime(item.timestamp)}</Text>
+            </View>
+          </View>
+
+          {!item.read && <View style={styles.unreadDot} />}
+        </TouchableOpacity>
+      );
+    },
+    [router],
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -124,7 +124,7 @@ export default function NotificationsScreen() {
       {/* Loading state */}
       {isNotificationsLoading && (
         <View style={styles.loadingContainer}>
-          {[0, 1, 2, 3, 4, 5].map(i => (
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <NotificationSkeleton key={i} />
           ))}
         </View>
@@ -132,10 +132,7 @@ export default function NotificationsScreen() {
 
       {/* Error state */}
       {isNotificationsError && !isNotificationsLoading && (
-        <ErrorState
-          message="Could not load notifications"
-          onRetry={() => refetchNotifications()}
-        />
+        <ErrorState message="Could not load notifications" onRetry={() => refetchNotifications()} />
       )}
 
       {/* Data */}
@@ -146,19 +143,9 @@ export default function NotificationsScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={theme.coral}
-            />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.coral} />}
           ListEmptyComponent={
-            <EmptyState
-              emoji="🔔"
-              title="All caught up!"
-              subtitle="You'll see notifications from your groups here"
-            />
+            <EmptyState emoji="🔔" title="All caught up!" subtitle="You'll see notifications from your groups here" />
           }
         />
       )}

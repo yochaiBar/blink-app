@@ -69,12 +69,12 @@ export function initSocket(httpServer: HttpServer) {
     // Auto-join user's group rooms (verified against DB membership)
     socket.on('join-groups', async (groupIds: string[]) => {
       if (!Array.isArray(groupIds) || groupIds.length === 0) return;
-      const validIds = groupIds.filter(id => typeof id === 'string' && UUID_REGEX.test(id));
+      const validIds = groupIds.filter((id) => typeof id === 'string' && UUID_REGEX.test(id));
       if (validIds.length === 0) return;
       try {
         const result = await query(
           'SELECT group_id FROM group_members WHERE user_id = $1 AND group_id = ANY($2::uuid[])',
-          [userId, validIds]
+          [userId, validIds],
         );
         const verifiedIds = result.rows.map((r) => r.group_id as string);
         verifiedIds.forEach((id: string) => socket.join(`group:${id}`));
@@ -128,12 +128,7 @@ export function emitToUser(userId: string, event: string, ...args: unknown[]): v
  * device-specific room via `register-device`. Returns whether at least
  * one socket received the event.
  */
-export function emitToUserDevice(
-  userId: string,
-  deviceId: string,
-  event: string,
-  ...args: unknown[]
-): void {
+export function emitToUserDevice(userId: string, deviceId: string, event: string, ...args: unknown[]): void {
   if (io) {
     io.to(`user-device:${userId}:${deviceId}`).emit(event, ...args);
   }
@@ -173,9 +168,7 @@ export async function emitToUserWithAck(
     sockets.map(async (s) => {
       try {
         const response = (await s.timeout(timeoutMs).emitWithAck(event, payload)) as
-          | { ok: true }
-          | { ok: false; error?: string }
-          | undefined;
+          { ok: true } | { ok: false; error?: string } | undefined;
         if (response && response.ok === true) acked++;
         else nacked++;
       } catch {

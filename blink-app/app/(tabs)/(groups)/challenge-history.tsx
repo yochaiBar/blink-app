@@ -1,12 +1,5 @@
 import React, { useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Check, X as XIcon } from 'lucide-react-native';
@@ -75,83 +68,86 @@ export default function ChallengeHistoryScreen() {
     staleTime: 30_000,
   });
 
-  const handleChallengePress = useCallback((item: ChallengeHistoryItem) => {
-    if (item.type === 'snap') {
-      // Navigate to group detail to see snap responses
-      router.push({ pathname: '/group-detail' as never, params: { id: item.group_id } });
-    } else {
-      const isExpired = new Date(item.expires_at).getTime() < Date.now();
-      if (isExpired || item.user_responded) {
-        // Expired or already responded -- show reveal screen instead of answering mode
-        router.push({
-          pathname: '/challenge-reveal' as never,
-          params: { challengeId: item.id, groupId: item.group_id },
-        });
+  const handleChallengePress = useCallback(
+    (item: ChallengeHistoryItem) => {
+      if (item.type === 'snap') {
+        // Navigate to group detail to see snap responses
+        router.push({ pathname: '/group-detail' as never, params: { id: item.group_id } });
       } else {
-        // Active challenge -- navigate to quiz answering mode
-        router.push({
-          pathname: '/quiz-challenge' as never,
-          params: {
-            groupId: item.group_id,
-            challengeId: item.id,
-            type: item.type,
-            promptText: item.prompt ?? '',
-            optionsJson: JSON.stringify(item.options ?? []),
-            expiresAt: item.expires_at,
-          },
-        });
+        const isExpired = new Date(item.expires_at).getTime() < Date.now();
+        if (isExpired || item.user_responded) {
+          // Expired or already responded -- show reveal screen instead of answering mode
+          router.push({
+            pathname: '/challenge-reveal' as never,
+            params: { challengeId: item.id, groupId: item.group_id },
+          });
+        } else {
+          // Active challenge -- navigate to quiz answering mode
+          router.push({
+            pathname: '/quiz-challenge' as never,
+            params: {
+              groupId: item.group_id,
+              challengeId: item.id,
+              type: item.type,
+              promptText: item.prompt ?? '',
+              optionsJson: JSON.stringify(item.options ?? []),
+              expiresAt: item.expires_at,
+            },
+          });
+        }
       }
-    }
-  }, [router]);
+    },
+    [router],
+  );
 
-  const renderItem = useCallback(({ item }: { item: ChallengeHistoryItem }) => {
-    const config = getTypeConfig(item.type);
-    const respondedRatio = item.member_count > 0
-      ? `${item.response_count}/${item.member_count} responded`
-      : `${item.response_count} responded`;
+  const renderItem = useCallback(
+    ({ item }: { item: ChallengeHistoryItem }) => {
+      const config = getTypeConfig(item.type);
+      const respondedRatio =
+        item.member_count > 0
+          ? `${item.response_count}/${item.member_count} responded`
+          : `${item.response_count} responded`;
 
-    return (
-      <TouchableOpacity
-        style={styles.historyCard}
-        onPress={() => handleChallengePress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.historyLeft}>
-          <View style={styles.typeIconCircle}>
-            <Text style={styles.typeEmoji}>{config.emoji}</Text>
-          </View>
-        </View>
-
-        <View style={styles.historyContent}>
-          <Text style={styles.promptText} numberOfLines={2}>
-            {item.prompt ?? config.label}
-          </Text>
-          <View style={styles.metaRow}>
-            <Text style={styles.responseCount}>{respondedRatio}</Text>
-            <Text style={styles.metaDot}>{'\u00B7'}</Text>
-            <Text style={styles.timestamp}>{getRelativeTime(item.created_at)}</Text>
-          </View>
-        </View>
-
-        <View style={styles.historyRight}>
-          {item.user_responded ? (
-            <View style={styles.statusBadgeGreen}>
-              <Check size={12} color={theme.green} />
+      return (
+        <TouchableOpacity style={styles.historyCard} onPress={() => handleChallengePress(item)} activeOpacity={0.7}>
+          <View style={styles.historyLeft}>
+            <View style={styles.typeIconCircle}>
+              <Text style={styles.typeEmoji}>{config.emoji}</Text>
             </View>
-          ) : (
-            <View style={styles.statusBadgeRed}>
-              <XIcon size={12} color={theme.textMuted} />
-              <Text style={styles.missedText}>missed</Text>
+          </View>
+
+          <View style={styles.historyContent}>
+            <Text style={styles.promptText} numberOfLines={2}>
+              {item.prompt ?? config.label}
+            </Text>
+            <View style={styles.metaRow}>
+              <Text style={styles.responseCount}>{respondedRatio}</Text>
+              <Text style={styles.metaDot}>{'\u00B7'}</Text>
+              <Text style={styles.timestamp}>{getRelativeTime(item.created_at)}</Text>
             </View>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
-  }, [handleChallengePress]);
+          </View>
+
+          <View style={styles.historyRight}>
+            {item.user_responded ? (
+              <View style={styles.statusBadgeGreen}>
+                <Check size={12} color={theme.green} />
+              </View>
+            ) : (
+              <View style={styles.statusBadgeRed}>
+                <XIcon size={12} color={theme.textMuted} />
+                <Text style={styles.missedText}>missed</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [handleChallengePress],
+  );
 
   const renderLoadingState = () => (
     <View style={styles.loadingContainer}>
-      {[0, 1, 2, 3, 4].map(i => (
+      {[0, 1, 2, 3, 4].map((i) => (
         <HistoryItemSkeleton key={i} />
       ))}
     </View>
@@ -173,10 +169,7 @@ export default function ChallengeHistoryScreen() {
 
       {/* Error state */}
       {historyQuery.isError && !historyQuery.isLoading && (
-        <ErrorState
-          message="Could not load challenge history"
-          onRetry={() => historyQuery.refetch()}
-        />
+        <ErrorState message="Could not load challenge history" onRetry={() => historyQuery.refetch()} />
       )}
 
       {/* Data */}

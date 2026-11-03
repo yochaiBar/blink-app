@@ -6,7 +6,13 @@ import { JWT_ACCESS_EXPIRY, JWT_REFRESH_EXPIRY } from '../utils/constants';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
-import { requestOtpSchema, verifyOtpSchema, refreshTokenSchema, updateProfileSchema, pushTokenSchema } from '../utils/schemas';
+import {
+  requestOtpSchema,
+  verifyOtpSchema,
+  refreshTokenSchema,
+  updateProfileSchema,
+  pushTokenSchema,
+} from '../utils/schemas';
 import logger from '../utils/logger';
 import { isSmsConfigured, sendSms } from '../config/sms';
 import { env } from '../config/env';
@@ -37,10 +43,10 @@ async function storeOtp(phone: string, code: string): Promise<void> {
   const expiresAt = Date.now() + 5 * 60 * 1000;
   // Clean up expired OTPs and any existing OTP for this phone
   await query('DELETE FROM otp_codes WHERE phone = $1 OR expires_at < NOW()', [phone]);
-  await query(
-    'INSERT INTO otp_codes (phone, code, expires_at) VALUES ($1, $2, NOW() + INTERVAL \'5 minutes\')',
-    [phone, code]
-  );
+  await query("INSERT INTO otp_codes (phone, code, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')", [
+    phone,
+    code,
+  ]);
   otpCache.set(phone, { code, expiresAt, attempts: 0 });
 }
 
@@ -55,7 +61,7 @@ async function getOtp(phone: string): Promise<{ code: string; attempts: number }
   // Fall back to database (handles multi-instance or post-restart scenarios)
   const result = await query<{ code: string; attempts: number }>(
     'SELECT code, attempts FROM otp_codes WHERE phone = $1 AND expires_at > NOW() LIMIT 1',
-    [phone]
+    [phone],
   );
   const row = result.rows[0];
   if (row && typeof row.code === 'string') return row;
@@ -63,10 +69,7 @@ async function getOtp(phone: string): Promise<{ code: string; attempts: number }
 }
 
 async function incrementOtpAttempts(phone: string): Promise<void> {
-  await query(
-    'UPDATE otp_codes SET attempts = attempts + 1 WHERE phone = $1 AND expires_at > NOW()',
-    [phone]
-  );
+  await query('UPDATE otp_codes SET attempts = attempts + 1 WHERE phone = $1 AND expires_at > NOW()', [phone]);
   const cached = otpCache.get(phone);
   if (cached) cached.attempts++;
 }
@@ -105,7 +108,10 @@ router.post(
       logger.info('OTP sent via Twilio', { phone: maskPhone(phone_number) });
     } catch (err) {
       if (ALLOW_DEV_OTP_FALLBACK) {
-        logger.warn('Twilio SMS failed, falling back to dev OTP', { phone: maskPhone(phone_number), error: (err as Error).message });
+        logger.warn('Twilio SMS failed, falling back to dev OTP', {
+          phone: maskPhone(phone_number),
+          error: (err as Error).message,
+        });
         await storeOtp(phone_number, DEV_OTP);
       } else {
         throw err;
@@ -113,7 +119,7 @@ router.post(
     }
 
     res.json({ message: 'OTP sent' });
-  })
+  }),
 );
 
 // ── POST /api/auth/verify-otp ────────────────────────────────────
@@ -134,11 +140,13 @@ router.post(
         `INSERT INTO users (phone_number) VALUES ($1)
          ON CONFLICT (phone_number) DO UPDATE SET last_active_at = NOW()
          RETURNING id, phone_number, display_name, avatar_url, bio`,
-        [phone_number]
+        [phone_number],
       );
       const bypassUser = bypassResult.rows[0];
       const bypassAccess = jwt.sign({ userId: bypassUser.id }, env.JWT_SECRET, { expiresIn: JWT_ACCESS_EXPIRY });
-      const bypassRefresh = jwt.sign({ userId: bypassUser.id }, env.JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRY });
+      const bypassRefresh = jwt.sign({ userId: bypassUser.id }, env.JWT_REFRESH_SECRET, {
+        expiresIn: JWT_REFRESH_EXPIRY,
+      });
       logger.info('User authenticated (testing bypass)', { userId: bypassUser.id });
       res.json({ user: bypassUser, accessToken: bypassAccess, refreshToken: bypassRefresh });
       return;
@@ -175,7 +183,7 @@ router.post(
       `INSERT INTO users (phone_number) VALUES ($1)
        ON CONFLICT (phone_number) DO UPDATE SET last_active_at = NOW()
        RETURNING id, phone_number, display_name, avatar_url, bio`,
-      [phone_number]
+      [phone_number],
     );
     const user = result.rows[0];
 
@@ -183,53 +191,32 @@ router.post(
     deleteOtp(phone_number).catch(() => {});
 
     // ── Issue JWT tokens ─────────────────────────────────────────
-    const accessToken = jwt.sign(
-      { userId: user.id },
-      env.JWT_SECRET,
-      { expiresIn: JWT_ACCESS_EXPIRY }
-    );
-    const refreshToken = jwt.sign(
-      { userId: user.id },
-      env.JWT_REFRESH_SECRET,
-      { expiresIn: JWT_REFRESH_EXPIRY }
-    );
+    const accessToken = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: JWT_ACCESS_EXPIRY });
+    const refreshToken = jwt.sign({ userId: user.id }, env.JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRY });
 
     logger.info('User authenticated', { userId: user.id });
     res.json({ user, accessToken, refreshToken });
-  })
+  }),
 );
 
 // ── POST /api/auth/refresh ───────────────────────────────────────
-router.post(
-  '/refresh',
-  validateBody(refreshTokenSchema),
-  (req: Request, res: Response) => {
-    const { refreshToken } = req.body;
+router.post('/refresh', validateBody(refreshTokenSchema), (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
 
-    try {
-      const payload = jwt.verify(
-        refreshToken,
-        env.JWT_REFRESH_SECRET
-      ) as { userId: string };
+  try {
+    const payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as { userId: string };
 
-      const newAccessToken = jwt.sign(
-        { userId: payload.userId },
-        env.JWT_SECRET,
-        { expiresIn: JWT_ACCESS_EXPIRY }
-      );
-      const newRefreshToken = jwt.sign(
-        { userId: payload.userId },
-        env.JWT_REFRESH_SECRET,
-        { expiresIn: JWT_REFRESH_EXPIRY }
-      );
+    const newAccessToken = jwt.sign({ userId: payload.userId }, env.JWT_SECRET, { expiresIn: JWT_ACCESS_EXPIRY });
+    const newRefreshToken = jwt.sign({ userId: payload.userId }, env.JWT_REFRESH_SECRET, {
+      expiresIn: JWT_REFRESH_EXPIRY,
+    });
 
-      logger.info('Token refreshed', { userId: payload.userId });
-      res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
-    } catch {
-      res.status(401).json({ error: 'Invalid refresh token' });
-    }
+    logger.info('Token refreshed', { userId: payload.userId });
+    res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
+  } catch {
+    res.status(401).json({ error: 'Invalid refresh token' });
   }
-);
+});
 
 // ── Feature flags ────────────────────────────────────────────────
 // Read per-request so ops can flip the value without redeploying
@@ -252,7 +239,7 @@ router.get(
     const result = await query<UserRow>(
       `SELECT id, phone_number, display_name, avatar_url, bio, created_at, last_active_at
        FROM users WHERE id = $1`,
-      [req.userId]
+      [req.userId],
     );
 
     if (result.rows.length === 0) {
@@ -264,7 +251,7 @@ router.get(
       ...result.rows[0],
       feature_flags: getFeatureFlags(),
     });
-  })
+  }),
 );
 
 // ── GET /api/auth/stats ──────────────────────────────────────────
@@ -279,11 +266,11 @@ router.get(
          COUNT(*)::int AS group_count
        FROM group_members
        WHERE user_id = $1`,
-      [req.userId]
+      [req.userId],
     );
 
     res.json(result.rows[0]);
-  })
+  }),
 );
 
 // ── PATCH /api/auth/profile ──────────────────────────────────────
@@ -317,7 +304,7 @@ router.patch(
       `UPDATE users SET ${setClauses.join(', ')}
        WHERE id = $${paramIndex}
        RETURNING id, phone_number, display_name, avatar_url, bio, created_at, last_active_at`,
-      values
+      values,
     );
 
     if (result.rows.length === 0) {
@@ -327,7 +314,7 @@ router.patch(
 
     logger.info('Profile updated', { userId: req.userId });
     res.json(result.rows[0]);
-  })
+  }),
 );
 
 // ── POST /api/auth/push-token ────────────────────────────────────
@@ -338,14 +325,11 @@ router.post(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { push_token } = req.body;
 
-    await query(
-      `UPDATE users SET push_token = $1 WHERE id = $2`,
-      [push_token, req.userId]
-    );
+    await query(`UPDATE users SET push_token = $1 WHERE id = $2`, [push_token, req.userId]);
 
     logger.info('Push token saved', { userId: req.userId });
     res.json({ message: 'Push token saved' });
-  })
+  }),
 );
 
 // ── DELETE /api/auth/delete-account ──────────────────────────────
@@ -359,10 +343,7 @@ router.delete(
 
       await client.query(`DELETE FROM group_members WHERE user_id = $1`, [req.userId]);
 
-      const result = await client.query(
-        `DELETE FROM users WHERE id = $1 RETURNING id`,
-        [req.userId]
-      );
+      const result = await client.query(`DELETE FROM users WHERE id = $1 RETURNING id`, [req.userId]);
 
       return result.rows.length > 0;
     });
@@ -374,7 +355,7 @@ router.delete(
 
     logger.info('Account deleted', { userId: req.userId });
     res.json({ message: 'Account deleted successfully' });
-  })
+  }),
 );
 
 export default router;

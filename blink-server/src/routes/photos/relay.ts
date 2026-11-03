@@ -4,10 +4,7 @@ import { asyncHandler } from '../../middleware/asyncHandler';
 import { validateBody } from '../../middleware/validate';
 import { relayPhotoSchema } from '../../utils/schemas';
 import { dispatchPhoto } from '../../services/relayHub';
-import type {
-  RelayPhotoMetadata,
-  RelayPhotoResult,
-} from '../../shared/photoProtocol';
+import type { RelayPhotoMetadata, RelayPhotoResult } from '../../shared/photoProtocol';
 
 // ─────────────────────────────────────────────────────────────────
 // POST /api/photos/relay

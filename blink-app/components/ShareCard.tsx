@@ -38,10 +38,7 @@ export default function ShareCard({
   groupEmoji,
   responseTimeSec,
 }: ShareCardProps) {
-  const responseLabel =
-    responseTimeSec != null && responseTimeSec > 0
-      ? `responded in ${responseTimeSec}s`
-      : null;
+  const responseLabel = responseTimeSec != null && responseTimeSec > 0 ? `responded in ${responseTimeSec}s` : null;
 
   return (
     <View style={styles.card}>
@@ -49,9 +46,7 @@ export default function ShareCard({
       <View style={styles.header}>
         <Text style={styles.logoText}>Blink</Text>
         <View style={styles.groupPill}>
-          {groupEmoji ? (
-            <Text style={styles.groupEmoji}>{groupEmoji}</Text>
-          ) : null}
+          {groupEmoji ? <Text style={styles.groupEmoji}>{groupEmoji}</Text> : null}
           <Text style={styles.groupName} numberOfLines={1}>
             {groupName}
           </Text>
@@ -60,18 +55,10 @@ export default function ShareCard({
 
       {/* ── Photo area (roughly 4:5 within the card) ─────── */}
       <View style={styles.photoWrapper}>
-        <Image
-          source={{ uri: photoUri }}
-          style={styles.photo}
-          contentFit="cover"
-        />
+        <Image source={{ uri: photoUri }} style={styles.photo} contentFit="cover" />
 
         {/* Prompt scrim overlay at the bottom of the photo */}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.85)']}
-          style={styles.promptOverlay}
-          pointerEvents="none"
-        >
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.85)']} style={styles.promptOverlay} pointerEvents="none">
           <Text style={styles.promptText} numberOfLines={3}>
             {prompt}
           </Text>
@@ -83,16 +70,10 @@ export default function ShareCard({
         <View style={styles.footerRow}>
           <View style={styles.avatarContainer}>
             {userAvatar ? (
-              <Image
-                source={{ uri: userAvatar }}
-                style={styles.avatar}
-                contentFit="cover"
-              />
+              <Image source={{ uri: userAvatar }} style={styles.avatar} contentFit="cover" />
             ) : (
               <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitial}>
-                  {userName ? userName.charAt(0).toUpperCase() : '?'}
-                </Text>
+                <Text style={styles.avatarInitial}>{userName ? userName.charAt(0).toUpperCase() : '?'}</Text>
               </View>
             )}
           </View>
@@ -101,9 +82,7 @@ export default function ShareCard({
             <Text style={styles.footerUserName} numberOfLines={1}>
               {userName}
             </Text>
-            {responseLabel ? (
-              <Text style={styles.footerResponseTime}>{responseLabel}</Text>
-            ) : null}
+            {responseLabel ? <Text style={styles.footerResponseTime}>{responseLabel}</Text> : null}
           </View>
         </View>
 

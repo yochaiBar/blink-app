@@ -55,10 +55,10 @@ export async function submitResponse(
   }
 
   // Verify membership
-  const membership = await query<GroupMemberRow>(
-    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
-    [c.group_id, userId]
-  );
+  const membership = await query<GroupMemberRow>(`SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`, [
+    c.group_id,
+    userId,
+  ]);
   if (membership.rows.length === 0) {
     throw Object.assign(new Error('Not a member of this group'), { statusCode: 403 });
   }
@@ -66,7 +66,7 @@ export async function submitResponse(
   // Check duplicate response
   const existing = await query<Pick<ChallengeResponseRow, 'id'>>(
     `SELECT id FROM challenge_responses WHERE challenge_id = $1 AND user_id = $2`,
-    [challengeId, userId]
+    [challengeId, userId],
   );
   if (existing.rows.length > 0) {
     throw Object.assign(new Error('Already responded'), { statusCode: 400 });
@@ -77,13 +77,22 @@ export async function submitResponse(
 
   // Insert response. has_photo = either v1 (photo_url set, legacy clients
   // before HTTP 426 cutover) or v2 (client signaled explicitly).
-  const responseType = (c.type === 'quiz' || c.type === 'prompt') ? 'answer' : 'photo';
+  const responseType = c.type === 'quiz' || c.type === 'prompt' ? 'answer' : 'photo';
   const hasPhoto = explicitHasPhoto === true || photoUrl != null;
   const result = await query<ChallengeResponseRow>(
     `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, has_photo, answer_index, answer_text, response_time_ms)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [challengeId, userId, responseType, photoUrl, hasPhoto, answerIndex ?? null, answerText || null, responseTimeMs || null]
+    [
+      challengeId,
+      userId,
+      responseType,
+      photoUrl,
+      hasPhoto,
+      answerIndex ?? null,
+      answerText || null,
+      responseTimeMs || null,
+    ],
   );
 
   return { response: result.rows[0], challenge: c };
@@ -93,15 +102,12 @@ export async function submitResponse(
  * Check if all group members have responded to a challenge.
  * If so, mark it as completed, process skips, trigger AI commentary.
  */
-export async function checkChallengeCompletion(
-  challengeId: string,
-  groupId: string
-): Promise<boolean> {
+export async function checkChallengeCompletion(challengeId: string, groupId: string): Promise<boolean> {
   const completed = await withTransaction(async (client) => {
     // Fetch the challenge's triggered_at to only count members who were in the group at that time
     const challengeResult = await client.query<{ triggered_at: Date; status: string }>(
       `SELECT triggered_at, status FROM challenges WHERE id = $1 FOR UPDATE`,
-      [challengeId]
+      [challengeId],
     );
     if (challengeResult.rows.length === 0 || challengeResult.rows[0].status !== 'active') {
       return false;
@@ -111,11 +117,11 @@ export async function checkChallengeCompletion(
     // Only count members who joined before the challenge was triggered
     const totalMembers = await client.query<CountRow>(
       `SELECT COUNT(*) FROM group_members WHERE group_id = $1 AND joined_at <= $2`,
-      [groupId, challengeTriggeredAt]
+      [groupId, challengeTriggeredAt],
     );
     const totalResponses = await client.query<CountRow>(
       `SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = $1`,
-      [challengeId]
+      [challengeId],
     );
 
     if (parseInt(totalResponses.rows[0].count) < parseInt(totalMembers.rows[0].count)) {
@@ -136,16 +142,18 @@ export async function checkChallengeCompletion(
   emitToGroup(groupId, 'challenge:completed', { challengeId, groupId });
 
   // Push notification for challenge completion (fire-and-forget)
-  sendPushToGroup(
+  sendPushToGroup(groupId, 'Challenge Complete!', 'Everyone responded — check out the results!', {
+    type: 'challenge_completed',
+    challengeId,
     groupId,
-    'Challenge Complete!',
-    'Everyone responded — check out the results!',
-    { type: 'challenge_completed', challengeId, groupId },
-  ).catch(() => {});
+  }).catch(() => {});
 
   // AI commentary on challenge results (fire-and-forget)
   generateAiCommentary(challengeId, groupId).catch((err: unknown) => {
-    logger.error('AI commentary generation failed', { error: err instanceof Error ? err.message : String(err), challengeId });
+    logger.error('AI commentary generation failed', {
+      error: err instanceof Error ? err.message : String(err),
+      challengeId,
+    });
   });
 
   return true;
@@ -163,7 +171,7 @@ async function generateAiCommentary(challengeId: string, groupId: string): Promi
      JOIN users u ON u.id = cr.user_id
      JOIN group_members gm ON gm.group_id = $2 AND gm.user_id = cr.user_id
      WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
-    [challengeId, groupId]
+    [challengeId, groupId],
   );
   const responsesData = allResponsesForCommentary.rows.map((r) => ({
     userName: r.display_name || 'Someone',

@@ -1,5 +1,15 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, Animated, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  Alert,
+  Animated,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -100,18 +110,14 @@ export default function ProfileScreen() {
       }
     };
 
-    Alert.alert(
-      'Delete Account',
-      'This action is permanent and cannot be undone. All your data will be deleted.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: doDelete,
-        },
-      ]
-    );
+    Alert.alert('Delete Account', 'This action is permanent and cannot be undone. All your data will be deleted.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete Account',
+        style: 'destructive',
+        onPress: doDelete,
+      },
+    ]);
   }, [logout]);
 
   const menuItems = [
@@ -142,9 +148,7 @@ export default function ProfileScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={theme.coral} />
-        }
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={theme.coral} />}
       >
         {/* ── Profile Card ── */}
         {isLoading ? (
@@ -163,9 +167,7 @@ export default function ProfileScreen() {
               <View style={styles.avatarRing}>
                 <Image source={{ uri: user.avatar || DEFAULT_AVATAR }} style={styles.avatar} contentFit="cover" />
               </View>
-              <Text style={[typography.displayMedium, { color: theme.text, marginTop: spacing.md }]}>
-                {user.name}
-              </Text>
+              <Text style={[typography.displayMedium, { color: theme.text, marginTop: spacing.md }]}>{user.name}</Text>
               <Text style={[typography.bodyMedium, { color: theme.textSecondary, marginTop: spacing.xs }]}>
                 {user.username}
               </Text>
@@ -218,11 +220,7 @@ export default function ProfileScreen() {
 
         {/* ── Streak Calendar ── */}
         {!isLoading && (
-          <StreakCalendar
-            totalSnaps={user.totalSnaps}
-            longestStreak={user.longestStreak}
-            joinDate={user.joinDate}
-          />
+          <StreakCalendar totalSnaps={user.totalSnaps} longestStreak={user.longestStreak} joinDate={user.joinDate} />
         )}
 
         {/* ── Menu Section ── */}

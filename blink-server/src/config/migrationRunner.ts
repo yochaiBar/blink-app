@@ -36,8 +36,9 @@ export async function runMigrations(): Promise<void> {
   });
 
   const migrationsDir = path.join(__dirname, 'migrations');
-  const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.endsWith('.sql'))
+  const files = fs
+    .readdirSync(migrationsDir)
+    .filter((f) => f.endsWith('.sql'))
     .sort(); // Alphabetical = chronological with NNN_ prefix
 
   let ranCount = 0;

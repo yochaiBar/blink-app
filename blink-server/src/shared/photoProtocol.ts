@@ -131,10 +131,10 @@ export interface IncomingPhotoEnvelope {
  * "Observability of a blind server").
  */
 export type PhotoDecryptErrorCode =
-  | 'KEY_MISSING'         // recipient doesn't have the group key
-  | 'AUTH_TAG_FAIL'       // ciphertext tampered or wrong key
-  | 'VERSION_MISMATCH'    // payload v doesn't match a version this client knows
-  | 'BAD_PAYLOAD';        // malformed envelope / bytes
+  | 'KEY_MISSING' // recipient doesn't have the group key
+  | 'AUTH_TAG_FAIL' // ciphertext tampered or wrong key
+  | 'VERSION_MISMATCH' // payload v doesn't match a version this client knows
+  | 'BAD_PAYLOAD'; // malformed envelope / bytes
 
 export interface PhotoIncomingAck {
   v: 1;

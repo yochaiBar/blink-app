@@ -23,17 +23,9 @@
  */
 
 import { query } from '../config/database';
-import {
-  emitToUserDevice,
-  emitToUserWithAck,
-  isUserOnline,
-  onUserConnect,
-} from '../socket';
+import { emitToUserDevice, emitToUserWithAck, isUserOnline, onUserConnect } from '../socket';
 import logger from '../utils/logger';
-import type {
-  IncomingPhotoEnvelope,
-  PhotoPickupRequest,
-} from '../shared/photoProtocol';
+import type { IncomingPhotoEnvelope, PhotoPickupRequest } from '../shared/photoProtocol';
 
 const ACK_TIMEOUT_MS = 30_000;
 
@@ -73,11 +65,7 @@ interface MemberRow {
  * Plan: defense in depth. The app filters too, but the server is the
  * authoritative gate — we never trust the sender's list verbatim.
  */
-async function filterRecipients(
-  groupId: string,
-  senderUserId: string,
-  requested: string[],
-): Promise<string[]> {
+async function filterRecipients(groupId: string, senderUserId: string, requested: string[]): Promise<string[]> {
   if (requested.length === 0) return [];
 
   // Strip the sender from their own list if it slips through.
@@ -105,9 +93,7 @@ async function filterRecipients(
     blockedIds.add(b.blocker_id === senderUserId ? b.blocked_id : b.blocker_id);
   }
 
-  return candidates.filter(
-    (id) => memberIds.has(id) && !blockedIds.has(id),
-  );
+  return candidates.filter((id) => memberIds.has(id) && !blockedIds.has(id));
 }
 
 /**
@@ -117,10 +103,7 @@ async function filterRecipients(
  * `pending` row for them, the existing one is good enough.
  */
 async function queuePending(
-  args: Pick<
-    DispatchArgs,
-    'groupId' | 'challengeId' | 'responseId' | 'senderUserId' | 'senderDeviceId'
-  >,
+  args: Pick<DispatchArgs, 'groupId' | 'challengeId' | 'responseId' | 'senderUserId' | 'senderDeviceId'>,
   recipientUserId: string,
 ): Promise<void> {
   await query(
@@ -128,14 +111,7 @@ async function queuePending(
        (response_id, challenge_id, recipient_user_id, sender_user_id, sender_device_id, group_id, state)
      VALUES ($1, $2, $3, $4, $5, $6, 'pending')
      ON CONFLICT (response_id, recipient_user_id, state) DO NOTHING`,
-    [
-      args.responseId,
-      args.challengeId,
-      recipientUserId,
-      args.senderUserId,
-      args.senderDeviceId,
-      args.groupId,
-    ],
+    [args.responseId, args.challengeId, recipientUserId, args.senderUserId, args.senderDeviceId, args.groupId],
   );
 }
 
@@ -157,11 +133,7 @@ async function ackPendingPickup(pickupId: string): Promise<void> {
  * Main entry point. Fan out one encrypted photo to its recipients.
  */
 export async function dispatchPhoto(args: DispatchArgs): Promise<DispatchResult> {
-  const finalRecipients = await filterRecipients(
-    args.groupId,
-    args.senderUserId,
-    args.recipientUserIds,
-  );
+  const finalRecipients = await filterRecipients(args.groupId, args.senderUserId, args.recipientUserIds);
 
   if (finalRecipients.length === 0) {
     // The request was either malformed (no valid recipients) or every
@@ -246,9 +218,7 @@ interface PendingRow {
  * the next time the recipient or sender connects we re-attempt. The TTL
  * cleanup job eventually moves stale rows to `expired`.
  */
-export async function dispatchPendingPickupsForUser(
-  recipientUserId: string,
-): Promise<number> {
+export async function dispatchPendingPickupsForUser(recipientUserId: string): Promise<number> {
   // Atomic claim: flip pending → in_flight and capture the rows we're now
   // responsible for emitting. Other listeners (if any) won't see these as
   // pending anymore. Re-check the recipient still exists is implicit
@@ -272,12 +242,7 @@ export async function dispatchPendingPickupsForUser(
       recipient_user_id: recipientUserId,
       pickup_id: row.id,
     };
-    emitToUserDevice(
-      row.sender_user_id,
-      row.sender_device_id,
-      'photo:pickup_request',
-      payload,
-    );
+    emitToUserDevice(row.sender_user_id, row.sender_device_id, 'photo:pickup_request', payload);
   }
 
   logger.info('pickup_requests dispatched', {

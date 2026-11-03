@@ -31,8 +31,7 @@ function upgradeRequired(routeName: string) {
       userId: req.userId,
     });
     res.status(426).json({
-      error:
-        'This app version is no longer supported. Please update to the latest version of Blink.',
+      error: 'This app version is no longer supported. Please update to the latest version of Blink.',
       upgrade_required: true,
     });
   });

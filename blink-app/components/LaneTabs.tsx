@@ -23,13 +23,7 @@ const LANES: Array<{ key: Lane; label: string }> = [
  * Gentle underline tab switcher for the three Home lanes. The active lane
  * brightens to its accent colour with a thin underline — no filled button.
  */
-export default function LaneTabs({
-  active,
-  onChange,
-}: {
-  active: Lane;
-  onChange: (lane: Lane) => void;
-}) {
+export default function LaneTabs({ active, onChange }: { active: Lane; onChange: (lane: Lane) => void }) {
   return (
     <View style={styles.bar}>
       {LANES.map(({ key, label }) => {
@@ -46,21 +40,10 @@ export default function LaneTabs({
               onChange(key);
             }}
           >
-            <Text
-              style={[
-                styles.label,
-                { color: isOn ? accent : theme.textMuted },
-                isOn && styles.labelOn,
-              ]}
-            >
+            <Text style={[styles.label, { color: isOn ? accent : theme.textMuted }, isOn && styles.labelOn]}>
               {label}
             </Text>
-            <View
-              style={[
-                styles.underline,
-                { backgroundColor: isOn ? accent : 'transparent' },
-              ]}
-            />
+            <View style={[styles.underline, { backgroundColor: isOn ? accent : 'transparent' }]} />
           </TouchableOpacity>
         );
       })}

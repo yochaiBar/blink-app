@@ -3,7 +3,8 @@ import { query } from '../config/database';
 import logger from '../utils/logger';
 
 // Types
-export type AiPersonality = 'family_friendly' | 'funny' | 'spicy' | 'sarcastic' | 'motivational' | 'extreme' | 'sexy' | 'no_filter';
+export type AiPersonality =
+  'family_friendly' | 'funny' | 'spicy' | 'sarcastic' | 'motivational' | 'extreme' | 'sexy' | 'no_filter';
 
 export interface GeneratedChallenge {
   type: 'snap' | 'quiz' | 'poll';
@@ -32,18 +33,30 @@ function getClient(): Anthropic | null {
 
 // Personality system prompts - these shape ALL AI output
 const PERSONALITY_PROMPTS: Record<AiPersonality, string> = {
-  family_friendly: 'You are a warm, wholesome group activity host. Keep everything PG-rated and inclusive. Use gentle humor. Never reference alcohol, drugs, dating, or anything inappropriate.',
-  funny: 'You are a hilarious group chat comedian. Use witty wordplay, pop culture references, and playful roasts. Think funniest person in the group chat. Keep it light and fun.',
-  spicy: 'You are a bold, daring group host who pushes boundaries. Create challenges that are edgy and provocative but not offensive. Think truth-or-dare energy. Use innuendo.',
-  sarcastic: 'You are extremely sarcastic and deadpan. Every compliment is backhanded. Every challenge has a judgmental comment. Channel a bored reality TV judge who secretly loves the contestants.',
-  motivational: 'You are an intense life coach and hype machine. Everything is EPIC and LEGENDARY. Use caps for emphasis. Treat every response like they just won the Olympics. High energy, zero chill.',
-  extreme: 'You are an unhinged chaos agent. Create wild, unexpected, absurd challenges. Think "Florida Man" energy meets improv comedy. Nothing harmful, but everything is dialed to 11.',
+  family_friendly:
+    'You are a warm, wholesome group activity host. Keep everything PG-rated and inclusive. Use gentle humor. Never reference alcohol, drugs, dating, or anything inappropriate.',
+  funny:
+    'You are a hilarious group chat comedian. Use witty wordplay, pop culture references, and playful roasts. Think funniest person in the group chat. Keep it light and fun.',
+  spicy:
+    'You are a bold, daring group host who pushes boundaries. Create challenges that are edgy and provocative but not offensive. Think truth-or-dare energy. Use innuendo.',
+  sarcastic:
+    'You are extremely sarcastic and deadpan. Every compliment is backhanded. Every challenge has a judgmental comment. Channel a bored reality TV judge who secretly loves the contestants.',
+  motivational:
+    'You are an intense life coach and hype machine. Everything is EPIC and LEGENDARY. Use caps for emphasis. Treat every response like they just won the Olympics. High energy, zero chill.',
+  extreme:
+    'You are an unhinged chaos agent. Create wild, unexpected, absurd challenges. Think "Florida Man" energy meets improv comedy. Nothing harmful, but everything is dialed to 11.',
   sexy: 'You are a flirty, confident host with Love Island energy. Challenges involve confidence and showing off. Keep it suggestive but tasteful. Think dating show host.',
-  no_filter: 'You are completely unfiltered and brutally honest. Roasts are savage. Compliments are rare and backhanded. Dark humor is your native language. Still avoid hate speech.',
+  no_filter:
+    'You are completely unfiltered and brutally honest. Roasts are savage. Compliments are rare and backhanded. Dark humor is your native language. Still avoid hate speech.',
 };
 
 // Core Claude call wrapper with logging and fallback
-async function callClaude(systemPrompt: string, userPrompt: string, groupId?: string, functionName?: string): Promise<string | null> {
+async function callClaude(
+  systemPrompt: string,
+  userPrompt: string,
+  groupId?: string,
+  functionName?: string,
+): Promise<string | null> {
   if (!isAiEnabled()) return null;
   const anthropic = getClient();
   if (!anthropic) return null;
@@ -66,7 +79,7 @@ async function callClaude(systemPrompt: string, userPrompt: string, groupId?: st
       query(
         `INSERT INTO ai_generation_log (group_id, function_name, personality, tokens_used, latency_ms, fallback_used)
          VALUES ($1, $2, $3, $4, $5, false)`,
-        [groupId, functionName || 'unknown', null, tokens, latency]
+        [groupId, functionName || 'unknown', null, tokens, latency],
       ).catch(() => {});
     }
 
@@ -75,10 +88,10 @@ async function callClaude(systemPrompt: string, userPrompt: string, groupId?: st
     logger.error('Claude API call failed', { error: err instanceof Error ? err.message : String(err), functionName });
     // Log fallback usage
     if (groupId) {
-      query(
-        `INSERT INTO ai_generation_log (group_id, function_name, fallback_used) VALUES ($1, $2, true)`,
-        [groupId, functionName || 'unknown']
-      ).catch(() => {});
+      query(`INSERT INTO ai_generation_log (group_id, function_name, fallback_used) VALUES ($1, $2, true)`, [
+        groupId,
+        functionName || 'unknown',
+      ]).catch(() => {});
     }
     return null;
   }
@@ -89,7 +102,10 @@ function parseJSON<T>(text: string | null): T | null {
   if (!text) return null;
   try {
     // Claude sometimes wraps in markdown code blocks
-    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const cleaned = text
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim();
     return JSON.parse(cleaned);
   } catch {
     return null;
@@ -148,9 +164,10 @@ export async function generateChallenge(
   groupId: string,
   personality: AiPersonality,
   memberNames: string[],
-  recentChallenges: string[]
+  recentChallenges: string[],
 ): Promise<GeneratedChallenge> {
-  const systemPrompt = PERSONALITY_PROMPTS[personality] + '\n\nYou generate fun group challenges for a photo-sharing app called Blink.';
+  const systemPrompt =
+    PERSONALITY_PROMPTS[personality] + '\n\nYou generate fun group challenges for a photo-sharing app called Blink.';
   const userPrompt = `Group members: ${memberNames.join(', ')}.
 Recent challenges (DO NOT repeat these): ${recentChallenges.join('; ') || 'none yet'}.
 
@@ -160,7 +177,7 @@ For "snap" type, options must be empty array []. For "quiz", provide exactly 4 f
 Vary between snap and quiz types.`;
 
   const result = parseJSON<GeneratedChallenge>(
-    await callClaude(systemPrompt, userPrompt, groupId, 'generateChallenge')
+    await callClaude(systemPrompt, userPrompt, groupId, 'generateChallenge'),
   );
 
   if (result && result.prompt) return result;
@@ -172,14 +189,19 @@ Vary between snap and quiz types.`;
     const shuffled = [...memberNames].sort(() => Math.random() - 0.5).slice(0, 4);
     return { type: 'quiz', prompt: q.prompt, options: shuffled };
   }
-  return { type: 'snap', prompt: FALLBACK_SNAP_PROMPTS[Math.floor(Math.random() * FALLBACK_SNAP_PROMPTS.length)], options: [] };
+  return {
+    type: 'snap',
+    prompt: FALLBACK_SNAP_PROMPTS[Math.floor(Math.random() * FALLBACK_SNAP_PROMPTS.length)],
+    options: [],
+  };
 }
 
 export async function generateSpotlightSuperlative(
   featuredUser: { displayName: string; streak: number; totalResponses: number; participationRate: number },
-  personality: AiPersonality
+  personality: AiPersonality,
 ): Promise<GeneratedSuperlative> {
-  const systemPrompt = PERSONALITY_PROMPTS[personality] + '\n\nYou write fun daily spotlight features for group members.';
+  const systemPrompt =
+    PERSONALITY_PROMPTS[personality] + '\n\nYou write fun daily spotlight features for group members.';
   const userPrompt = `Featured member: ${featuredUser.displayName}
 Stats: ${featuredUser.streak}-day streak, ${featuredUser.totalResponses} total responses, ${featuredUser.participationRate}% participation rate.
 
@@ -188,7 +210,7 @@ Write a fun superlative and a one-line fun fact. Return ONLY valid JSON:
 Keep each under 60 characters.`;
 
   const result = parseJSON<GeneratedSuperlative>(
-    await callClaude(systemPrompt, userPrompt, undefined, 'generateSpotlightSuperlative')
+    await callClaude(systemPrompt, userPrompt, undefined, 'generateSpotlightSuperlative'),
   );
 
   if (result && result.superlative) return result;
@@ -200,24 +222,37 @@ Keep each under 60 characters.`;
 
 export async function generateNotificationCopy(
   type: string,
-  context: { groupName?: string; challengeType?: string; respondedNames?: string[]; milestone?: number; userName?: string },
-  personality: AiPersonality
+  context: {
+    groupName?: string;
+    challengeType?: string;
+    respondedNames?: string[];
+    milestone?: number;
+    userName?: string;
+  },
+  personality: AiPersonality,
 ): Promise<{ title: string; body: string }> {
-  const systemPrompt = PERSONALITY_PROMPTS[personality] + '\n\nYou write short, punchy push notification messages for a social app.';
+  const systemPrompt =
+    PERSONALITY_PROMPTS[personality] + '\n\nYou write short, punchy push notification messages for a social app.';
   const userPrompt = `Write a push notification for event: "${type}"
 Context: ${JSON.stringify(context)}
 Return ONLY valid JSON: {"title": "short title", "body": "notification body under 80 chars"}`;
 
   const result = parseJSON<{ title: string; body: string }>(
-    await callClaude(systemPrompt, userPrompt, undefined, 'generateNotificationCopy')
+    await callClaude(systemPrompt, userPrompt, undefined, 'generateNotificationCopy'),
   );
 
   if (result && result.title && result.body) return result;
 
   // Fallback
   const fallbacks: Record<string, { title: string; body: string }> = {
-    challenge_started: { title: `${context.groupName || 'Your group'}`, body: `New ${context.challengeType || 'challenge'}! Respond before time runs out!` },
-    streak_milestone: { title: 'Streak milestone!', body: `${context.userName || 'Someone'} hit a ${context.milestone}-day streak!` },
+    challenge_started: {
+      title: `${context.groupName || 'Your group'}`,
+      body: `New ${context.challengeType || 'challenge'}! Respond before time runs out!`,
+    },
+    streak_milestone: {
+      title: 'Streak milestone!',
+      body: `${context.userName || 'Someone'} hit a ${context.milestone}-day streak!`,
+    },
     challenge_completed: { title: 'Challenge complete!', body: 'Everyone responded. Check out the results!' },
   };
   return fallbacks[type] || { title: 'Blink', body: 'Something is happening in your group!' };
@@ -226,15 +261,17 @@ Return ONLY valid JSON: {"title": "short title", "body": "notification body unde
 export async function generateSkipPenalty(
   userName: string,
   penaltyType: 'wanted_poster' | 'avatar_change' | 'servant',
-  personality: AiPersonality
+  personality: AiPersonality,
 ): Promise<{ text: string }> {
-  const systemPrompt = PERSONALITY_PROMPTS[personality] + '\n\nYou write funny penalty descriptions for group members who missed a challenge.';
+  const systemPrompt =
+    PERSONALITY_PROMPTS[personality] +
+    '\n\nYou write funny penalty descriptions for group members who missed a challenge.';
   const userPrompt = `Write a "${penaltyType}" penalty for "${userName}" who missed a group challenge.
 Return ONLY valid JSON: {"text": "the penalty description under 120 chars"}
 Make it funny and playful, not mean.`;
 
   const result = parseJSON<{ text: string }>(
-    await callClaude(systemPrompt, userPrompt, undefined, 'generateSkipPenalty')
+    await callClaude(systemPrompt, userPrompt, undefined, 'generateSkipPenalty'),
   );
 
   if (result && result.text) return result;
@@ -245,17 +282,18 @@ Make it funny and playful, not mean.`;
 
 export async function commentOnResponses(
   responses: { userName: string; answerText?: string; responseTimeMs?: number }[],
-  personality: AiPersonality
+  personality: AiPersonality,
 ): Promise<{ commentary: string }> {
-  const systemPrompt = PERSONALITY_PROMPTS[personality] + '\n\nYou write brief, witty commentary on group challenge results.';
+  const systemPrompt =
+    PERSONALITY_PROMPTS[personality] + '\n\nYou write brief, witty commentary on group challenge results.';
   const userPrompt = `The group just finished a challenge. Here are the responses:
-${responses.map(r => `- ${r.userName}${r.answerText ? `: "${r.answerText}"` : ''}${r.responseTimeMs ? ` (${(r.responseTimeMs / 1000).toFixed(1)}s)` : ''}`).join('\n')}
+${responses.map((r) => `- ${r.userName}${r.answerText ? `: "${r.answerText}"` : ''}${r.responseTimeMs ? ` (${(r.responseTimeMs / 1000).toFixed(1)}s)` : ''}`).join('\n')}
 
 Write ONE short commentary line (under 100 chars). Be funny. Reference specific people.
 Return ONLY valid JSON: {"commentary": "your commentary"}`;
 
   const result = parseJSON<{ commentary: string }>(
-    await callClaude(systemPrompt, userPrompt, undefined, 'commentOnResponses')
+    await callClaude(systemPrompt, userPrompt, undefined, 'commentOnResponses'),
   );
 
   if (result && result.commentary) return result;

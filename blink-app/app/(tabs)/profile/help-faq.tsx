@@ -13,43 +13,53 @@ interface FAQItem {
 const faqData: FAQItem[] = [
   {
     question: 'What is Blink?',
-    answer: 'Blink is a social photo-sharing app where you and your friends participate in timed snap challenges, answer daily prompts, maintain streaks, and compete on leaderboards. Think of it as spontaneous moments with your favorite people!',
+    answer:
+      'Blink is a social photo-sharing app where you and your friends participate in timed snap challenges, answer daily prompts, maintain streaks, and compete on leaderboards. Think of it as spontaneous moments with your favorite people!',
   },
   {
     question: 'How do Snap Challenges work?',
-    answer: 'When a snap challenge is active in your group, you\'ll see a timer counting down. Tap the challenge bar to enter — you\'ll get a 3-second countdown, then 10 seconds to capture your moment. After submitting, you can see what everyone else shared!',
+    answer:
+      "When a snap challenge is active in your group, you'll see a timer counting down. Tap the challenge bar to enter — you'll get a 3-second countdown, then 10 seconds to capture your moment. After submitting, you can see what everyone else shared!",
   },
   {
     question: 'What are streaks?',
-    answer: 'Streaks track how many consecutive days you\'ve submitted snaps in a group. Keep your streak alive by participating every day! The longer your streak, the higher you climb on the leaderboard.',
+    answer:
+      "Streaks track how many consecutive days you've submitted snaps in a group. Keep your streak alive by participating every day! The longer your streak, the higher you climb on the leaderboard.",
   },
   {
     question: 'How do I join a group?',
-    answer: 'You can join a group by entering an invite code. Ask a friend to share their group\'s code, then go to Join Group from the home screen and enter it. You can also tap on a shared invite link.',
+    answer:
+      "You can join a group by entering an invite code. Ask a friend to share their group's code, then go to Join Group from the home screen and enter it. You can also tap on a shared invite link.",
   },
   {
     question: 'How do I invite friends?',
-    answer: 'Open your group, tap the invite button, and share the invite code or link with friends. They can enter the code in the app or tap the link to join directly.',
+    answer:
+      'Open your group, tap the invite button, and share the invite code or link with friends. They can enter the code in the app or tap the link to join directly.',
   },
   {
     question: 'What are Daily Prompts?',
-    answer: 'Daily prompts are fun questions, polls, or quizzes posted in your groups. They can be open-ended questions, multiple choice polls, or trivia quizzes. Respond and see what your friends think!',
+    answer:
+      'Daily prompts are fun questions, polls, or quizzes posted in your groups. They can be open-ended questions, multiple choice polls, or trivia quizzes. Respond and see what your friends think!',
   },
   {
     question: 'How does the leaderboard work?',
-    answer: 'Each group has its own leaderboard ranking members by their total snaps submitted and streak length. The top 3 members are featured on the podium. Stay active to climb the ranks!',
+    answer:
+      'Each group has its own leaderboard ranking members by their total snaps submitted and streak length. The top 3 members are featured on the podium. Stay active to climb the ranks!',
   },
   {
     question: 'Can others see my snaps before I submit?',
-    answer: 'No! Snaps are locked until you submit your own. This ensures everyone captures their authentic moment without being influenced by others.',
+    answer:
+      'No! Snaps are locked until you submit your own. This ensures everyone captures their authentic moment without being influenced by others.',
   },
   {
     question: 'How do I change my privacy settings?',
-    answer: 'Go to Profile → Settings → Privacy. You can control who sees your snaps: Everyone, Friends Only, or Groups Only.',
+    answer:
+      'Go to Profile → Settings → Privacy. You can control who sees your snaps: Everyone, Friends Only, or Groups Only.',
   },
   {
     question: 'What are Quiet Hours?',
-    answer: 'Quiet Hours let you mute notifications during certain times (e.g., 10 PM to 8 AM). You can enable this in Settings → Notifications → Quiet Hours.',
+    answer:
+      'Quiet Hours let you mute notifications during certain times (e.g., 10 PM to 8 AM). You can enable this in Settings → Notifications → Quiet Hours.',
   },
 ];
 
@@ -68,10 +78,7 @@ export default function HelpFAQScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.heroSection}>
           <Text style={styles.heroEmoji}>💡</Text>
           <Text style={styles.heroTitle}>How can we help?</Text>
@@ -90,18 +97,14 @@ export default function HelpFAQScreen() {
                 testID={`faq-item-${index}`}
               >
                 <View style={styles.faqHeader}>
-                  <Text style={[styles.faqQuestion, isExpanded && styles.faqQuestionExpanded]}>
-                    {item.question}
-                  </Text>
+                  <Text style={[styles.faqQuestion, isExpanded && styles.faqQuestionExpanded]}>{item.question}</Text>
                   {isExpanded ? (
                     <ChevronUp size={18} color={theme.coral} />
                   ) : (
                     <ChevronDown size={18} color={theme.textMuted} />
                   )}
                 </View>
-                {isExpanded && (
-                  <Text style={styles.faqAnswer}>{item.answer}</Text>
-                )}
+                {isExpanded && <Text style={styles.faqAnswer}>{item.answer}</Text>}
               </TouchableOpacity>
             );
           })}
@@ -111,13 +114,10 @@ export default function HelpFAQScreen() {
           <Text style={styles.contactTitle}>Still need help?</Text>
           <Text style={styles.contactText}>
             Reach out to us at{' '}
-            <Text
-              style={styles.emailLink}
-              onPress={() => Linking.openURL('mailto:support@blink.app')}
-            >
+            <Text style={styles.emailLink} onPress={() => Linking.openURL('mailto:support@blink.app')}>
               support@blink.app
-            </Text>
-            {' '}and we'll get back to you within 24 hours.
+            </Text>{' '}
+            and we'll get back to you within 24 hours.
           </Text>
         </View>
 

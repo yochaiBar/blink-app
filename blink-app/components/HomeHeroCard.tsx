@@ -46,9 +46,7 @@ function WelcomeCard({ onCreateGroup, onJoinGroup }: { onCreateGroup: () => void
         <Sparkles size={20} color={theme.coral} />
         <Text style={styles.welcomeTitle}>Welcome to Blink!</Text>
       </View>
-      <Text style={styles.welcomeSub}>
-        Create or join a group to start snapping with friends
-      </Text>
+      <Text style={styles.welcomeSub}>Create or join a group to start snapping with friends</Text>
       <View style={styles.btnRow}>
         <TouchableOpacity style={styles.btnFilled} onPress={onCreateGroup} activeOpacity={0.85}>
           <Text style={styles.btnFilledText}>Create Group</Text>
@@ -79,20 +77,23 @@ function ChallengeCard({ group, onRespond }: { group: Group; onRespond?: () => v
           Animated.timing(pulseOpacity, { toValue: 0.4, duration: 750, useNativeDriver: true }),
           Animated.timing(pulseOpacity, { toValue: 1, duration: 750, useNativeDriver: true }),
         ]),
-      ])
+      ]),
     ).start();
   }, [pulseScale, pulseOpacity]);
 
   const updateCountdown = useCallback(() => {
     const remaining = Math.max(0, (group.challengeEndTime ?? 0) - Date.now());
-    if (remaining <= 0) { setCountdown('0:00'); return; }
+    if (remaining <= 0) {
+      setCountdown('0:00');
+      return;
+    }
     const hrs = Math.floor(remaining / 3600000);
     const mins = Math.floor((remaining % 3600000) / 60000);
     const secs = Math.floor((remaining % 60000) / 1000);
     setCountdown(
       hrs > 0
         ? `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-        : `${mins}:${secs.toString().padStart(2, '0')}`
+        : `${mins}:${secs.toString().padStart(2, '0')}`,
     );
   }, [group.challengeEndTime]);
 
@@ -125,7 +126,10 @@ function ChallengeCard({ group, onRespond }: { group: Group; onRespond?: () => v
         {/* Avatar stack */}
         <View style={styles.avatarStack}>
           {displayedMembers.map((m, i) => (
-            <View key={m.id} style={[styles.avatarWrap, { marginLeft: i > 0 ? -10 : 0, zIndex: displayedMembers.length - i }]}>
+            <View
+              key={m.id}
+              style={[styles.avatarWrap, { marginLeft: i > 0 ? -10 : 0, zIndex: displayedMembers.length - i }]}
+            >
               <Image source={{ uri: m.avatar }} style={styles.avatar} contentFit="cover" />
             </View>
           ))}
@@ -155,7 +159,7 @@ function SummaryCard({ user, groupCount }: { user: UserProfile; groupCount: numb
       Animated.sequence([
         Animated.timing(shimmerAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
         Animated.timing(shimmerAnim, { toValue: 0, duration: 2000, useNativeDriver: true }),
-      ])
+      ]),
     ).start();
   }, [shimmerAnim]);
 
@@ -179,9 +183,7 @@ function SummaryCard({ user, groupCount }: { user: UserProfile; groupCount: numb
         <View style={styles.avatarRing}>
           <Image source={{ uri: user.avatar }} style={styles.ringAvatar} contentFit="cover" />
         </View>
-        <Text style={styles.profileName}>
-          {user.name ? user.name.split(' ')[0] : 'Welcome!'}
-        </Text>
+        <Text style={styles.profileName}>{user.name ? user.name.split(' ')[0] : 'Welcome!'}</Text>
       </View>
 
       <View style={styles.pillRow}>
@@ -284,7 +286,13 @@ const styles = StyleSheet.create({
   ctaBtnText: { fontSize: 15, fontWeight: '700' as const, color: theme.white },
 
   /* Summary */
-  starTitle: { fontSize: 14, fontWeight: '700' as const, color: theme.yellow, letterSpacing: 0.5, textTransform: 'uppercase' },
+  starTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.yellow,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   avatarRing: {
     width: 52,

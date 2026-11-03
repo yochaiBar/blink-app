@@ -128,17 +128,8 @@ function AnimatedReactionBtn({ emoji, isSelected, count, onPress, variant }: Ani
   const btnStyle = variant === 'photo' ? styles.quickReactBtn : styles.quizReactBtn;
 
   return (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.7}
-    >
-      <Animated.View
-        style={[
-          btnStyle,
-          isSelected && styles.reactionSelected,
-          { transform: [{ scale: bounceAnim }] },
-        ]}
-      >
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
+      <Animated.View style={[btnStyle, isSelected && styles.reactionSelected, { transform: [{ scale: bounceAnim }] }]}>
         <Text style={styles.quickReactEmoji}>{emoji}</Text>
         {count > 0 && (
           <View style={styles.countBadge}>
@@ -152,7 +143,12 @@ function AnimatedReactionBtn({ emoji, isSelected, count, onPress, variant }: Ani
 
 // ─── Main Screen ─────────────────────────────────────────────────────
 export default function ChallengeRevealScreen() {
-  const { challengeId, groupId, isDemo, localPhotoUri } = useLocalSearchParams<{ challengeId: string; groupId: string; isDemo?: string; localPhotoUri?: string }>();
+  const { challengeId, groupId, isDemo, localPhotoUri } = useLocalSearchParams<{
+    challengeId: string;
+    groupId: string;
+    isDemo?: string;
+    localPhotoUri?: string;
+  }>();
   const isDemoMode = isDemo === '1';
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -218,7 +214,8 @@ export default function ChallengeRevealScreen() {
         };
         return {
           responses: [userResponse, ...DEMO_RESPONSES],
-          aiCommentary: 'Welcome to Blink! This is what it looks like when your friends respond to challenges. Pretty cool, right?',
+          aiCommentary:
+            'Welcome to Blink! This is what it looks like when your friends respond to challenges. Pretty cool, right?',
           challenge: DEMO_CHALLENGE,
         };
       }
@@ -238,23 +235,23 @@ export default function ChallengeRevealScreen() {
         };
       } catch {
         // Reveal endpoint may not exist yet -- fall back to responses endpoint
-        const responses: ApiChallengeResponse[] = await api(
-          `/challenges/${challengeId}/responses`,
-        );
+        const responses: ApiChallengeResponse[] = await api(`/challenges/${challengeId}/responses`);
         return { responses: Array.isArray(responses) ? responses : [], aiCommentary: null, challenge: null };
       }
     },
     enabled: !!challengeId,
     staleTime: 60_000,
     // Refetch every 3s for the first 10s to pick up photos still uploading to S3
-    refetchInterval: isDemoMode ? false : (query) => {
-      const elapsed = Date.now() - mountedAt;
-      if (elapsed > 10_000) return false;
-      // Keep refetching if any response is missing a photo_url
-      const responses = query.state.data?.responses ?? [];
-      const hasMissingPhoto = responses.some((r: ApiChallengeResponse) => !r.photo_url);
-      return hasMissingPhoto ? 3000 : false;
-    },
+    refetchInterval: isDemoMode
+      ? false
+      : (query) => {
+          const elapsed = Date.now() - mountedAt;
+          if (elapsed > 10_000) return false;
+          // Keep refetching if any response is missing a photo_url
+          const responses = query.state.data?.responses ?? [];
+          const hasMissingPhoto = responses.some((r: ApiChallengeResponse) => !r.photo_url);
+          return hasMissingPhoto ? 3000 : false;
+        },
   });
 
   const { data: groupData } = useQuery<ApiGroupDetail>({
@@ -292,18 +289,13 @@ export default function ChallengeRevealScreen() {
     sortedResponses[sortedResponses.length - 1]?.user_id === user.id;
 
   // Challenge info
-  const challengePrompt =
-    revealData?.challenge?.prompt_text ??
-    revealData?.challenge?.prompt ??
-    null;
+  const challengePrompt = revealData?.challenge?.prompt_text ?? revealData?.challenge?.prompt ?? null;
   const challengeType = revealData?.challenge?.type ?? 'snap';
   const challengeOptions = revealData?.challenge?.options_json ?? revealData?.challenge?.options ?? null;
 
   // Average response time
   const avgResponseTime = useMemo(() => {
-    const times = sortedResponses
-      .map((r) => r.response_time_ms)
-      .filter((t): t is number => t != null && t > 0);
+    const times = sortedResponses.map((r) => r.response_time_ms).filter((t): t is number => t != null && t > 0);
     if (times.length === 0) return null;
     return (times.reduce((a, b) => a + b, 0) / times.length / 1000).toFixed(1);
   }, [sortedResponses]);
@@ -372,9 +364,12 @@ export default function ChallengeRevealScreen() {
       return;
     }
 
-    const timeout = setTimeout(() => {
-      revealNextCard(revealedCount);
-    }, revealedCount === 0 ? 300 : REVEAL_DELAY_MS);
+    const timeout = setTimeout(
+      () => {
+        revealNextCard(revealedCount);
+      },
+      revealedCount === 0 ? 300 : REVEAL_DELAY_MS,
+    );
 
     return () => clearTimeout(timeout);
   }, [phase, revealedCount, totalResponses, autoRevealing, hasScrolledManually]);
@@ -476,14 +471,11 @@ export default function ChallengeRevealScreen() {
   }, [sortedResponses, user.id]);
 
   // ── Helper to get reaction count for a specific emoji on a response ──
-  const getReactionCount = useCallback(
-    (response: ApiChallengeResponse, emoji: string): number => {
-      if (!response.reactions) return 0;
-      const reaction = response.reactions.find((r) => r.emoji === emoji);
-      return reaction?.count ?? 0;
-    },
-    [],
-  );
+  const getReactionCount = useCallback((response: ApiChallengeResponse, emoji: string): number => {
+    if (!response.reactions) return 0;
+    const reaction = response.reactions.find((r) => r.emoji === emoji);
+    return reaction?.count ?? 0;
+  }, []);
 
   // ── Reaction handler ────────────────────────────────────────────
   const handleReact = useCallback(
@@ -565,13 +557,7 @@ export default function ChallengeRevealScreen() {
     return (
       <View style={styles.progressDots}>
         {sortedResponses.map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              i < revealedCount ? styles.dotActive : styles.dotInactive,
-            ]}
-          />
+          <View key={i} style={[styles.dot, i < revealedCount ? styles.dotActive : styles.dotInactive]} />
         ))}
       </View>
     );
@@ -589,10 +575,7 @@ export default function ChallengeRevealScreen() {
         style={[
           styles.revealCard,
           {
-            transform: [
-              { translateY: anim.translateY },
-              { scale: anim.scale },
-            ],
+            transform: [{ translateY: anim.translateY }, { scale: anim.scale }],
             opacity: anim.opacity,
           },
         ]}
@@ -610,9 +593,7 @@ export default function ChallengeRevealScreen() {
             />
           ) : (
             <View style={styles.photoPlaceholder}>
-              <Text style={styles.photoPlaceholderEmoji}>
-                {'\u{1F4F8}'}
-              </Text>
+              <Text style={styles.photoPlaceholderEmoji}>{'\u{1F4F8}'}</Text>
             </View>
           )}
 
@@ -623,11 +604,7 @@ export default function ChallengeRevealScreen() {
             pointerEvents="box-none"
           >
             <View style={styles.userInfoRow}>
-              <AvatarRing
-                uri={response.avatar_url}
-                name={response.display_name ?? undefined}
-                size={32}
-              />
+              <AvatarRing uri={response.avatar_url} name={response.display_name ?? undefined} size={32} />
               <View style={styles.userInfoText}>
                 <View style={styles.nameRow}>
                   <Text style={styles.userName} numberOfLines={1}>
@@ -639,9 +616,7 @@ export default function ChallengeRevealScreen() {
                     </View>
                   )}
                 </View>
-                {responseTime !== '' && (
-                  <Text style={styles.responseTime}>{responseTime}</Text>
-                )}
+                {responseTime !== '' && <Text style={styles.responseTime}>{responseTime}</Text>}
               </View>
             </View>
           </LinearGradient>
@@ -677,9 +652,7 @@ export default function ChallengeRevealScreen() {
     const responseTime = formatTime(response.response_time_ms);
     const answerText =
       response.answer_text ??
-      (response.answer_index != null && challengeOptions
-        ? challengeOptions[response.answer_index]
-        : null) ??
+      (response.answer_index != null && challengeOptions ? challengeOptions[response.answer_index] : null) ??
       'No answer';
 
     // Tally votes per option and collect voter info
@@ -705,10 +678,7 @@ export default function ChallengeRevealScreen() {
         style={[
           styles.quizCardWrapper,
           {
-            transform: [
-              { translateY: anim.translateY },
-              { scale: anim.scale },
-            ],
+            transform: [{ translateY: anim.translateY }, { scale: anim.scale }],
             opacity: anim.opacity,
           },
         ]}
@@ -716,11 +686,7 @@ export default function ChallengeRevealScreen() {
         <GlassCard style={styles.quizCard} padding={16} borderRadius={16}>
           {/* User header */}
           <View style={styles.quizUserRow}>
-            <AvatarRing
-              uri={response.avatar_url}
-              name={response.display_name ?? undefined}
-              size={32}
-            />
+            <AvatarRing uri={response.avatar_url} name={response.display_name ?? undefined} size={32} />
             <View style={styles.userInfoText}>
               <View style={styles.nameRow}>
                 <Text style={styles.userName} numberOfLines={1}>
@@ -732,9 +698,7 @@ export default function ChallengeRevealScreen() {
                   </View>
                 )}
               </View>
-              {responseTime !== '' && (
-                <Text style={styles.responseTime}>{responseTime}</Text>
-              )}
+              {responseTime !== '' && <Text style={styles.responseTime}>{responseTime}</Text>}
             </View>
           </View>
 
@@ -762,17 +726,12 @@ export default function ChallengeRevealScreen() {
                         ]}
                       />
                       <Text
-                        style={[
-                          styles.quizOptionLabel,
-                          isSelected && styles.quizOptionLabelSelected,
-                        ]}
+                        style={[styles.quizOptionLabel, isSelected && styles.quizOptionLabelSelected]}
                         numberOfLines={1}
                       >
                         {option}
                       </Text>
-                      <Text style={styles.quizOptionPct}>
-                        {Math.round(pct)}%
-                      </Text>
+                      <Text style={styles.quizOptionPct}>{Math.round(pct)}%</Text>
                     </View>
                     {voters.length > 0 && (
                       <View style={styles.quizVoterAvatars}>
@@ -780,16 +739,11 @@ export default function ChallengeRevealScreen() {
                           <Image
                             key={v.userId}
                             source={{ uri: v.avatar }}
-                            style={[
-                              styles.quizVoterAvatar,
-                              { marginLeft: vi > 0 ? -6 : 0, zIndex: 5 - vi },
-                            ]}
+                            style={[styles.quizVoterAvatar, { marginLeft: vi > 0 ? -6 : 0, zIndex: 5 - vi }]}
                             contentFit="cover"
                           />
                         ))}
-                        {voters.length > 5 && (
-                          <Text style={styles.quizVoterOverflow}>+{voters.length - 5}</Text>
-                        )}
+                        {voters.length > 5 && <Text style={styles.quizVoterOverflow}>+{voters.length - 5}</Text>}
                       </View>
                     )}
                   </View>
@@ -834,10 +788,7 @@ export default function ChallengeRevealScreen() {
       >
         <View style={styles.youreInContainer}>
           {/* Camera flash */}
-          <Animated.View
-            style={[styles.flash, { opacity: flashOpacity }]}
-            pointerEvents="none"
-          />
+          <Animated.View style={[styles.flash, { opacity: flashOpacity }]} pointerEvents="none" />
 
           {/* Checkmark */}
           <Animated.View
@@ -853,17 +804,13 @@ export default function ChallengeRevealScreen() {
           </Animated.View>
 
           {/* Title */}
-          <Animated.Text style={[styles.youreInTitle, { opacity: titleOpacity }]}>
-            Your blink is in!
-          </Animated.Text>
+          <Animated.Text style={[styles.youreInTitle, { opacity: titleOpacity }]}>Your blink is in!</Animated.Text>
 
           <Animated.Text style={[styles.youreInSubtitle, { opacity: titleOpacity }]}>
             Tap to see what your friends posted
           </Animated.Text>
 
-          {youreInTimerDone && isLoading && (
-            <Text style={styles.youreInLoading}>Loading...</Text>
-          )}
+          {youreInTimerDone && isLoading && <Text style={styles.youreInLoading}>Loading...</Text>}
 
           {/* Confetti particles */}
           {smallConfetti.particles.map((p) => (
@@ -994,9 +941,7 @@ export default function ChallengeRevealScreen() {
             {isLastResponder && (
               <View style={styles.celebrationContainer}>
                 <Text style={styles.celebrationEmoji}>{'\u{1F389}'}</Text>
-                <Text style={styles.celebrationText}>
-                  You completed the group!
-                </Text>
+                <Text style={styles.celebrationText}>You completed the group!</Text>
               </View>
             )}
 
@@ -1022,20 +967,12 @@ export default function ChallengeRevealScreen() {
               </View>
             ) : (
               <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={styles.shareBtn}
-                  onPress={handleShare}
-                  activeOpacity={0.85}
-                >
+                <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85}>
                   <Share2 size={18} color={theme.white} />
                   <Text style={styles.shareBtnText}>Share This Blink</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.feedBtn}
-                  onPress={handleBackToFeed}
-                  activeOpacity={0.7}
-                >
+                <TouchableOpacity style={styles.feedBtn} onPress={handleBackToFeed} activeOpacity={0.7}>
                   <Text style={styles.feedBtnText}>Back to Feed</Text>
                 </TouchableOpacity>
               </View>

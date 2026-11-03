@@ -1,13 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Check, Users } from 'lucide-react-native';
@@ -43,14 +35,7 @@ export default function QuizChallengeScreen() {
     optionsJson: string;
     expiresAt: string;
   }>();
-  const {
-    groupId,
-    challengeId,
-    type,
-    promptText,
-    optionsJson,
-    expiresAt,
-  } = params;
+  const { groupId, challengeId, type, promptText, optionsJson, expiresAt } = params;
 
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -119,13 +104,16 @@ export default function QuizChallengeScreen() {
     },
   });
 
-  const handleSelect = useCallback((index: number) => {
-    if (phase !== 'answering' || isExpired) return;
-    setSelectedIndex(index);
-    if (Platform.OS !== 'web') {
-      Haptics.selectionAsync();
-    }
-  }, [phase, isExpired]);
+  const handleSelect = useCallback(
+    (index: number) => {
+      if (phase !== 'answering' || isExpired) return;
+      setSelectedIndex(index);
+      if (Platform.OS !== 'web') {
+        Haptics.selectionAsync();
+      }
+    },
+    [phase, isExpired],
+  );
 
   const handleSubmit = useCallback(() => {
     if (selectedIndex === null || isExpired) return;
@@ -161,26 +149,30 @@ export default function QuizChallengeScreen() {
   }, [resultsQuery.data, options]);
 
   const totalResponses = resultsQuery.data?.length ?? 0;
-  const mostPopularIndex = resultDistribution.length > 0
-    ? resultDistribution.reduce((maxI, item, i, arr) => item.count > arr[maxI].count ? i : maxI, 0)
-    : -1;
+  const mostPopularIndex =
+    resultDistribution.length > 0
+      ? resultDistribution.reduce((maxI, item, i, arr) => (item.count > arr[maxI].count ? i : maxI), 0)
+      : -1;
 
   const challengeEmoji = type?.includes('food') ? '🍔' : type?.includes('most_likely') ? '👀' : '🧠';
-  const challengeLabel = type?.includes('food') ? 'FOOD QUIZ' : type?.includes('most_likely') ? 'MOST LIKELY TO' : 'QUIZ CHALLENGE';
+  const challengeLabel = type?.includes('food')
+    ? 'FOOD QUIZ'
+    : type?.includes('most_likely')
+      ? 'MOST LIKELY TO'
+      : 'QUIZ CHALLENGE';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
           <X size={22} color={theme.text} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.challengeLabel}>{challengeEmoji} {challengeLabel}</Text>
+          <Text style={styles.challengeLabel}>
+            {challengeEmoji} {challengeLabel}
+          </Text>
         </View>
 
         <View style={styles.timerBadge}>
@@ -223,10 +215,7 @@ export default function QuizChallengeScreen() {
               return (
                 <TouchableOpacity
                   key={i}
-                  style={[
-                    styles.optionCard,
-                    isSelected && styles.optionCardSelected,
-                  ]}
+                  style={[styles.optionCard, isSelected && styles.optionCardSelected]}
                   onPress={() => handleSelect(i)}
                   activeOpacity={0.8}
                   disabled={phase === 'submitting' || isExpired}
@@ -238,9 +227,7 @@ export default function QuizChallengeScreen() {
                       <Text style={styles.optionIndexText}>{String.fromCharCode(65 + i)}</Text>
                     )}
                   </View>
-                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
-                    {option}
-                  </Text>
+                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{option}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -257,9 +244,7 @@ export default function QuizChallengeScreen() {
               </Text>
             </View>
 
-            {resultsQuery.isLoading && (
-              <ActivityIndicator size="large" color={theme.coral} style={{ marginTop: 20 }} />
-            )}
+            {resultsQuery.isLoading && <ActivityIndicator size="large" color={theme.coral} style={{ marginTop: 20 }} />}
 
             {resultDistribution.map((item, i) => {
               const isMostPopular = i === mostPopularIndex && totalResponses > 0;
@@ -269,9 +254,7 @@ export default function QuizChallengeScreen() {
                 <View key={i} style={styles.resultRow}>
                   <View style={styles.resultHeader}>
                     <View style={styles.resultLabelRow}>
-                      <Text style={[styles.resultLabel, isMostPopular && styles.resultLabelPopular]}>
-                        {item.label}
-                      </Text>
+                      <Text style={[styles.resultLabel, isMostPopular && styles.resultLabelPopular]}>{item.label}</Text>
                       {isMostPopular && (
                         <View style={styles.popularBadge}>
                           <Text style={styles.popularBadgeText}>Most Popular</Text>
@@ -338,26 +321,13 @@ export default function QuizChallengeScreen() {
 
       {phase === 'answering' && isExpired && (
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-          <Button
-            title="Go Back"
-            onPress={() => router.back()}
-            variant="primary"
-            size="lg"
-            fullWidth
-          />
+          <Button title="Go Back" onPress={() => router.back()} variant="primary" size="lg" fullWidth />
         </View>
       )}
 
       {phase === 'submitting' && (
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-          <Button
-            title="Submitting..."
-            onPress={() => {}}
-            variant="primary"
-            size="lg"
-            fullWidth
-            loading
-          />
+          <Button title="Submitting..." onPress={() => {}} variant="primary" size="lg" fullWidth loading />
         </View>
       )}
 

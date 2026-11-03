@@ -61,9 +61,7 @@ function buildQuizResults(
       .sort((a, b) => b.votes - a.votes);
   }
 
-  return responses
-    .filter((r) => r.answer_text)
-    .map((r) => ({ name: r.display_name || 'User', votes: 1 }));
+  return responses.filter((r) => r.answer_text).map((r) => ({ name: r.display_name || 'User', votes: 1 }));
 }
 
 export default function GroupMiniFeed({ groupId, groupName, groupEmoji }: Props) {
@@ -74,18 +72,14 @@ export default function GroupMiniFeed({ groupId, groupName, groupEmoji }: Props)
     queryFn: async (): Promise<FeedItemData[]> => {
       const items: FeedItemData[] = [];
 
-      const history: ChallengeHistoryItem[] = await api(
-        `/challenges/groups/${groupId}/challenges/history?limit=10`,
-      );
+      const history: ChallengeHistoryItem[] = await api(`/challenges/groups/${groupId}/challenges/history?limit=10`);
       if (!Array.isArray(history)) return [];
 
       const challengeFetches = history.map(async (challenge) => {
         if (!challenge.user_responded) return; // Skip unresponded in mini-feed too
 
         try {
-          const responses: ApiChallengeResponse[] = await api(
-            `/challenges/${challenge.id}/responses`,
-          );
+          const responses: ApiChallengeResponse[] = await api(`/challenges/${challenge.id}/responses`);
           if (!Array.isArray(responses) || responses.length === 0) return;
 
           if (challenge.type === 'snap') {
@@ -161,10 +155,7 @@ export default function GroupMiniFeed({ groupId, groupName, groupEmoji }: Props)
     <View style={styles.container}>
       <Text style={styles.sectionTitle}>Recent Activity</Text>
       {sortedItems.map((item) => (
-        <FeedItem
-          key={item.id}
-          item={{ ...item, onPress: () => handleItemPress(item) }}
-        />
+        <FeedItem key={item.id} item={{ ...item, onPress: () => handleItemPress(item) }} />
       ))}
     </View>
   );

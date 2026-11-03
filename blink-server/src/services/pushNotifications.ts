@@ -45,7 +45,7 @@ export async function sendPushNotification(
   pushToken: string,
   title: string,
   body: string,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
 ): Promise<void> {
   if (!pushToken || !pushToken.startsWith('ExponentPushToken[')) {
     logger.debug('Skipping push: invalid or missing token', { pushToken });
@@ -167,7 +167,7 @@ export async function sendPushToGroup(
   title: string,
   body: string,
   data?: Record<string, unknown>,
-  excludeUserId?: string
+  excludeUserId?: string,
 ): Promise<void> {
   try {
     let tokenQuery = `
@@ -229,13 +229,10 @@ export async function sendPushToUser(
   userId: string,
   title: string,
   body: string,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const result = await query(
-      `SELECT push_token FROM users WHERE id = $1`,
-      [userId]
-    );
+    const result = await query(`SELECT push_token FROM users WHERE id = $1`, [userId]);
 
     const token = result.rows[0]?.push_token;
     if (!token) {
@@ -293,10 +290,7 @@ async function checkReceipts(receiptIds: string[]): Promise<void> {
  */
 async function clearInvalidToken(pushToken: string): Promise<void> {
   try {
-    await query(
-      `UPDATE users SET push_token = NULL WHERE push_token = $1`,
-      [pushToken]
-    );
+    await query(`UPDATE users SET push_token = NULL WHERE push_token = $1`, [pushToken]);
     logger.info('Cleared invalid push token', { pushToken });
   } catch (err: unknown) {
     logger.error('Failed to clear invalid push token', {

@@ -84,9 +84,7 @@ export default React.memo(function GroupCard({ group, onPress }: GroupCardProps)
             <Text style={styles.emoji}>{group.emoji}</Text>
             <View>
               <Text style={styles.name}>{group.name}</Text>
-              <Text style={[styles.category, { color: group.color }]}>
-                {categoryLabels[group.category]}
-              </Text>
+              <Text style={[styles.category, { color: group.color }]}>{categoryLabels[group.category]}</Text>
             </View>
           </View>
           <ChevronRight size={18} color={theme.textMuted} />
@@ -95,12 +93,11 @@ export default React.memo(function GroupCard({ group, onPress }: GroupCardProps)
         <View style={styles.bottomRow}>
           <View style={styles.avatarStack}>
             {displayedMembers.map((member, i) => (
-              <View key={member.id} style={[styles.avatarContainer, { marginLeft: i > 0 ? -10 : 0, zIndex: displayedMembers.length - i }]}>
-                <Image
-                  source={{ uri: member.avatar }}
-                  style={styles.avatar}
-                  contentFit="cover"
-                />
+              <View
+                key={member.id}
+                style={[styles.avatarContainer, { marginLeft: i > 0 ? -10 : 0, zIndex: displayedMembers.length - i }]}
+              >
+                <Image source={{ uri: member.avatar }} style={styles.avatar} contentFit="cover" />
                 {member.isOnline && <View style={styles.onlineDot} />}
               </View>
             ))}

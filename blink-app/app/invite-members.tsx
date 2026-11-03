@@ -18,7 +18,7 @@ export default function InviteMembersScreen() {
   const [copied, setCopied] = useState<boolean>(false);
   const [linkCopied, setLinkCopied] = useState<boolean>(false);
 
-  const group = groups.find(g => g.id === groupId);
+  const group = groups.find((g) => g.id === groupId);
   const inviteCode = group?.inviteCode || '------';
   const inviteLink = `https://blink.app/join/${inviteCode}`;
 
@@ -59,14 +59,25 @@ export default function InviteMembersScreen() {
       <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={{ marginLeft: 20, marginTop: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' }}
+          style={{
+            marginLeft: 20,
+            marginTop: 10,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
         >
           <ArrowLeft size={22} color={theme.text} />
         </TouchableOpacity>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <Text style={{ fontSize: 48, marginBottom: 16 }}>😅</Text>
           <Text style={{ color: theme.text, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Group not found</Text>
-          <Text style={{ color: theme.textMuted, fontSize: 14, textAlign: 'center' }}>This group may have been removed or you no longer have access.</Text>
+          <Text style={{ color: theme.textMuted, fontSize: 14, textAlign: 'center' }}>
+            This group may have been removed or you no longer have access.
+          </Text>
         </View>
       </View>
     );
@@ -89,10 +100,7 @@ export default function InviteMembersScreen() {
           <Text style={styles.groupMembers}>{group.memberCount ?? group.members.length} members</Text>
         </View>
 
-        <LinearGradient
-          colors={[`${group.color}15`, `${group.color}08`]}
-          style={styles.codeCard}
-        >
+        <LinearGradient colors={[`${group.color}15`, `${group.color}08`]} style={styles.codeCard}>
           <Text style={styles.codeLabel}>INVITE CODE</Text>
           <Text style={[styles.codeText, { color: group.color }]}>{inviteCode}</Text>
           <Button

@@ -7,7 +7,8 @@ import { wasRecentChallengeRing } from '@/utils/challengeSound';
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const data = notification.request.content.data as Record<string, string | undefined> | undefined;
-    const isChallenge = data?.type === 'challenge_started' || data?.type === 'challenge' || data?.screen === 'challenge';
+    const isChallenge =
+      data?.type === 'challenge_started' || data?.type === 'challenge' || data?.screen === 'challenge';
     const isLocalRing = data?._challenge_ring === 'true';
 
     // If this is a server push for a challenge AND we already played the local
@@ -74,7 +75,8 @@ export async function schedulePushNotification(title: string, body: string, seco
   try {
     await Notifications.scheduleNotificationAsync({
       content: { title, body, sound: true },
-      trigger: Platform.OS === 'web' ? null : { seconds, type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL },
+      trigger:
+        Platform.OS === 'web' ? null : { seconds, type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL },
     });
     // console.log('[Notifications] Scheduled:', title);
   } catch {

@@ -81,9 +81,7 @@ export default function ChallengeResponsesList({
   return (
     <>
       {/* Daily Spotlight */}
-      {spotlight && !isDemo && (
-        <SpotlightCard spotlight={spotlight} />
-      )}
+      {spotlight && !isDemo && <SpotlightCard spotlight={spotlight} />}
 
       {/* Blurred preview if user hasn't responded */}
       {!hasSubmittedToday && activeChallenge && !isDemo && (previewData || snaps.length > 0) && (
@@ -93,8 +91,7 @@ export default function ChallengeResponsesList({
           totalReactions={previewData?.totalReactions ?? 0}
           topReactionEmoji={previewData?.topReactionEmoji}
           respondedUsers={
-            previewData?.respondedUsers ??
-            snaps.map((sn) => ({ displayName: sn.userName, avatarUrl: sn.userAvatar }))
+            previewData?.respondedUsers ?? snaps.map((sn) => ({ displayName: sn.userName, avatarUrl: sn.userAvatar }))
           }
           challengeJustStarted={challengeJustTriggered}
           onRespond={onRespond}
@@ -119,11 +116,7 @@ export default function ChallengeResponsesList({
           <SnapCardSkeleton />
         </>
       ) : responsesError ? (
-        <ErrorState
-          message="Failed to load snaps"
-          onRetry={onRetryResponses}
-          compact
-        />
+        <ErrorState message="Failed to load snaps" onRetry={onRetryResponses} compact />
       ) : isQuizChallenge && activeChallenge ? (
         hasSubmittedToday && quizDistribution.length > 0 ? (
           <QuizResultsSection
@@ -134,20 +127,12 @@ export default function ChallengeResponsesList({
             myAnswerIndex={myResponse?.answer_index}
           />
         ) : !hasSubmittedToday ? (
-          <EmptyState
-            emoji={"\u{1F9E0}"}
-            title="Quiz active!"
-            subtitle="Tap the challenge bar to answer"
-          />
+          <EmptyState emoji={'\u{1F9E0}'} title="Quiz active!" subtitle="Tap the challenge bar to answer" />
         ) : (
-          <EmptyState
-            emoji={"\u23F3"}
-            title="Waiting for responses"
-            subtitle="Results appear when others answer"
-          />
+          <EmptyState emoji={'\u23F3'} title="Waiting for responses" subtitle="Results appear when others answer" />
         )
       ) : hasSubmittedToday && snaps.length > 0 ? (
-        snaps.map(snap => (
+        snaps.map((snap) => (
           <SnapCard
             key={snap.id}
             snap={snap}
@@ -159,19 +144,11 @@ export default function ChallengeResponsesList({
           />
         ))
       ) : snaps.length === 0 && !activeChallenge && groupPhotosCount === 0 ? (
-        <EmptyState
-          emoji={"\u{1F4F8}"}
-          title="No snaps yet"
-          subtitle="Start a challenge to see snaps here!"
-        />
-      ) : snaps.length > 0 && !hasSubmittedToday ? (
-        null
-      ) : null}
+        <EmptyState emoji={'\u{1F4F8}'} title="No snaps yet" subtitle="Start a challenge to see snaps here!" />
+      ) : snaps.length > 0 && !hasSubmittedToday ? null : null}
 
       {/* AI Commentary Card */}
-      {aiCommentary && (
-        <AiCommentaryCard commentary={aiCommentary.commentary} />
-      )}
+      {aiCommentary && <AiCommentaryCard commentary={aiCommentary.commentary} />}
     </>
   );
 }

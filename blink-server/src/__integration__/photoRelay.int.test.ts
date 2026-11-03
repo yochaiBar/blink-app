@@ -84,10 +84,9 @@ describe('POST /api/photos/relay', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ v: 1, delivered_user_ids: [], queued_user_ids: [bob.id] });
     expect(
-      await countRows(
-        `SELECT COUNT(*) FROM pending_photo_pickups WHERE recipient_user_id = $1 AND state = 'pending'`,
-        [bob.id],
-      ),
+      await countRows(`SELECT COUNT(*) FROM pending_photo_pickups WHERE recipient_user_id = $1 AND state = 'pending'`, [
+        bob.id,
+      ]),
     ).toBe(1);
   });
 

@@ -1,13 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  Dimensions,
-  Animated,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, Dimensions, Animated } from 'react-native';
 import { theme } from '@/constants/colors';
 
 export interface TargetLayout {
@@ -153,16 +145,10 @@ export default function Tooltip({
     <TouchableWithoutFeedback onPress={onDismiss}>
       <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
         {/* Spotlight cutout border with pulse */}
-        <Animated.View
-          style={[styles.spotlight, spotlightStyle, { opacity: pulseAnim }]}
-          pointerEvents="none"
-        />
+        <Animated.View style={[styles.spotlight, spotlightStyle, { opacity: pulseAnim }]} pointerEvents="none" />
 
         {/* Arrow */}
-        <Animated.View
-          style={[styles.arrow, arrowStyle, { opacity: fadeAnim }]}
-          pointerEvents="none"
-        />
+        <Animated.View style={[styles.arrow, arrowStyle, { opacity: fadeAnim }]} pointerEvents="none" />
 
         {/* Tooltip bubble with scale animation */}
         <Animated.View

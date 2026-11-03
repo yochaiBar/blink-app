@@ -70,11 +70,13 @@ describe('Initial State', () => {
 // ─────────────────────────────────────────────────────────────────
 describe('requestOtp', () => {
   it('should request OTP via server API', async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {
-      message: 'OTP sent',
-      verificationId: 'dev-mode',
-      dev_hint: 'Use 123456',
-    }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(200, {
+        message: 'OTP sent',
+        verificationId: 'dev-mode',
+        dev_hint: 'Use 123456',
+      }),
+    );
 
     const { requestOtp } = useAuthStore.getState();
     await requestOtp('+15551234567');
@@ -84,7 +86,7 @@ describe('requestOtp', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ phone_number: '+15551234567' }),
-      })
+      }),
     );
   });
 
@@ -109,11 +111,13 @@ describe('verifyOtp', () => {
       bio: null,
     };
 
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {
-      user: mockUser,
-      accessToken: 'access-token-123',
-      refreshToken: 'refresh-token-456',
-    }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(200, {
+        user: mockUser,
+        accessToken: 'access-token-123',
+        refreshToken: 'refresh-token-456',
+      }),
+    );
 
     const { verifyOtp } = useAuthStore.getState();
     await verifyOtp('+15551234567', '123456');
@@ -135,11 +139,13 @@ describe('verifyOtp', () => {
   });
 
   it('should send phone_number and code in dev mode body', async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {
-      user: { id: 'u1', phone_number: '+15551234567', display_name: null, avatar_url: null, bio: null },
-      accessToken: 'at',
-      refreshToken: 'rt',
-    }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(200, {
+        user: { id: 'u1', phone_number: '+15551234567', display_name: null, avatar_url: null, bio: null },
+        accessToken: 'at',
+        refreshToken: 'rt',
+      }),
+    );
 
     const { verifyOtp } = useAuthStore.getState();
     await verifyOtp('+15551234567', '123456');
@@ -149,7 +155,7 @@ describe('verifyOtp', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ phone_number: '+15551234567', code: '123456' }),
-      })
+      }),
     );
   });
 });
@@ -234,11 +240,13 @@ describe('restoreSession', () => {
 describe('logout', () => {
   it('should clear tokens and reset state', async () => {
     // Set up authenticated state first
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {
-      user: { id: 'u1', phone_number: '+1', display_name: 'T', avatar_url: null, bio: null },
-      accessToken: 'at',
-      refreshToken: 'rt',
-    }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(200, {
+        user: { id: 'u1', phone_number: '+1', display_name: 'T', avatar_url: null, bio: null },
+        accessToken: 'at',
+        refreshToken: 'rt',
+      }),
+    );
 
     const { verifyOtp, logout } = useAuthStore.getState();
     await verifyOtp('+15551234567', '123456');
@@ -260,11 +268,13 @@ describe('logout', () => {
 describe('Local State Updates', () => {
   beforeEach(async () => {
     // Set up authenticated state
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {
-      user: { id: 'u1', phone_number: '+1', display_name: 'Original', avatar_url: null, bio: 'Original bio' },
-      accessToken: 'at',
-      refreshToken: 'rt',
-    }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(200, {
+        user: { id: 'u1', phone_number: '+1', display_name: 'Original', avatar_url: null, bio: 'Original bio' },
+        accessToken: 'at',
+        refreshToken: 'rt',
+      }),
+    );
 
     const { verifyOtp } = useAuthStore.getState();
     await verifyOtp('+15551234567', '123456');

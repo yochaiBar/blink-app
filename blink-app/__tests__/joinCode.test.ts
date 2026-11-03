@@ -58,15 +58,18 @@ describe('extractInviteCode — edge cases beyond the happy path', () => {
     expect(result).toBe('');
   });
 
-  it('FIXED: pasting a full invite link resolves to the code on-device. The join-group.tsx ' +
-    'TextInput maxLength is now 128, high enough that the native layer (iOS ' +
-    'RCTBaseTextInputView.mm / Android InputFilter.LengthFilter) no longer truncates a ' +
-    'pasted link before onChangeText fires. So the full link reaches extractInviteCode() ' +
-    'and collapses to the code -- the exact reported repro now works.', () => {
-    const pastedLink = 'https://blink.app/join/CREW25';
-    // The whole link (29 chars) fits under maxLength={128}, so onChangeText receives it intact.
-    expect(pastedLink.length).toBeLessThanOrEqual(128);
-    expect(looksLikeInviteLink(pastedLink)).toBe(true);
-    expect(extractInviteCode(pastedLink)).toBe('CREW25');
-  });
+  it(
+    'FIXED: pasting a full invite link resolves to the code on-device. The join-group.tsx ' +
+      'TextInput maxLength is now 128, high enough that the native layer (iOS ' +
+      'RCTBaseTextInputView.mm / Android InputFilter.LengthFilter) no longer truncates a ' +
+      'pasted link before onChangeText fires. So the full link reaches extractInviteCode() ' +
+      'and collapses to the code -- the exact reported repro now works.',
+    () => {
+      const pastedLink = 'https://blink.app/join/CREW25';
+      // The whole link (29 chars) fits under maxLength={128}, so onChangeText receives it intact.
+      expect(pastedLink.length).toBeLessThanOrEqual(128);
+      expect(looksLikeInviteLink(pastedLink)).toBe(true);
+      expect(extractInviteCode(pastedLink)).toBe('CREW25');
+    },
+  );
 });

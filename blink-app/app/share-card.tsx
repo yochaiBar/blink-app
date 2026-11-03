@@ -1,14 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Share2, Download } from 'lucide-react-native';
@@ -24,15 +15,7 @@ export default function ShareCardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const {
-    photoUri,
-    prompt,
-    userName,
-    userAvatar,
-    groupName,
-    groupEmoji,
-    responseTimeSec,
-  } = useLocalSearchParams<{
+  const { photoUri, prompt, userName, userAvatar, groupName, groupEmoji, responseTimeSec } = useLocalSearchParams<{
     photoUri: string;
     prompt: string;
     userName: string;
@@ -46,8 +29,7 @@ export default function ShareCardScreen() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const responseTimeNum =
-    responseTimeSec != null ? parseFloat(responseTimeSec) : undefined;
+  const responseTimeNum = responseTimeSec != null ? parseFloat(responseTimeSec) : undefined;
 
   const handleShare = useCallback(async () => {
     if (isCapturing) return;
@@ -144,12 +126,7 @@ export default function ShareCardScreen() {
 
       {/* Action buttons */}
       <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={handleShare}
-          activeOpacity={0.85}
-          disabled={isCapturing}
-        >
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleShare} activeOpacity={0.85} disabled={isCapturing}>
           {isCapturing ? (
             <ActivityIndicator size="small" color={theme.white} />
           ) : (
@@ -160,12 +137,7 @@ export default function ShareCardScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={handleSave}
-          activeOpacity={0.7}
-          disabled={isSaving}
-        >
+        <TouchableOpacity style={styles.secondaryBtn} onPress={handleSave} activeOpacity={0.7} disabled={isSaving}>
           {isSaving ? (
             <ActivityIndicator size="small" color={theme.textSecondary} />
           ) : (
@@ -176,11 +148,7 @@ export default function ShareCardScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.backLinkBtn}
-          onPress={handleBack}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={styles.backLinkBtn} onPress={handleBack} activeOpacity={0.7}>
           <Text style={styles.backLinkText}>Back</Text>
         </TouchableOpacity>
       </View>

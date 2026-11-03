@@ -12,7 +12,11 @@ interface SkeletonProps {
   style?: ViewStyle;
 }
 
-function getDefaultProps(variant: SkeletonVariant): { width: DimensionValue; height: DimensionValue; borderRadius: number } {
+function getDefaultProps(variant: SkeletonVariant): {
+  width: DimensionValue;
+  height: DimensionValue;
+  borderRadius: number;
+} {
   switch (variant) {
     case 'circle':
       return { width: 40, height: 40, borderRadius: 20 };
@@ -24,13 +28,7 @@ function getDefaultProps(variant: SkeletonVariant): { width: DimensionValue; hei
   }
 }
 
-export default React.memo(function Skeleton({
-  variant = 'rect',
-  width,
-  height,
-  borderRadius,
-  style,
-}: SkeletonProps) {
+export default React.memo(function Skeleton({ variant = 'rect', width, height, borderRadius, style }: SkeletonProps) {
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
@@ -46,7 +44,7 @@ export default React.memo(function Skeleton({
           duration: 800,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     animation.start();
     return () => animation.stop();

@@ -73,9 +73,7 @@ export interface EnqueueKeyshareArgs {
  * exists — re-joins don't double-enqueue. Returns the row id (existing or
  * new) for the caller to thread through any immediate-dispatch attempt.
  */
-export async function enqueueKeyshare(
-  args: EnqueueKeyshareArgs,
-): Promise<string | null> {
+export async function enqueueKeyshare(args: EnqueueKeyshareArgs): Promise<string | null> {
   const result = await query<{ id: string }>(
     `INSERT INTO pending_joins (group_id, joiner_user_id, joiner_device_id, state)
      VALUES ($1, $2, $3, 'pending')
@@ -165,9 +163,7 @@ export async function requestKeyshareRecovery(
  * cron will reap it eventually. We could `UPDATE state = 'cancelled'` in
  * that case, but accepting the small wait is fine for v1.
  */
-export async function dispatchPendingKeysharesForUser(
-  courierUserId: string,
-): Promise<number> {
+export async function dispatchPendingKeysharesForUser(courierUserId: string): Promise<number> {
   // Atomic claim: only flip rows where THIS user is a member of the join's
   // group AND the row is still `pending`. EXISTS-against-group_members
   // happens inside the SQL so we don't race a leave-then-courier scenario.
@@ -245,8 +241,8 @@ export async function dispatchPendingKeysharesForUser(
 
 export interface DeliverKeyshareArgs {
   pendingJoinId: string;
-  joinerUserId: string;     // pulled from the row, used for the emit fan-out
-  envelope: unknown;        // opaque to the server; we forward whole
+  joinerUserId: string; // pulled from the row, used for the emit fan-out
+  envelope: unknown; // opaque to the server; we forward whole
 }
 
 /**
@@ -256,9 +252,7 @@ export interface DeliverKeyshareArgs {
  * already delivered, in which case the late courier's emit is suppressed
  * to avoid the joiner getting two envelopes.
  */
-export async function markKeyshareDelivered(
-  args: DeliverKeyshareArgs,
-): Promise<{ deliveredThisCall: boolean }> {
+export async function markKeyshareDelivered(args: DeliverKeyshareArgs): Promise<{ deliveredThisCall: boolean }> {
   const update = await query<{ joiner_device_id: string }>(
     `UPDATE pending_joins
         SET state = 'delivered', state_changed_at = NOW()

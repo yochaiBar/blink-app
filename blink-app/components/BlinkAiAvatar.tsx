@@ -27,7 +27,7 @@ export default function BlinkAiAvatar({ size = 28 }: BlinkAiAvatarProps) {
           duration: 1500,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     ).start();
   }, [shimmerAnim]);
 

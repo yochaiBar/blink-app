@@ -1,14 +1,5 @@
 import React, { useCallback, useMemo, useRef, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  Animated,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Animated, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Users, Plus, UserPlus } from 'lucide-react-native';
@@ -79,15 +70,14 @@ const GroupListCard = React.memo(function GroupListCard({
     onPress();
   }, [onPress]);
 
-  const topStreak = useMemo(
-    () => group.members.reduce((max, m) => Math.max(max, m.streak), 0),
-    [group.members],
-  );
+  const topStreak = useMemo(() => group.members.reduce((max, m) => Math.max(max, m.streak), 0), [group.members]);
 
   const displayedMembers = group.members.slice(0, 5);
 
   return (
-    <Animated.View style={{ opacity: entranceOpacity, transform: [{ scale: Animated.multiply(scaleAnim, entranceScale) }] }}>
+    <Animated.View
+      style={{ opacity: entranceOpacity, transform: [{ scale: Animated.multiply(scaleAnim, entranceScale) }] }}
+    >
       <TouchableOpacity
         activeOpacity={1}
         onPressIn={handlePressIn}
@@ -95,11 +85,7 @@ const GroupListCard = React.memo(function GroupListCard({
         onPress={handlePress}
         testID={`group-card-${group.id}`}
       >
-        <GlassCard
-          style={styles.groupCard}
-          padding={0}
-          borderRadius={borderRadius.xl}
-        >
+        <GlassCard style={styles.groupCard} padding={0} borderRadius={borderRadius.xl}>
           <View style={styles.groupCardInner}>
             {/* Top section: emoji, name, meta */}
             <View style={styles.groupTopRow}>
@@ -112,9 +98,7 @@ const GroupListCard = React.memo(function GroupListCard({
                   <Text style={styles.groupName} numberOfLines={1}>
                     {group.name}
                   </Text>
-                  {group.hasActiveChallenge && (
-                    <View style={styles.activeDot} />
-                  )}
+                  {group.hasActiveChallenge && <View style={styles.activeDot} />}
                 </View>
 
                 <View style={styles.groupMetaRow}>
@@ -132,9 +116,7 @@ const GroupListCard = React.memo(function GroupListCard({
                   )}
 
                   <Text style={styles.groupMetaDot}>{'\u00B7'}</Text>
-                  <Text style={styles.groupMeta}>
-                    {getRelativeTime(group.lastActive)}
-                  </Text>
+                  <Text style={styles.groupMeta}>{getRelativeTime(group.lastActive)}</Text>
                 </View>
               </View>
             </View>
@@ -142,20 +124,12 @@ const GroupListCard = React.memo(function GroupListCard({
             {/* Bottom section: member avatars */}
             <View style={styles.memberRow}>
               {displayedMembers.map((member, i) => (
-                <View
-                  key={member.id}
-                  style={[
-                    styles.memberAvatar,
-                    { marginLeft: i > 0 ? -6 : 0, zIndex: 10 - i },
-                  ]}
-                >
+                <View key={member.id} style={[styles.memberAvatar, { marginLeft: i > 0 ? -6 : 0, zIndex: 10 - i }]}>
                   <AvatarRing
                     uri={member.avatar}
                     name={member.name}
                     size={24}
-                    ringColor={
-                      member.isOnline ? theme.green : theme.border
-                    }
+                    ringColor={member.isOnline ? theme.green : theme.border}
                     showStatus
                     hasResponded={member.isOnline}
                   />
@@ -163,9 +137,7 @@ const GroupListCard = React.memo(function GroupListCard({
               ))}
               {(group.memberCount ?? group.members.length) > 5 && (
                 <View style={styles.moreMembers}>
-                  <Text style={styles.moreMembersText}>
-                    +{(group.memberCount ?? group.members.length) - 5}
-                  </Text>
+                  <Text style={styles.moreMembersText}>+{(group.memberCount ?? group.members.length) - 5}</Text>
                 </View>
               )}
             </View>
@@ -181,13 +153,7 @@ const GroupListCard = React.memo(function GroupListCard({
 export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const {
-    groups,
-    refreshGroups,
-    isRefreshing,
-    isLoading,
-    shouldShowDemoGroup,
-  } = useApp();
+  const { groups, refreshGroups, isRefreshing, isLoading, shouldShowDemoGroup } = useApp();
 
   // Onboarding tour
   const tourStep = useOnboardingStore((s) => s.tourStep);
@@ -196,9 +162,7 @@ export default function GroupsScreen() {
   const advanceTour = useOnboardingStore((s) => s.advanceTour);
   const completeTour = useOnboardingStore((s) => s.completeTour);
 
-  const [demoCardLayout, setDemoCardLayout] = useState<TargetLayout | null>(
-    null,
-  );
+  const [demoCardLayout, setDemoCardLayout] = useState<TargetLayout | null>(null);
   const demoCardRef = useRef<View>(null);
 
   useEffect(() => {
@@ -259,9 +223,7 @@ export default function GroupsScreen() {
     return [...groups].sort((a, b) => {
       if (a.hasActiveChallenge && !b.hasActiveChallenge) return -1;
       if (!a.hasActiveChallenge && b.hasActiveChallenge) return 1;
-      return (
-        new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime()
-      );
+      return new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime();
     });
   }, [groups]);
 
@@ -269,15 +231,8 @@ export default function GroupsScreen() {
     ({ item, index }: { item: Group; index: number }) => {
       const isDemo = isDemoGroup(item.id);
       return (
-        <View
-          ref={isDemo ? demoCardRef : undefined}
-          collapsable={false}
-        >
-          <GroupListCard
-            group={item}
-            onPress={() => handleGroupPress(item.id)}
-            index={index}
-          />
+        <View ref={isDemo ? demoCardRef : undefined} collapsable={false}>
+          <GroupListCard group={item} onPress={() => handleGroupPress(item.id)} index={index} />
         </View>
       );
     },
@@ -293,11 +248,7 @@ export default function GroupsScreen() {
     return (
       <View style={styles.footerSection}>
         {/* Create Group button */}
-        <TouchableOpacity
-          style={styles.createBtn}
-          onPress={handleCreateGroup}
-          activeOpacity={0.85}
-        >
+        <TouchableOpacity style={styles.createBtn} onPress={handleCreateGroup} activeOpacity={0.85}>
           <LinearGradient
             colors={[theme.coral, theme.coralDark]}
             start={{ x: 0, y: 0 }}
@@ -310,11 +261,7 @@ export default function GroupsScreen() {
         </TouchableOpacity>
 
         {/* Join with Code */}
-        <TouchableOpacity
-          style={styles.joinBtn}
-          onPress={handleJoinGroup}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={styles.joinBtn} onPress={handleJoinGroup} activeOpacity={0.7}>
           <UserPlus size={16} color={theme.coral} />
           <Text style={styles.joinBtnText}>Join with Code</Text>
         </TouchableOpacity>
@@ -342,15 +289,9 @@ export default function GroupsScreen() {
           <Users size={48} color={theme.textMuted} />
         </View>
         <Text style={styles.emptyTitle}>No groups yet</Text>
-        <Text style={styles.emptySubtitle}>
-          Create or join a group to start sharing blinks with friends
-        </Text>
+        <Text style={styles.emptySubtitle}>Create or join a group to start sharing blinks with friends</Text>
 
-        <TouchableOpacity
-          style={styles.emptyCreateBtn}
-          onPress={handleCreateGroup}
-          activeOpacity={0.85}
-        >
+        <TouchableOpacity style={styles.emptyCreateBtn} onPress={handleCreateGroup} activeOpacity={0.85}>
           <LinearGradient
             colors={[theme.coral, theme.coralDark]}
             start={{ x: 0, y: 0 }}
@@ -362,11 +303,7 @@ export default function GroupsScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.emptyJoinBtn}
-          onPress={handleJoinGroup}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={styles.emptyJoinBtn} onPress={handleJoinGroup} activeOpacity={0.7}>
           <Text style={styles.emptyJoinBtnText}>Join with Code</Text>
         </TouchableOpacity>
       </View>
@@ -397,13 +334,7 @@ export default function GroupsScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={ListEmpty}
         ListFooterComponent={hasGroups ? ListFooter : null}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={refreshGroups}
-            tintColor={theme.coral}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshGroups} tintColor={theme.coral} />}
         removeClippedSubviews={Platform.OS !== 'web'}
         maxToRenderPerBatch={10}
         initialNumToRender={8}

@@ -66,9 +66,9 @@ describe('POST /api/challenges/responses/:responseId/comments', () => {
 
   it('creates a top-level comment, emits socket event, pushes to photo owner', async () => {
     mockQuery
-      .mockResolvedValueOnce(queryResult([makeResponseContext()]))      // loadResponseContext
-      .mockResolvedValueOnce(queryResult([makeMembership()]))           // isGroupMember
-      .mockResolvedValueOnce(queryResult([makeComment()]))              // INSERT comment
+      .mockResolvedValueOnce(queryResult([makeResponseContext()])) // loadResponseContext
+      .mockResolvedValueOnce(queryResult([makeMembership()])) // isGroupMember
+      .mockResolvedValueOnce(queryResult([makeComment()])) // INSERT comment
       .mockResolvedValueOnce(queryResult([{ display_name: 'Tester' }])); // getDisplayName
 
     const res = await request(app)
@@ -107,10 +107,10 @@ describe('POST /api/challenges/responses/:responseId/comments', () => {
     });
 
     mockQuery
-      .mockResolvedValueOnce(queryResult([makeResponseContext()]))      // loadResponseContext
-      .mockResolvedValueOnce(queryResult([makeMembership()]))           // isGroupMember
-      .mockResolvedValueOnce(queryResult([parent]))                     // parent lookup
-      .mockResolvedValueOnce(queryResult([reply]))                      // INSERT reply
+      .mockResolvedValueOnce(queryResult([makeResponseContext()])) // loadResponseContext
+      .mockResolvedValueOnce(queryResult([makeMembership()])) // isGroupMember
+      .mockResolvedValueOnce(queryResult([parent])) // parent lookup
+      .mockResolvedValueOnce(queryResult([reply])) // INSERT reply
       .mockResolvedValueOnce(queryResult([{ display_name: 'Tester' }])) // getDisplayName
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])); // parent author for push
 
@@ -132,7 +132,7 @@ describe('POST /api/challenges/responses/:responseId/comments', () => {
   it('rejects a reply-to-reply (1-level threading)', async () => {
     const parent = makeComment({
       id: TEST_PARENT_COMMENT_ID,
-      parent_comment_id: 'some-other-comment-id',  // already a reply
+      parent_comment_id: 'some-other-comment-id', // already a reply
       response_id: TEST_RESPONSE_ID,
     });
 
@@ -174,7 +174,7 @@ describe('POST /api/challenges/responses/:responseId/comments', () => {
     mockQuery
       .mockResolvedValueOnce(queryResult([makeResponseContext()]))
       .mockResolvedValueOnce(queryResult([makeMembership()]))
-      .mockResolvedValueOnce(queryResult([]));  // parent not found
+      .mockResolvedValueOnce(queryResult([])); // parent not found
 
     const res = await request(app)
       .post(`/api/challenges/responses/${TEST_RESPONSE_ID}/comments`)
@@ -196,9 +196,7 @@ describe('POST /api/challenges/responses/:responseId/comments', () => {
   });
 
   it('returns 403 when user is not a group member', async () => {
-    mockQuery
-      .mockResolvedValueOnce(queryResult([makeResponseContext()]))
-      .mockResolvedValueOnce(queryResult([]));  // no membership
+    mockQuery.mockResolvedValueOnce(queryResult([makeResponseContext()])).mockResolvedValueOnce(queryResult([])); // no membership
 
     const res = await request(app)
       .post(`/api/challenges/responses/${TEST_RESPONSE_ID}/comments`)
@@ -270,9 +268,7 @@ describe('GET /api/challenges/responses/:responseId/comments', () => {
   });
 
   it('returns 403 when not a group member', async () => {
-    mockQuery
-      .mockResolvedValueOnce(queryResult([makeResponseContext()]))
-      .mockResolvedValueOnce(queryResult([]));
+    mockQuery.mockResolvedValueOnce(queryResult([makeResponseContext()])).mockResolvedValueOnce(queryResult([]));
 
     const res = await request(app)
       .get(`/api/challenges/responses/${TEST_RESPONSE_ID}/comments`)
@@ -317,8 +313,8 @@ describe('DELETE /api/challenges/comments/:commentId', () => {
 
   it('returns 403 when not the comment owner', async () => {
     mockQuery
-      .mockResolvedValueOnce(queryResult([]))                                  // UPDATE returned nothing
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }]));      // SELECT shows someone else owns it
+      .mockResolvedValueOnce(queryResult([])) // UPDATE returned nothing
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])); // SELECT shows someone else owns it
 
     const res = await request(app)
       .delete(`/api/challenges/comments/${TEST_COMMENT_ID}`)
@@ -329,8 +325,8 @@ describe('DELETE /api/challenges/comments/:commentId', () => {
 
   it('returns 404 when comment does not exist', async () => {
     mockQuery
-      .mockResolvedValueOnce(queryResult([]))   // UPDATE: nothing
-      .mockResolvedValueOnce(queryResult([]));  // SELECT: nothing
+      .mockResolvedValueOnce(queryResult([])) // UPDATE: nothing
+      .mockResolvedValueOnce(queryResult([])); // SELECT: nothing
 
     const res = await request(app)
       .delete(`/api/challenges/comments/${TEST_COMMENT_ID}`)

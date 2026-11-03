@@ -79,14 +79,7 @@ export default React.memo(function AvatarRing({
         },
       ]}
     >
-      <Text
-        style={[
-          styles.initial,
-          { fontSize: size * 0.4 },
-        ]}
-      >
-        {initial}
-      </Text>
+      <Text style={[styles.initial, { fontSize: size * 0.4 }]}>{initial}</Text>
     </View>
   );
 

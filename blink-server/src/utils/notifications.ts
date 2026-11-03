@@ -10,15 +10,19 @@ export async function createNotification(
   title: string,
   body: string,
   groupId?: string,
-  fromUserId?: string
+  fromUserId?: string,
 ) {
   try {
     await query(
       `INSERT INTO notifications (user_id, type, title, body, group_id, from_user_id)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [userId, type, title, body, groupId || null, fromUserId || null]
+      [userId, type, title, body, groupId || null, fromUserId || null],
     );
   } catch (err: unknown) {
-    logger.error('Failed to create notification', { error: err instanceof Error ? err.message : String(err), userId, type });
+    logger.error('Failed to create notification', {
+      error: err instanceof Error ? err.message : String(err),
+      userId,
+      type,
+    });
   }
 }

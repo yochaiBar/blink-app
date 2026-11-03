@@ -1,13 +1,5 @@
 import React, { useRef, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Dimensions,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Lock, Zap, Star, Sparkles } from 'lucide-react-native';
@@ -290,16 +282,9 @@ function LockedPhotoFeedItem({ item }: { item: FeedItemData }) {
 
       {/* Blurred photo placeholder */}
       <View style={styles.lockedPhotoContainer}>
-        <Animated.View
-          style={[StyleSheet.absoluteFill, { opacity: frostedOpacity }]}
-        >
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: frostedOpacity }]}>
           <LinearGradient
-            colors={[
-              theme.bgElevated,
-              theme.surface,
-              theme.bgElevated,
-              theme.surface,
-            ]}
+            colors={[theme.bgElevated, theme.surface, theme.bgElevated, theme.surface]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
@@ -308,11 +293,7 @@ function LockedPhotoFeedItem({ item }: { item: FeedItemData }) {
 
         {/* Frosted overlay pattern */}
         <LinearGradient
-          colors={[
-            'rgba(255, 107, 74, 0.06)',
-            'rgba(167, 139, 250, 0.04)',
-            'rgba(255, 107, 74, 0.08)',
-          ]}
+          colors={['rgba(255, 107, 74, 0.06)', 'rgba(167, 139, 250, 0.04)', 'rgba(255, 107, 74, 0.08)']}
           start={{ x: 0.2, y: 0 }}
           end={{ x: 0.8, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -324,11 +305,7 @@ function LockedPhotoFeedItem({ item }: { item: FeedItemData }) {
           </View>
           <Text style={styles.lockedTitle}>Respond to see this blink</Text>
 
-          <TouchableOpacity
-            style={styles.respondPill}
-            onPress={handleRespond}
-            activeOpacity={0.85}
-          >
+          <TouchableOpacity style={styles.respondPill} onPress={handleRespond} activeOpacity={0.85}>
             <LinearGradient
               colors={[theme.coral, theme.coralDark]}
               start={{ x: 0, y: 0 }}
@@ -355,9 +332,7 @@ function QuizResultFeedItem({ item }: { item: FeedItemData }) {
     item.onPress?.();
   }, [item.onPress]);
 
-  const maxVotes = Math.max(
-    ...(item.quizResults?.map((r) => r.votes) ?? [1]),
-  );
+  const maxVotes = Math.max(...(item.quizResults?.map((r) => r.votes) ?? [1]));
 
   return (
     <TouchableOpacity activeOpacity={0.95} onPress={handlePress}>
@@ -381,30 +356,16 @@ function QuizResultFeedItem({ item }: { item: FeedItemData }) {
         </View>
 
         {/* Quiz card */}
-        <GlassCard
-          style={styles.quizCard}
-          padding={spacing.lg}
-          borderRadius={borderRadius.lg}
-        >
+        <GlassCard style={styles.quizCard} padding={spacing.lg} borderRadius={borderRadius.lg}>
           <Text style={styles.quizQuestion}>{item.quizQuestion}</Text>
           <View style={styles.quizResultsList}>
             {item.quizResults?.map((result, i) => {
-              const barWidth =
-                maxVotes > 0
-                  ? Math.max(10, (result.votes / maxVotes) * 100)
-                  : 10;
+              const barWidth = maxVotes > 0 ? Math.max(10, (result.votes / maxVotes) * 100) : 10;
               const isWinner = result.votes === maxVotes && maxVotes > 0;
               return (
                 <View key={`${result.name}-${i}`} style={styles.quizResultRow}>
                   <View style={styles.quizResultInfo}>
-                    <Text
-                      style={[
-                        styles.quizResultName,
-                        isWinner && styles.quizResultNameWinner,
-                      ]}
-                    >
-                      {result.name}
-                    </Text>
+                    <Text style={[styles.quizResultName, isWinner && styles.quizResultNameWinner]}>{result.name}</Text>
                     <Text style={styles.quizResultVotes}>
                       {result.votes} vote{result.votes !== 1 ? 's' : ''}
                     </Text>
@@ -415,9 +376,7 @@ function QuizResultFeedItem({ item }: { item: FeedItemData }) {
                         styles.quizBarFill,
                         {
                           width: `${barWidth}%`,
-                          backgroundColor: isWinner
-                            ? theme.coral
-                            : theme.surfaceLight,
+                          backgroundColor: isWinner ? theme.coral : theme.surfaceLight,
                         },
                       ]}
                     />
@@ -437,17 +396,10 @@ function QuizResultFeedItem({ item }: { item: FeedItemData }) {
 function AICommentaryFeedItem({ item }: { item: FeedItemData }) {
   return (
     <View style={styles.aiItem}>
-      <GlassCard
-        style={styles.aiCard}
-        padding={spacing.lg}
-        borderRadius={borderRadius.lg}
-        noBorder
-      >
+      <GlassCard style={styles.aiCard} padding={spacing.lg} borderRadius={borderRadius.lg} noBorder>
         <View style={styles.aiHeader}>
           <Sparkles size={16} color={theme.purple} />
-          <Text style={styles.aiHeaderText}>
-            Blink AI on "{item.groupName}"
-          </Text>
+          <Text style={styles.aiHeaderText}>Blink AI on "{item.groupName}"</Text>
         </View>
         <Text style={styles.aiCommentary}>{item.commentary}</Text>
       </GlassCard>
@@ -468,17 +420,9 @@ function SpotlightFeedItem({ item }: { item: FeedItemData }) {
   return (
     <TouchableOpacity activeOpacity={0.95} onPress={handlePress}>
       <View style={styles.spotlightItem}>
-        <GlassCard
-          style={styles.spotlightCard}
-          padding={0}
-          borderRadius={borderRadius.lg}
-        >
+        <GlassCard style={styles.spotlightCard} padding={0} borderRadius={borderRadius.lg}>
           <LinearGradient
-            colors={[
-              'rgba(255, 216, 77, 0.08)',
-              'rgba(255, 107, 74, 0.04)',
-              'transparent',
-            ]}
+            colors={['rgba(255, 216, 77, 0.08)', 'rgba(255, 107, 74, 0.04)', 'transparent']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
@@ -490,15 +434,9 @@ function SpotlightFeedItem({ item }: { item: FeedItemData }) {
                 Daily Spotlight {'\u00B7'} {item.groupName}
               </Text>
             </View>
-            <Text style={styles.spotlightUser}>
-              {item.spotlightUser}
-            </Text>
-            <Text style={styles.spotlightSuperlative}>
-              "{item.superlative}"
-            </Text>
-            {item.funFact ? (
-              <Text style={styles.spotlightFact}>{item.funFact}</Text>
-            ) : null}
+            <Text style={styles.spotlightUser}>{item.spotlightUser}</Text>
+            <Text style={styles.spotlightSuperlative}>"{item.superlative}"</Text>
+            {item.funFact ? <Text style={styles.spotlightFact}>{item.funFact}</Text> : null}
           </View>
         </GlassCard>
       </View>
@@ -590,12 +528,7 @@ function ActiveChallengeFeedItem({ item }: { item: FeedItemData }) {
           )}
 
           {/* Dark overlay */}
-          <Animated.View
-            style={[
-              styles.activeChallengeOverlay,
-              { opacity: overlayOpacity },
-            ]}
-          />
+          <Animated.View style={[styles.activeChallengeOverlay, { opacity: overlayOpacity }]} />
 
           {/* Center content */}
           <View style={styles.activeChallengeCenter}>
@@ -609,13 +542,9 @@ function ActiveChallengeFeedItem({ item }: { item: FeedItemData }) {
               </Text>
             ) : null}
 
-            <Text style={styles.activeChallengeRevealText}>
-              Respond to reveal
-            </Text>
+            <Text style={styles.activeChallengeRevealText}>Respond to reveal</Text>
 
-            {respondedText ? (
-              <Text style={styles.activeChallengeCount}>{respondedText}</Text>
-            ) : null}
+            {respondedText ? <Text style={styles.activeChallengeCount}>{respondedText}</Text> : null}
 
             <View style={styles.respondPill}>
               <LinearGradient
@@ -643,9 +572,7 @@ function SectionHeaderFeedItem({ item }: { item: FeedItemData }) {
   return (
     <View style={styles.sectionHeader} testID={`section-header-${item.id}`}>
       <Text style={styles.sectionHeaderTitle}>{item.sectionTitle}</Text>
-      {item.sectionSubtitle ? (
-        <Text style={styles.sectionHeaderSubtitle}>{item.sectionSubtitle}</Text>
-      ) : null}
+      {item.sectionSubtitle ? <Text style={styles.sectionHeaderSubtitle}>{item.sectionSubtitle}</Text> : null}
     </View>
   );
 }
@@ -731,7 +658,8 @@ function WorldwideFeedItem({ item }: { item: FeedItemData }) {
             <View key={i} style={styles.worldwideCommentRow}>
               <Text style={styles.worldwideCommentName}>{c.userName}</Text>
               <Text style={styles.worldwideCommentText} numberOfLines={3}>
-                {' '}{c.text}
+                {' '}
+                {c.text}
               </Text>
             </View>
           ))}

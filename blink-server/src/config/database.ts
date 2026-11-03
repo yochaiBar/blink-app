@@ -16,14 +16,15 @@ const pool = new Pool({
   max: parseInt(process.env.DB_POOL_MAX || '20', 10),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-  ...(isProduction && !isRailwayInternal && {
-    ssl: {
-      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
-      ...(process.env.DB_SSL_CERT && {
-        ca: process.env.DB_SSL_CERT,
-      }),
-    },
-  }),
+  ...(isProduction &&
+    !isRailwayInternal && {
+      ssl: {
+        rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+        ...(process.env.DB_SSL_CERT && {
+          ca: process.env.DB_SSL_CERT,
+        }),
+      },
+    }),
 });
 
 pool.on('error', (err) => {
@@ -34,7 +35,7 @@ pool.on('error', (err) => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const query = <T extends Record<string, any> = Record<string, any>>(
   text: string,
-  params?: unknown[]
+  params?: unknown[],
 ): Promise<QueryResult<T>> => pool.query<T>(text, params);
 
 /**
@@ -45,9 +46,7 @@ export const query = <T extends Record<string, any> = Record<string, any>>(
  * Every query inside `fn` must go through `client` — `query()` would pick
  * another pooled connection outside the transaction.
  */
-export async function withTransaction<T>(
-  fn: (client: PoolClient) => Promise<T>
-): Promise<T> {
+export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

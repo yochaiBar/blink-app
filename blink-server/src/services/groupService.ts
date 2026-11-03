@@ -6,14 +6,11 @@ import { GroupRow, GroupMemberRow } from '../types/db';
  * Verify that a user is a member of a group.
  * Returns the membership row. Throws with statusCode if not a member.
  */
-export async function verifyMembership(
-  userId: string,
-  groupId: string
-): Promise<GroupMemberRow> {
-  const membership = await query<GroupMemberRow>(
-    `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`,
-    [groupId, userId]
-  );
+export async function verifyMembership(userId: string, groupId: string): Promise<GroupMemberRow> {
+  const membership = await query<GroupMemberRow>(`SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`, [
+    groupId,
+    userId,
+  ]);
   if (membership.rows.length === 0) {
     throw Object.assign(new Error('Not a member of this group'), { statusCode: 403 });
   }
@@ -76,13 +73,13 @@ export async function getGroupWithMembers(groupId: string): Promise<{
      JOIN users u ON u.id = gm.user_id
      WHERE gm.group_id = $1
      ORDER BY gm.total_responses DESC`,
-    [groupId]
+    [groupId],
   );
 
   const penalties = await query<ActivePenaltyDetailRow>(
     `SELECT * FROM active_penalties
      WHERE group_id = $1 AND expires_at > NOW()`,
-    [groupId]
+    [groupId],
   );
 
   return {
@@ -101,11 +98,11 @@ export async function getGroupWithMembers(groupId: string): Promise<{
  */
 export async function handleAdminLeave(
   groupId: string,
-  userId: string
+  userId: string,
 ): Promise<'deleted' | 'transferred' | 'no_action'> {
   const otherMembers = await query<Pick<GroupMemberRow, 'user_id' | 'role'>>(
     `SELECT user_id, role FROM group_members WHERE group_id = $1 AND user_id != $2`,
-    [groupId, userId]
+    [groupId, userId],
   );
 
   if (otherMembers.rows.length === 0) {
@@ -123,12 +120,12 @@ export async function handleAdminLeave(
       `SELECT user_id FROM group_members
        WHERE group_id = $1 AND user_id != $2
        ORDER BY joined_at ASC LIMIT 1`,
-      [groupId, userId]
+      [groupId, userId],
     );
-    await query(
-      `UPDATE group_members SET role = 'admin' WHERE group_id = $1 AND user_id = $2`,
-      [groupId, nextAdmin.rows[0].user_id]
-    );
+    await query(`UPDATE group_members SET role = 'admin' WHERE group_id = $1 AND user_id = $2`, [
+      groupId,
+      nextAdmin.rows[0].user_id,
+    ]);
     logger.info('Admin role transferred', { groupId, newAdminId: nextAdmin.rows[0].user_id });
     return 'transferred';
   }

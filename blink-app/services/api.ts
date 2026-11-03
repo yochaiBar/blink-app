@@ -231,9 +231,7 @@ export interface KeyshareDeliverResult {
   delivered: boolean;
 }
 
-export function deliverKeyshare(
-  body: KeyshareDeliverBody,
-): Promise<KeyshareDeliverResult> {
+export function deliverKeyshare(body: KeyshareDeliverBody): Promise<KeyshareDeliverResult> {
   return api<KeyshareDeliverResult>('/keyshare/deliver', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -252,10 +250,7 @@ export interface KeyshareRequestResult {
  * Used when a member belongs to a group but has no local key (stalled join
  * / pre-migration group) or holds a stale key after a rotation.
  */
-export function requestKeyshare(body: {
-  group_id: string;
-  device_id: string;
-}): Promise<KeyshareRequestResult> {
+export function requestKeyshare(body: { group_id: string; device_id: string }): Promise<KeyshareRequestResult> {
   return api<KeyshareRequestResult>('/keyshare/request', {
     method: 'POST',
     body: JSON.stringify({ v: 1, ...body }),
@@ -273,9 +268,7 @@ export interface KeyshareResetResult {
  * the key). Caller then mints a fresh key locally at the returned version
  * and members pull it via requestKeyshare.
  */
-export function resetGroupKey(body: {
-  group_id: string;
-}): Promise<KeyshareResetResult> {
+export function resetGroupKey(body: { group_id: string }): Promise<KeyshareResetResult> {
   return api<KeyshareResetResult>('/keyshare/reset', {
     method: 'POST',
     body: JSON.stringify({ v: 1, ...body }),
@@ -324,9 +317,7 @@ export interface RegisterDeviceKeyResult {
   registered_at: string;
 }
 
-export function registerDeviceKey(
-  body: RegisterDeviceKeyBody,
-): Promise<RegisterDeviceKeyResult> {
+export function registerDeviceKey(body: RegisterDeviceKeyBody): Promise<RegisterDeviceKeyResult> {
   return api<RegisterDeviceKeyResult>('/device-keys', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -350,11 +341,7 @@ export function fetchComments(responseId: string): Promise<CommentItem[]> {
   return api<CommentItem[]>(`/challenges/responses/${responseId}/comments`);
 }
 
-export function postComment(
-  responseId: string,
-  text: string,
-  parentCommentId?: string,
-): Promise<CommentItem> {
+export function postComment(responseId: string, text: string, parentCommentId?: string): Promise<CommentItem> {
   return api<CommentItem>(`/challenges/responses/${responseId}/comments`, {
     method: 'POST',
     body: JSON.stringify(parentCommentId ? { text, parent_comment_id: parentCommentId } : { text }),

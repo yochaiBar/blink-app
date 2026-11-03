@@ -30,7 +30,6 @@ const mockQuery = query as jest.MockedFunction<typeof query>;
 const mockEmit = emitToGroup as jest.MockedFunction<typeof emitToGroup>;
 const app = createTestApp(challengeRouter, '/api/challenges');
 
-
 // ─────────────────────────────────────────────────────────────────
 // POST /api/challenges/groups/:groupId/challenges (trigger)
 // ─────────────────────────────────────────────────────────────────
@@ -41,13 +40,13 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
     const challenge = makeChallenge();
 
     mockQuery
-      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership check
-      .mockResolvedValueOnce(queryResult([]))                      // advisory lock (pg_advisory_xact_lock)
-      .mockResolvedValueOnce(queryResult([]))                      // cooldown check (no recent)
-      .mockResolvedValueOnce(queryResult([]))                      // no active challenges (FOR UPDATE)
-      .mockResolvedValueOnce(queryResult([challenge]))             // INSERT challenge
-      .mockResolvedValueOnce(queryResult([]))                      // group members for notification
-      .mockResolvedValueOnce(queryResult([makeUser()]))            // trigger user name
+      .mockResolvedValueOnce(queryResult([makeMembership()])) // membership check
+      .mockResolvedValueOnce(queryResult([])) // advisory lock (pg_advisory_xact_lock)
+      .mockResolvedValueOnce(queryResult([])) // cooldown check (no recent)
+      .mockResolvedValueOnce(queryResult([])) // no active challenges (FOR UPDATE)
+      .mockResolvedValueOnce(queryResult([challenge])) // INSERT challenge
+      .mockResolvedValueOnce(queryResult([])) // group members for notification
+      .mockResolvedValueOnce(queryResult([makeUser()])) // trigger user name
       .mockResolvedValueOnce(queryResult([{ name: 'Test Group' }])); // group name
 
     const res = await request(app)
@@ -65,13 +64,13 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
     const challenge = makeChallenge({ type: 'quiz' });
 
     mockQuery
-      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership check
-      .mockResolvedValueOnce(queryResult([]))                      // advisory lock (pg_advisory_xact_lock)
-      .mockResolvedValueOnce(queryResult([]))                      // cooldown check (no recent)
-      .mockResolvedValueOnce(queryResult([]))                      // no active challenges (FOR UPDATE)
-      .mockResolvedValueOnce(queryResult([challenge]))             // INSERT challenge
-      .mockResolvedValueOnce(queryResult([]))                      // group members for notification
-      .mockResolvedValueOnce(queryResult([makeUser()]))            // trigger user name
+      .mockResolvedValueOnce(queryResult([makeMembership()])) // membership check
+      .mockResolvedValueOnce(queryResult([])) // advisory lock (pg_advisory_xact_lock)
+      .mockResolvedValueOnce(queryResult([])) // cooldown check (no recent)
+      .mockResolvedValueOnce(queryResult([])) // no active challenges (FOR UPDATE)
+      .mockResolvedValueOnce(queryResult([challenge])) // INSERT challenge
+      .mockResolvedValueOnce(queryResult([])) // group members for notification
+      .mockResolvedValueOnce(queryResult([makeUser()])) // trigger user name
       .mockResolvedValueOnce(queryResult([{ name: 'Test Group' }])); // group name
 
     const res = await request(app)
@@ -96,8 +95,8 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
 
   it('should return 409 when a challenge was triggered within 5s cooldown (Bug #3a)', async () => {
     mockQuery
-      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership check
-      .mockResolvedValueOnce(queryResult([]))                      // advisory lock (pg_advisory_xact_lock)
+      .mockResolvedValueOnce(queryResult([makeMembership()])) // membership check
+      .mockResolvedValueOnce(queryResult([])) // advisory lock (pg_advisory_xact_lock)
       .mockResolvedValueOnce(queryResult([{ id: 'recent-challenge' }])); // cooldown check returns recent
 
     const res = await request(app)
@@ -114,16 +113,16 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
     const newChallenge = makeChallenge();
 
     mockQuery
-      .mockResolvedValueOnce(queryResult([makeMembership()]))              // membership check
-      .mockResolvedValueOnce(queryResult([]))                               // advisory lock (pg_advisory_xact_lock)
-      .mockResolvedValueOnce(queryResult([]))                               // cooldown check (none recent)
-      .mockResolvedValueOnce(queryResult([{ id: expiredChallengeId }]))    // active challenges FOR UPDATE
-      .mockResolvedValueOnce(queryResult([], 1))                           // UPDATE expired
-      .mockResolvedValueOnce(queryResult([newChallenge]))                  // INSERT new challenge
-      .mockResolvedValueOnce(queryResult([]))                               // group members for notification
-      .mockResolvedValueOnce(queryResult([makeUser()]))                    // trigger user name
-      .mockResolvedValueOnce(queryResult([{ name: 'Test Group' }]))        // group name
-      .mockResolvedValueOnce(queryResult([]));                              // processSkipsForChallenge queries
+      .mockResolvedValueOnce(queryResult([makeMembership()])) // membership check
+      .mockResolvedValueOnce(queryResult([])) // advisory lock (pg_advisory_xact_lock)
+      .mockResolvedValueOnce(queryResult([])) // cooldown check (none recent)
+      .mockResolvedValueOnce(queryResult([{ id: expiredChallengeId }])) // active challenges FOR UPDATE
+      .mockResolvedValueOnce(queryResult([], 1)) // UPDATE expired
+      .mockResolvedValueOnce(queryResult([newChallenge])) // INSERT new challenge
+      .mockResolvedValueOnce(queryResult([])) // group members for notification
+      .mockResolvedValueOnce(queryResult([makeUser()])) // trigger user name
+      .mockResolvedValueOnce(queryResult([{ name: 'Test Group' }])) // group name
+      .mockResolvedValueOnce(queryResult([])); // processSkipsForChallenge queries
 
     const res = await request(app)
       .post(`/api/challenges/groups/${TEST_GROUP_ID}/challenges`)
@@ -140,22 +139,19 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
     const response = makeChallengeResponse();
 
     mockQuery
-      .mockResolvedValueOnce(queryResult([challenge]))            // find challenge
-      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership
-      .mockResolvedValueOnce(queryResult([]))                      // no existing response
-      .mockResolvedValueOnce(queryResult([response]))              // INSERT response
-      .mockResolvedValueOnce(queryResult([makeUser()]))            // R1: responder name (notifyUserOfResponse)
+      .mockResolvedValueOnce(queryResult([challenge])) // find challenge
+      .mockResolvedValueOnce(queryResult([makeMembership()])) // membership
+      .mockResolvedValueOnce(queryResult([])) // no existing response
+      .mockResolvedValueOnce(queryResult([response])) // INSERT response
+      .mockResolvedValueOnce(queryResult([makeUser()])) // R1: responder name (notifyUserOfResponse)
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
-      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }])) // R1: streak check
       .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
-      .mockResolvedValueOnce(queryResult([{ count: '2' }]))        // R2: completion total members
-      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
+      .mockResolvedValueOnce(queryResult([{ count: '2' }])) // R2: completion total members
+      .mockResolvedValueOnce(queryResult([{ count: '1' }])); // R3: completion total responses
 
-    const respondApp = createTestApp(
-      (await import('../routes/challenges')).default,
-      '/api/challenges'
-    );
+    const respondApp = createTestApp((await import('../routes/challenges')).default, '/api/challenges');
 
     const res = await request(respondApp)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
@@ -166,7 +162,7 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
     expect(mockEmit).toHaveBeenCalledWith(
       TEST_GROUP_ID,
       'challenge:response',
-      expect.objectContaining({ groupId: TEST_GROUP_ID })
+      expect.objectContaining({ groupId: TEST_GROUP_ID }),
     );
   });
 
@@ -180,9 +176,7 @@ describe('POST /api/challenges/groups/:groupId/challenges', () => {
   });
 
   it('should return 401 without authentication', async () => {
-    const res = await request(app)
-      .post(`/api/challenges/groups/${TEST_GROUP_ID}/challenges`)
-      .send({});
+    const res = await request(app).post(`/api/challenges/groups/${TEST_GROUP_ID}/challenges`).send({});
 
     expect(res.status).toBe(401);
   });
@@ -251,20 +245,20 @@ describe('POST /api/challenges/:id/respond', () => {
     const response = makeChallengeResponse();
 
     mockQuery
-      .mockResolvedValueOnce(queryResult([challenge]))            // find challenge
-      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership
-      .mockResolvedValueOnce(queryResult([]))                      // no existing response
-      .mockResolvedValueOnce(queryResult([response]))              // INSERT response
+      .mockResolvedValueOnce(queryResult([challenge])) // find challenge
+      .mockResolvedValueOnce(queryResult([makeMembership()])) // membership
+      .mockResolvedValueOnce(queryResult([])) // no existing response
+      .mockResolvedValueOnce(queryResult([response])) // INSERT response
       // Fire-and-forget mocks ordered by round-robin interleaving:
       // Round 1: socialObligation(1), streakRewards(1), completionCheck(1)
       // Round 2: socialObligation(2), completionCheck(2)
       // Round 3: completionCheck(3)
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
-      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }])) // R1: streak check
       .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
-      .mockResolvedValueOnce(queryResult([{ count: '2' }]))        // R2: completion total members (joined_at filter)
-      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
+      .mockResolvedValueOnce(queryResult([{ count: '2' }])) // R2: completion total members (joined_at filter)
+      .mockResolvedValueOnce(queryResult([{ count: '1' }])); // R3: completion total responses
 
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
@@ -289,13 +283,13 @@ describe('POST /api/challenges/:id/respond', () => {
       // Round 1: notifyResponse(1), socialObligation(1), streakRewards(1), completionCheck(1)
       // Round 2: socialObligation(2), completionCheck(2)
       // Round 3: completionCheck(3)
-      .mockResolvedValueOnce(queryResult([makeUser()]))            // R1: responder name (notifyUserOfResponse)
+      .mockResolvedValueOnce(queryResult([makeUser()])) // R1: responder name (notifyUserOfResponse)
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
-      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }])) // R1: streak check
       .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
-      .mockResolvedValueOnce(queryResult([{ count: '2' }]))        // R2: completion total members
-      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
+      .mockResolvedValueOnce(queryResult([{ count: '2' }])) // R2: completion total members
+      .mockResolvedValueOnce(queryResult([{ count: '1' }])); // R3: completion total responses
 
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
@@ -306,7 +300,7 @@ describe('POST /api/challenges/:id/respond', () => {
     expect(mockEmit).toHaveBeenCalledWith(
       TEST_GROUP_ID,
       'challenge:response',
-      expect.objectContaining({ challengeId: TEST_CHALLENGE_ID })
+      expect.objectContaining({ challengeId: TEST_CHALLENGE_ID }),
     );
   });
 
@@ -321,11 +315,11 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([response]))
       // Fire-and-forget mocks (round-robin): social(1), streak(1), completion(1), social(2), completion(2), completion(3)
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
-      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }])) // R1: streak check
       .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
-      .mockResolvedValueOnce(queryResult([{ count: '5' }]))        // R2: completion total members
-      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
+      .mockResolvedValueOnce(queryResult([{ count: '5' }])) // R2: completion total members
+      .mockResolvedValueOnce(queryResult([{ count: '1' }])); // R3: completion total responses
 
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
@@ -346,11 +340,11 @@ describe('POST /api/challenges/:id/respond', () => {
       .mockResolvedValueOnce(queryResult([response]))
       // Fire-and-forget mocks (round-robin): social(1), streak(1), completion(1), social(2), completion(2), completion(3)
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R1: social allMembers
-      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))  // R1: streak check
+      .mockResolvedValueOnce(queryResult([{ current_streak: 0 }])) // R1: streak check
       .mockResolvedValueOnce(queryResult([{ created_at: new Date().toISOString(), status: 'active' }])) // R1: completion challenge FOR UPDATE
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }])) // R2: social allResponded
-      .mockResolvedValueOnce(queryResult([{ count: '3' }]))        // R2: completion total members
-      .mockResolvedValueOnce(queryResult([{ count: '1' }]));       // R3: completion total responses
+      .mockResolvedValueOnce(queryResult([{ count: '3' }])) // R2: completion total members
+      .mockResolvedValueOnce(queryResult([{ count: '1' }])); // R3: completion total responses
 
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
@@ -373,9 +367,7 @@ describe('POST /api/challenges/:id/respond', () => {
   });
 
   it('should return 403 when user is not a group member', async () => {
-    mockQuery
-      .mockResolvedValueOnce(queryResult([makeChallenge()]))
-      .mockResolvedValueOnce(queryResult([]));
+    mockQuery.mockResolvedValueOnce(queryResult([makeChallenge()])).mockResolvedValueOnce(queryResult([]));
 
     const res = await request(app)
       .post(`/api/challenges/${TEST_CHALLENGE_ID}/respond`)
@@ -423,10 +415,10 @@ describe('POST /api/challenges/:id/respond', () => {
     const response = makeChallengeResponse({ photo_url: null, has_photo: true });
 
     mockQuery
-      .mockResolvedValueOnce(queryResult([challenge]))            // find challenge
-      .mockResolvedValueOnce(queryResult([makeMembership()]))     // membership
-      .mockResolvedValueOnce(queryResult([]))                      // no existing response
-      .mockResolvedValueOnce(queryResult([response]))              // INSERT
+      .mockResolvedValueOnce(queryResult([challenge])) // find challenge
+      .mockResolvedValueOnce(queryResult([makeMembership()])) // membership
+      .mockResolvedValueOnce(queryResult([])) // no existing response
+      .mockResolvedValueOnce(queryResult([response])) // INSERT
       // fire-and-forget mocks; minimal so the request returns 201
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID, display_name: 'Test', avatar_url: null }]))
       .mockResolvedValueOnce(queryResult([{ current_streak: 0 }]))
@@ -443,9 +435,7 @@ describe('POST /api/challenges/:id/respond', () => {
     expect(res.status).toBe(201);
 
     // Verify the INSERT was called with photo_url=null + has_photo=true.
-    const insertCall = mockQuery.mock.calls.find((c) =>
-      String(c[0]).match(/INSERT INTO challenge_responses/i),
-    );
+    const insertCall = mockQuery.mock.calls.find((c) => String(c[0]).match(/INSERT INTO challenge_responses/i));
     expect(insertCall).toBeDefined();
     // Position 3 is photo_url (4th param, $4); position 4 is has_photo (5th, $5).
     expect(insertCall![1]![3]).toBeNull();
@@ -474,9 +464,7 @@ describe('POST /api/challenges/:id/respond', () => {
       .send({ photo_url: 'https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg' });
 
     expect(res.status).toBe(201);
-    const insertCall = mockQuery.mock.calls.find((c) =>
-      String(c[0]).match(/INSERT INTO challenge_responses/i),
-    );
+    const insertCall = mockQuery.mock.calls.find((c) => String(c[0]).match(/INSERT INTO challenge_responses/i));
     expect(insertCall).toBeDefined();
     expect(insertCall![1]![3]).toBe('https://blinks3upload.s3.us-east-1.amazonaws.com/photos/test.jpg');
     // has_photo is implicit from photoUrl presence
@@ -491,12 +479,8 @@ describe('GET /api/challenges/:id/responses', () => {
   const token = generateAccessToken(TEST_USER_ID);
 
   it('should return responses with reactions when user has responded', async () => {
-    const responses = [
-      { ...makeChallengeResponse(), display_name: 'User 1', avatar_url: null },
-    ];
-    const reactions = [
-      { response_id: TEST_RESPONSE_ID, emoji: '🔥', count: '3', user_names: ['A', 'B', 'C'] },
-    ];
+    const responses = [{ ...makeChallengeResponse(), display_name: 'User 1', avatar_url: null }];
+    const reactions = [{ response_id: TEST_RESPONSE_ID, emoji: '🔥', count: '3', user_names: ['A', 'B', 'C'] }];
 
     mockQuery
       .mockResolvedValueOnce(queryResult([{ id: 'my-response' }]))
@@ -553,9 +537,7 @@ describe('GET /api/challenges/groups/:groupId/challenges/history', () => {
       { ...makeChallenge({ status: 'completed' }), response_count: 3, member_count: 5, user_responded: true },
     ];
 
-    mockQuery
-      .mockResolvedValueOnce(queryResult([makeMembership()]))
-      .mockResolvedValueOnce(queryResult(history));
+    mockQuery.mockResolvedValueOnce(queryResult([makeMembership()])).mockResolvedValueOnce(queryResult(history));
 
     const res = await request(app)
       .get(`/api/challenges/groups/${TEST_GROUP_ID}/challenges/history`)
@@ -577,9 +559,7 @@ describe('GET /api/challenges/groups/:groupId/challenges/history', () => {
   });
 
   it('should return empty array when no challenge history exists', async () => {
-    mockQuery
-      .mockResolvedValueOnce(queryResult([makeMembership()]))
-      .mockResolvedValueOnce(queryResult([]));
+    mockQuery.mockResolvedValueOnce(queryResult([makeMembership()])).mockResolvedValueOnce(queryResult([]));
 
     const res = await request(app)
       .get(`/api/challenges/groups/${TEST_GROUP_ID}/challenges/history`)
@@ -645,9 +625,7 @@ describe('POST /api/challenges/responses/:responseId/reactions', () => {
   it('should return 403 when user is not a group member', async () => {
     const responseRow = { ...makeChallengeResponse(), group_id: TEST_GROUP_ID };
 
-    mockQuery
-      .mockResolvedValueOnce(queryResult([responseRow]))
-      .mockResolvedValueOnce(queryResult([]));
+    mockQuery.mockResolvedValueOnce(queryResult([responseRow])).mockResolvedValueOnce(queryResult([]));
 
     const res = await request(app)
       .post(`/api/challenges/responses/${TEST_RESPONSE_ID}/reactions`)

@@ -20,7 +20,17 @@ interface SnapCardProps {
 const quickReactions = ['😂', '🔥', '💀', '😍', '👀'];
 
 // ─── Animated Reaction Button ────────────────────────────────────────
-function AnimatedQuickReactBtn({ emoji, isSelected, count, onPress }: { emoji: string; isSelected: boolean; count: number; onPress: () => void }) {
+function AnimatedQuickReactBtn({
+  emoji,
+  isSelected,
+  count,
+  onPress,
+}: {
+  emoji: string;
+  isSelected: boolean;
+  count: number;
+  onPress: () => void;
+}) {
   const bounceAnim = useRef(new Animated.Value(1)).current;
 
   const handlePress = useCallback(() => {
@@ -44,7 +54,9 @@ function AnimatedQuickReactBtn({ emoji, isSelected, count, onPress }: { emoji: s
 
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
-      <Animated.View style={[styles.quickReactBtn, isSelected && styles.reactionSelected, { transform: [{ scale: bounceAnim }] }]}>
+      <Animated.View
+        style={[styles.quickReactBtn, isSelected && styles.reactionSelected, { transform: [{ scale: bounceAnim }] }]}
+      >
         <Text style={styles.quickReactEmoji}>{emoji}</Text>
         {count > 0 && (
           <View style={styles.countBadge}>
@@ -56,7 +68,14 @@ function AnimatedQuickReactBtn({ emoji, isSelected, count, onPress }: { emoji: s
   );
 }
 
-export default React.memo(function SnapCard({ snap, isLocked, currentUserId, onReact, onReport, onBlock }: SnapCardProps) {
+export default React.memo(function SnapCard({
+  snap,
+  isLocked,
+  currentUserId,
+  onReact,
+  onReport,
+  onBlock,
+}: SnapCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const [showMenu, setShowMenu] = useState(false);
 
@@ -78,12 +97,15 @@ export default React.memo(function SnapCard({ snap, isLocked, currentUserId, onR
     }).start();
   }, [scaleAnim]);
 
-  const handleReact = useCallback((emoji: string) => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    onReact?.(snap.id, emoji);
-  }, [snap.id, onReact]);
+  const handleReact = useCallback(
+    (emoji: string) => {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      onReact?.(snap.id, emoji);
+    },
+    [snap.id, onReact],
+  );
 
   return (
     <Animated.View style={[styles.container, { transform: [{ scale: scaleAnim }] }]}>
@@ -183,10 +205,7 @@ export default React.memo(function SnapCard({ snap, isLocked, currentUserId, onR
                 <Text style={[styles.menuItemText, { color: theme.red }]}>Block {snap.userName}</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={[styles.menuItem, styles.menuCancel]}
-              onPress={() => setShowMenu(false)}
-            >
+            <TouchableOpacity style={[styles.menuItem, styles.menuCancel]} onPress={() => setShowMenu(false)}>
               <Text style={[styles.menuItemText, { color: theme.textMuted }]}>Cancel</Text>
             </TouchableOpacity>
           </View>

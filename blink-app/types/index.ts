@@ -1,6 +1,7 @@
 export type GroupCategory = 'close_friends' | 'family' | 'students' | 'work' | 'custom';
 
-export type AiPersonality = 'family_friendly' | 'funny' | 'spicy' | 'sarcastic' | 'motivational' | 'extreme' | 'sexy' | 'no_filter';
+export type AiPersonality =
+  'family_friendly' | 'funny' | 'spicy' | 'sarcastic' | 'motivational' | 'extreme' | 'sexy' | 'no_filter';
 
 export interface GroupMember {
   id: string;

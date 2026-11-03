@@ -46,11 +46,7 @@ export interface PhotoTimelineProps {
   onSeeAll: () => void;
 }
 
-export default function PhotoTimeline({
-  photos,
-  groupId,
-  onSeeAll,
-}: PhotoTimelineProps) {
+export default function PhotoTimeline({ photos, groupId, onSeeAll }: PhotoTimelineProps) {
   const router = useRouter();
   if (photos.length === 0) return null;
 
@@ -87,11 +83,17 @@ export default function PhotoTimeline({
             />
             <View style={styles.thumbOverlayBottom}>
               <Image
-                source={{ uri: photo.avatar_url ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop' }}
+                source={{
+                  uri:
+                    photo.avatar_url ??
+                    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
+                }}
                 style={styles.thumbAvatar}
                 contentFit="cover"
               />
-              <Text style={styles.thumbTime} numberOfLines={1}>{getRelativeTime(photo.responded_at)}</Text>
+              <Text style={styles.thumbTime} numberOfLines={1}>
+                {getRelativeTime(photo.responded_at)}
+              </Text>
             </View>
           </TouchableOpacity>
         ))}

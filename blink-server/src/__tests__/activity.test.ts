@@ -9,13 +9,7 @@
  */
 
 import request from 'supertest';
-import {
-  createTestApp,
-  generateAccessToken,
-  TEST_USER_ID,
-  TEST_GROUP_ID,
-  queryResult,
-} from './helpers';
+import { createTestApp, generateAccessToken, TEST_USER_ID, TEST_GROUP_ID, queryResult } from './helpers';
 
 import './setup';
 
@@ -58,9 +52,7 @@ describe('GET /api/activity', () => {
 
     mockQuery.mockResolvedValueOnce(queryResult(activities));
 
-    const res = await request(app)
-      .get('/api/activity')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/activity').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
@@ -98,16 +90,14 @@ describe('GET /api/activity', () => {
     // Verify the query was called with the before parameter
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining('$2'),
-      expect.arrayContaining([TEST_USER_ID, before])
+      expect.arrayContaining([TEST_USER_ID, before]),
     );
   });
 
   it('should return empty array when no activity exists', async () => {
     mockQuery.mockResolvedValueOnce(queryResult([]));
 
-    const res = await request(app)
-      .get('/api/activity')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/activity').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
@@ -121,39 +111,63 @@ describe('GET /api/activity', () => {
   it('should limit results to 50 items', async () => {
     mockQuery.mockResolvedValueOnce(queryResult([]));
 
-    await request(app)
-      .get('/api/activity')
-      .set('Authorization', `Bearer ${token}`);
+    await request(app).get('/api/activity').set('Authorization', `Bearer ${token}`);
 
     // Verify LIMIT 50 is in the query parameters
-    expect(mockQuery).toHaveBeenCalledWith(
-      expect.stringContaining('LIMIT'),
-      expect.arrayContaining([50])
-    );
+    expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('LIMIT'), expect.arrayContaining([50]));
   });
 
   it('should handle database errors gracefully', async () => {
     mockQuery.mockRejectedValueOnce(new Error('Query timeout'));
 
-    const res = await request(app)
-      .get('/api/activity')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/activity').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(500);
   });
 
   it('should include all activity types in response', async () => {
     const mixedActivities = [
-      { type: 'snap', userId: 'u1', userName: 'A', userAvatar: '', groupName: 'G', groupId: 'g1', message: 'snap', timestamp: new Date().toISOString(), imageUrl: 'img', id: 'a1' },
-      { type: 'challenge_triggered', userId: 'u2', userName: 'B', userAvatar: '', groupName: 'G', groupId: 'g1', message: 'challenge', timestamp: new Date().toISOString(), imageUrl: null, id: 'a2' },
-      { type: 'join', userId: 'u3', userName: 'C', userAvatar: '', groupName: 'G', groupId: 'g1', message: 'join', timestamp: new Date().toISOString(), imageUrl: null, id: 'a3' },
+      {
+        type: 'snap',
+        userId: 'u1',
+        userName: 'A',
+        userAvatar: '',
+        groupName: 'G',
+        groupId: 'g1',
+        message: 'snap',
+        timestamp: new Date().toISOString(),
+        imageUrl: 'img',
+        id: 'a1',
+      },
+      {
+        type: 'challenge_triggered',
+        userId: 'u2',
+        userName: 'B',
+        userAvatar: '',
+        groupName: 'G',
+        groupId: 'g1',
+        message: 'challenge',
+        timestamp: new Date().toISOString(),
+        imageUrl: null,
+        id: 'a2',
+      },
+      {
+        type: 'join',
+        userId: 'u3',
+        userName: 'C',
+        userAvatar: '',
+        groupName: 'G',
+        groupId: 'g1',
+        message: 'join',
+        timestamp: new Date().toISOString(),
+        imageUrl: null,
+        id: 'a3',
+      },
     ];
 
     mockQuery.mockResolvedValueOnce(queryResult(mixedActivities));
 
-    const res = await request(app)
-      .get('/api/activity')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/activity').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(3);

@@ -26,10 +26,10 @@ export function bearer(user: { token: string }): { Authorization: string } {
 export async function createUser(overrides: { phone_number?: string; display_name?: string } = {}): Promise<TestUser> {
   phoneCounter += 1;
   const phone = overrides.phone_number ?? `+1555${String(phoneCounter).padStart(7, '0')}`;
-  const result = await query<UserRow>(
-    `INSERT INTO users (phone_number, display_name) VALUES ($1, $2) RETURNING *`,
-    [phone, overrides.display_name ?? `User ${phoneCounter}`],
-  );
+  const result = await query<UserRow>(`INSERT INTO users (phone_number, display_name) VALUES ($1, $2) RETURNING *`, [
+    phone,
+    overrides.display_name ?? `User ${phoneCounter}`,
+  ]);
   const user = result.rows[0];
   return { ...user, token: accessTokenFor(user.id) };
 }

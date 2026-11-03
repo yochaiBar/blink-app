@@ -2,7 +2,22 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, Shield, Moon, LogOut, ChevronRight, Globe, Lock, Eye, Trash2, FileText, Mail, UserX, X } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Bell,
+  Shield,
+  Moon,
+  LogOut,
+  ChevronRight,
+  Globe,
+  Lock,
+  Eye,
+  Trash2,
+  FileText,
+  Mail,
+  UserX,
+  X,
+} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
@@ -20,11 +35,15 @@ export default function SettingsScreen() {
   const [quietHoursEnabled, setQuietHoursEnabled] = useState<boolean>(false);
   const [privacyMode, setPrivacyMode] = useState<'everyone' | 'friends' | 'groups_only'>('everyone');
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
-  const [blockedUsers, setBlockedUsers] = useState<Array<{ blocked_id: string; display_name: string | null; avatar_url: string | null }>>([]);
+  const [blockedUsers, setBlockedUsers] = useState<
+    Array<{ blocked_id: string; display_name: string | null; avatar_url: string | null }>
+  >([]);
 
   useEffect(() => {
     getBlockedUsers()
-      .then((data) => { if (Array.isArray(data)) setBlockedUsers(data); })
+      .then((data) => {
+        if (Array.isArray(data)) setBlockedUsers(data);
+      })
       .catch(() => {}); // Non-critical: blocked users list is supplementary
   }, []);
 
@@ -99,7 +118,9 @@ export default function SettingsScreen() {
     };
 
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm('Delete Account?\n\nThis will permanently delete all your data. This action cannot be undone.');
+      const confirmed = window.confirm(
+        'Delete Account?\n\nThis will permanently delete all your data. This action cannot be undone.',
+      );
       if (confirmed) doDelete();
     } else {
       Alert.alert('Delete Account', 'This will permanently delete all your data. This action cannot be undone.', [
@@ -150,9 +171,7 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Quiet Hours</Text>
-                {quietHoursEnabled && (
-                  <Text style={styles.settingDesc}>10:00 PM - 8:00 AM</Text>
-                )}
+                {quietHoursEnabled && <Text style={styles.settingDesc}>10:00 PM - 8:00 AM</Text>}
               </View>
               <Switch
                 value={quietHoursEnabled}
@@ -181,12 +200,8 @@ export default function SettingsScreen() {
                   }}
                 >
                   <IconComp size={18} color={isSelected ? theme.coral : theme.textMuted} />
-                  <Text style={[styles.privacyOptionText, isSelected && { color: theme.coral }]}>
-                    {opt.label}
-                  </Text>
-                  {isSelected && (
-                    <View style={styles.selectedDot} />
-                  )}
+                  <Text style={[styles.privacyOptionText, isSelected && { color: theme.coral }]}>{opt.label}</Text>
+                  {isSelected && <View style={styles.selectedDot} />}
                 </TouchableOpacity>
               );
             })}
@@ -243,7 +258,10 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.card}>
-            <TouchableOpacity style={styles.settingRow} onPress={() => Linking.openURL(`${API_URL.replace(/\/api$/, '')}/privacy`)}>
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => Linking.openURL(`${API_URL.replace(/\/api$/, '')}/privacy`)}
+            >
               <View style={[styles.iconBg, { backgroundColor: theme.greenMuted }]}>
                 <Shield size={18} color={theme.green} />
               </View>
@@ -253,7 +271,10 @@ export default function SettingsScreen() {
 
             <View style={styles.rowDivider} />
 
-            <TouchableOpacity style={styles.settingRow} onPress={() => Linking.openURL(`${API_URL.replace(/\/api$/, '')}/terms`)}>
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => Linking.openURL(`${API_URL.replace(/\/api$/, '')}/terms`)}
+            >
               <View style={[styles.iconBg, { backgroundColor: theme.blueMuted }]}>
                 <FileText size={18} color={theme.blue} />
               </View>

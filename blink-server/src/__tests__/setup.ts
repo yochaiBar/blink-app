@@ -77,9 +77,7 @@ jest.mock('../socket', () => ({
   emitToUser: jest.fn(),
   emitToUserDevice: jest.fn(),
   isUserOnline: jest.fn().mockResolvedValue(false),
-  emitToUserWithAck: jest
-    .fn()
-    .mockResolvedValue({ acked: 0, nacked: 0, failed: 0 }),
+  emitToUserWithAck: jest.fn().mockResolvedValue({ acked: 0, nacked: 0, failed: 0 }),
   onUserConnect: jest.fn(),
   initSocket: jest.fn().mockReturnValue({}),
   getIO: jest.fn().mockReturnValue(null),

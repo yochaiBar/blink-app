@@ -132,7 +132,7 @@ function getCellColor(level: 0 | 1 | 2): string {
 export default React.memo(function StreakCalendar({ totalSnaps, longestStreak, joinDate }: StreakCalendarProps) {
   const cells = useMemo(
     () => generateMockData(totalSnaps, longestStreak, joinDate),
-    [totalSnaps, longestStreak, joinDate]
+    [totalSnaps, longestStreak, joinDate],
   );
 
   const currentStreak = useMemo(() => computeCurrentStreak(cells), [cells]);

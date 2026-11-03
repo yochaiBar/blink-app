@@ -8,11 +8,7 @@ interface StatusDotProps {
   pulse?: boolean;
 }
 
-export default React.memo(function StatusDot({
-  color = theme.green,
-  size = 8,
-  pulse = false,
-}: StatusDotProps) {
+export default React.memo(function StatusDot({ color = theme.green, size = 8, pulse = false }: StatusDotProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
 

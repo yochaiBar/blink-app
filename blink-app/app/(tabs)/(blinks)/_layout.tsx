@@ -1,6 +1,6 @@
-import { Stack } from "expo-router";
-import React from "react";
-import { theme } from "@/constants/colors";
+import { Stack } from 'expo-router';
+import React from 'react';
+import { theme } from '@/constants/colors';
 
 export default function BlinksLayout() {
   return (
@@ -11,14 +11,8 @@ export default function BlinksLayout() {
         contentStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Stack.Screen
-        name="index"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="notifications"
-        options={{ headerShown: false }}
-      />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="notifications" options={{ headerShown: false }} />
     </Stack>
   );
 }

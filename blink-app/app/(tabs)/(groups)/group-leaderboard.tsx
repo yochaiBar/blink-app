@@ -23,7 +23,7 @@ export default function GroupLeaderboardScreen() {
   const router = useRouter();
   const { groups, user } = useApp();
 
-  const group = groups.find(g => g.id === groupId);
+  const group = groups.find((g) => g.id === groupId);
 
   // Fetch group detail for member stats
   const detailQuery = useQuery({
@@ -36,9 +36,7 @@ export default function GroupLeaderboardScreen() {
     staleTime: 15_000,
   });
 
-  const leaderboard = detailQuery.data
-    ? apiMembersToLeaderboard(detailQuery.data.members)
-    : [];
+  const leaderboard = detailQuery.data ? apiMembersToLeaderboard(detailQuery.data.members) : [];
 
   const topThree = leaderboard.slice(0, 3);
   const rest = leaderboard.slice(3);
@@ -53,7 +51,9 @@ export default function GroupLeaderboardScreen() {
         <View style={[styles.podiumAvatarRing, { borderColor: rankColors[position] }]}>
           <Image source={{ uri: entry.userAvatar }} style={styles.podiumAvatar} contentFit="cover" />
         </View>
-        <Text style={styles.podiumName} numberOfLines={1}>{entry.userName}</Text>
+        <Text style={styles.podiumName} numberOfLines={1}>
+          {entry.userName}
+        </Text>
         <Text style={[styles.podiumScore, { color: rankColors[position] }]}>{entry.score}</Text>
         <View style={styles.podiumStreakRow}>
           <Flame size={12} color={theme.yellow} />
@@ -63,25 +63,28 @@ export default function GroupLeaderboardScreen() {
     );
   }, []);
 
-  const renderListItem = useCallback(({ item }: { item: LeaderboardEntry }) => {
-    const isMe = item.userId === user.id;
-    return (
-      <View style={[styles.listItem, isMe && styles.listItemMe]}>
-        <Text style={styles.listRank}>#{item.rank}</Text>
-        <Image source={{ uri: item.userAvatar }} style={styles.listAvatar} contentFit="cover" />
-        <View style={styles.listInfo}>
-          <Text style={[styles.listName, isMe && { color: theme.coral }]}>
-            {item.userName} {isMe ? '(you)' : ''}
-          </Text>
-          <View style={styles.listStreakRow}>
-            <Flame size={12} color={theme.yellow} />
-            <Text style={styles.listStreakText}>{item.streak} day streak</Text>
+  const renderListItem = useCallback(
+    ({ item }: { item: LeaderboardEntry }) => {
+      const isMe = item.userId === user.id;
+      return (
+        <View style={[styles.listItem, isMe && styles.listItemMe]}>
+          <Text style={styles.listRank}>#{item.rank}</Text>
+          <Image source={{ uri: item.userAvatar }} style={styles.listAvatar} contentFit="cover" />
+          <View style={styles.listInfo}>
+            <Text style={[styles.listName, isMe && { color: theme.coral }]}>
+              {item.userName} {isMe ? '(you)' : ''}
+            </Text>
+            <View style={styles.listStreakRow}>
+              <Flame size={12} color={theme.yellow} />
+              <Text style={styles.listStreakText}>{item.streak} day streak</Text>
+            </View>
           </View>
+          <Text style={styles.listScore}>{item.score}</Text>
         </View>
-        <Text style={styles.listScore}>{item.score}</Text>
-      </View>
-    );
-  }, [user.id]);
+      );
+    },
+    [user.id],
+  );
 
   if (!group) {
     return (
@@ -144,10 +147,7 @@ export default function GroupLeaderboardScreen() {
           </View>
           <View style={{ width: 40 }} />
         </View>
-        <ErrorState
-          message="Failed to load leaderboard"
-          onRetry={() => detailQuery.refetch()}
-        />
+        <ErrorState message="Failed to load leaderboard" onRetry={() => detailQuery.refetch()} />
       </View>
     );
   }
@@ -171,17 +171,10 @@ export default function GroupLeaderboardScreen() {
       </View>
 
       {leaderboard.length === 0 ? (
-        <EmptyState
-          emoji="🏆"
-          title="No rankings yet"
-          subtitle="Start participating to climb the leaderboard!"
-        />
+        <EmptyState emoji="🏆" title="No rankings yet" subtitle="Start participating to climb the leaderboard!" />
       ) : topThree.length >= 3 ? (
         <>
-          <LinearGradient
-            colors={['rgba(255, 215, 0, 0.06)', 'transparent']}
-            style={styles.podium}
-          >
+          <LinearGradient colors={['rgba(255, 215, 0, 0.06)', 'transparent']} style={styles.podium}>
             <View style={styles.podiumRow}>
               {renderPodiumItem(topThree[1], 1)}
               {renderPodiumItem(topThree[0], 0)}

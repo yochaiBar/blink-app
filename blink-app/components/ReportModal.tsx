@@ -23,7 +23,13 @@ interface ReportModalProps {
   contentType: 'photo' | 'user' | 'group' | 'challenge_response';
 }
 
-export default function ReportModal({ visible, onClose, reportedUserId, reportedContentId, contentType }: ReportModalProps) {
+export default function ReportModal({
+  visible,
+  onClose,
+  reportedUserId,
+  reportedContentId,
+  contentType,
+}: ReportModalProps) {
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -84,7 +90,9 @@ export default function ReportModal({ visible, onClose, reportedUserId, reported
                 }}
               >
                 <Text style={styles.reasonEmoji}>{r.emoji}</Text>
-                <Text style={[styles.reasonLabel, selectedReason === r.key && styles.reasonLabelSelected]}>{r.label}</Text>
+                <Text style={[styles.reasonLabel, selectedReason === r.key && styles.reasonLabelSelected]}>
+                  {r.label}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>

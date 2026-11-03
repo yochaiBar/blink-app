@@ -106,9 +106,7 @@ export default React.memo(function Button({
   const variantStyle = VARIANT_STYLES[variant];
   const sizeStyle = SIZE_STYLES[size];
 
-  const spinnerColor = variant === 'primary' || variant === 'destructive'
-    ? theme.white
-    : theme.textSecondary;
+  const spinnerColor = variant === 'primary' || variant === 'destructive' ? theme.white : theme.textSecondary;
 
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }], alignSelf: fullWidth ? 'stretch' : 'auto' }}>

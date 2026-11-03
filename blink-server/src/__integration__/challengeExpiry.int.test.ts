@@ -52,9 +52,7 @@ describe('GET /api/challenges/groups/:groupId/challenges/active — expiry', () 
     const requesters = [...members, ...members];
     const responses = await raceBehindLock('challenges', requesters.length, () =>
       Promise.all(
-        requesters.map((m) =>
-          server.api().get(`/api/challenges/groups/${group.id}/challenges/active`).set(bearer(m)),
-        ),
+        requesters.map((m) => server.api().get(`/api/challenges/groups/${group.id}/challenges/active`).set(bearer(m))),
       ),
     );
 

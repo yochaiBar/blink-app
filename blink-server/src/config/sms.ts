@@ -5,13 +5,10 @@ const TWILIO_ACCOUNT_SID = env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = env.TWILIO_AUTH_TOKEN;
 const TWILIO_PHONE_NUMBER = env.TWILIO_PHONE_NUMBER;
 
-export const isSmsConfigured =
-  !!TWILIO_ACCOUNT_SID && !!TWILIO_AUTH_TOKEN && !!TWILIO_PHONE_NUMBER;
+export const isSmsConfigured = !!TWILIO_ACCOUNT_SID && !!TWILIO_AUTH_TOKEN && !!TWILIO_PHONE_NUMBER;
 
 if (!isSmsConfigured) {
-  logger.warn(
-    'Twilio credentials not set. Falling back to dev-mode OTP (123456).'
-  );
+  logger.warn('Twilio credentials not set. Falling back to dev-mode OTP (123456).');
 }
 
 export async function sendSms(to: string, body: string): Promise<void> {

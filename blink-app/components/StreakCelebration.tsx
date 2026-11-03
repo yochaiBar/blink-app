@@ -11,14 +11,7 @@ export interface StreakCelebrationProps {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const CONFETTI_COLORS = [
-  theme.coral,
-  theme.yellow,
-  theme.green,
-  theme.blue,
-  theme.purple,
-  theme.pink,
-];
+const CONFETTI_COLORS = [theme.coral, theme.yellow, theme.green, theme.blue, theme.purple, theme.pink];
 
 const CONFETTI_COUNT = 24;
 
@@ -80,12 +73,7 @@ function ConfettiPiece({ delay, color, startX }: { delay: number; color: string;
   );
 }
 
-export default function StreakCelebration({
-  visible,
-  userName,
-  streakDays,
-  onDismiss,
-}: StreakCelebrationProps) {
+export default function StreakCelebration({ visible, userName, streakDays, onDismiss }: StreakCelebrationProps) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -133,12 +121,7 @@ export default function StreakCelebration({
       {confettiPieces.map((props, i) => (
         <ConfettiPiece key={i} {...props} />
       ))}
-      <Animated.View
-        style={[
-          styles.card,
-          { transform: [{ scale: scaleAnim }] },
-        ]}
-      >
+      <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
         <Text style={styles.emoji}>{'\uD83D\uDD25'}</Text>
         <Text style={styles.title}>
           {userName} hit a {streakDays}-day streak!

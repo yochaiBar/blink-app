@@ -11,12 +11,7 @@
 
 import request from 'supertest';
 import { createHmac, randomBytes } from 'node:crypto';
-import {
-  createTestApp,
-  generateAccessToken,
-  TEST_USER_ID,
-  queryResult,
-} from './helpers';
+import { createTestApp, generateAccessToken, TEST_USER_ID, queryResult } from './helpers';
 
 import './setup';
 
@@ -35,9 +30,7 @@ function makePublicKeyB64(): string {
 
 function makeAttestation(token: string, publicKeyB64: string): string {
   const publicKeyBytes = Buffer.from(publicKeyB64, 'base64');
-  return createHmac('sha256', Buffer.from(token, 'utf8'))
-    .update(publicKeyBytes)
-    .digest('base64');
+  return createHmac('sha256', Buffer.from(token, 'utf8')).update(publicKeyBytes).digest('base64');
 }
 
 describe('POST /api/device-keys', () => {
@@ -58,15 +51,12 @@ describe('POST /api/device-keys', () => {
       )
       .mockResolvedValueOnce(queryResult([])); // tombstone-others UPDATE
 
-    const res = await request(app)
-      .post('/api/device-keys')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        v: 1,
-        device_id: TEST_DEVICE_ID,
-        x25519_public_key_b64: publicKeyB64,
-        attestation_b64: validAttestation,
-      });
+    const res = await request(app).post('/api/device-keys').set('Authorization', `Bearer ${token}`).send({
+      v: 1,
+      device_id: TEST_DEVICE_ID,
+      x25519_public_key_b64: publicKeyB64,
+      attestation_b64: validAttestation,
+    });
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
@@ -79,15 +69,12 @@ describe('POST /api/device-keys', () => {
   it('rejects with 400 when attestation does not match the JWT', async () => {
     const bogusAttestation = makeAttestation('a-different-token', publicKeyB64);
 
-    const res = await request(app)
-      .post('/api/device-keys')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        v: 1,
-        device_id: TEST_DEVICE_ID,
-        x25519_public_key_b64: publicKeyB64,
-        attestation_b64: bogusAttestation,
-      });
+    const res = await request(app).post('/api/device-keys').set('Authorization', `Bearer ${token}`).send({
+      v: 1,
+      device_id: TEST_DEVICE_ID,
+      x25519_public_key_b64: publicKeyB64,
+      attestation_b64: bogusAttestation,
+    });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/attestation/i);
@@ -103,15 +90,12 @@ describe('POST /api/device-keys', () => {
     // public-key bytes in the body, not what the attestation was made for.
     const attestationForOtherKey = makeAttestation(token, attackerPublicKey);
 
-    const res = await request(app)
-      .post('/api/device-keys')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        v: 1,
-        device_id: TEST_DEVICE_ID,
-        x25519_public_key_b64: publicKeyB64,
-        attestation_b64: attestationForOtherKey,
-      });
+    const res = await request(app).post('/api/device-keys').set('Authorization', `Bearer ${token}`).send({
+      v: 1,
+      device_id: TEST_DEVICE_ID,
+      x25519_public_key_b64: publicKeyB64,
+      attestation_b64: attestationForOtherKey,
+    });
 
     expect(res.status).toBe(400);
     expect(mockQuery).not.toHaveBeenCalled();
@@ -121,15 +105,12 @@ describe('POST /api/device-keys', () => {
     // Length-correct but unrelated random bytes.
     const garbage = randomBytes(32).toString('base64');
 
-    const res = await request(app)
-      .post('/api/device-keys')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        v: 1,
-        device_id: TEST_DEVICE_ID,
-        x25519_public_key_b64: publicKeyB64,
-        attestation_b64: garbage,
-      });
+    const res = await request(app).post('/api/device-keys').set('Authorization', `Bearer ${token}`).send({
+      v: 1,
+      device_id: TEST_DEVICE_ID,
+      x25519_public_key_b64: publicKeyB64,
+      attestation_b64: garbage,
+    });
 
     expect(res.status).toBe(400);
   });
@@ -137,42 +118,34 @@ describe('POST /api/device-keys', () => {
   it('rejects with 400 on malformed base64 in public key', async () => {
     const malformed = 'not-base64-not-44-chars-yikes';
 
-    const res = await request(app)
-      .post('/api/device-keys')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        v: 1,
-        device_id: TEST_DEVICE_ID,
-        x25519_public_key_b64: malformed,
-        attestation_b64: validAttestation,
-      });
+    const res = await request(app).post('/api/device-keys').set('Authorization', `Bearer ${token}`).send({
+      v: 1,
+      device_id: TEST_DEVICE_ID,
+      x25519_public_key_b64: malformed,
+      attestation_b64: validAttestation,
+    });
 
     expect(res.status).toBe(400);
   });
 
   it('rejects with 400 when v is not 1', async () => {
-    const res = await request(app)
-      .post('/api/device-keys')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        v: 2,
-        device_id: TEST_DEVICE_ID,
-        x25519_public_key_b64: publicKeyB64,
-        attestation_b64: validAttestation,
-      });
+    const res = await request(app).post('/api/device-keys').set('Authorization', `Bearer ${token}`).send({
+      v: 2,
+      device_id: TEST_DEVICE_ID,
+      x25519_public_key_b64: publicKeyB64,
+      attestation_b64: validAttestation,
+    });
 
     expect(res.status).toBe(400);
   });
 
   it('rejects with 401 when no JWT is present', async () => {
-    const res = await request(app)
-      .post('/api/device-keys')
-      .send({
-        v: 1,
-        device_id: TEST_DEVICE_ID,
-        x25519_public_key_b64: publicKeyB64,
-        attestation_b64: validAttestation,
-      });
+    const res = await request(app).post('/api/device-keys').send({
+      v: 1,
+      device_id: TEST_DEVICE_ID,
+      x25519_public_key_b64: publicKeyB64,
+      attestation_b64: validAttestation,
+    });
 
     expect(res.status).toBe(401);
   });
@@ -190,15 +163,12 @@ describe('POST /api/device-keys', () => {
       )
       .mockResolvedValueOnce(queryResult([], 2)); // 2 other rows tombstoned
 
-    const res = await request(app)
-      .post('/api/device-keys')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        v: 1,
-        device_id: TEST_DEVICE_ID,
-        x25519_public_key_b64: publicKeyB64,
-        attestation_b64: validAttestation,
-      });
+    const res = await request(app).post('/api/device-keys').set('Authorization', `Bearer ${token}`).send({
+      v: 1,
+      device_id: TEST_DEVICE_ID,
+      x25519_public_key_b64: publicKeyB64,
+      attestation_b64: validAttestation,
+    });
 
     expect(res.status).toBe(200);
     // 2nd call is the tombstone UPDATE — verify its WHERE clause excludes
@@ -228,15 +198,12 @@ describe('POST /api/device-keys', () => {
     const newPublicKey = makePublicKeyB64();
     const newAttestation = makeAttestation(token, newPublicKey);
 
-    const res = await request(app)
-      .post('/api/device-keys')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        v: 1,
-        device_id: TEST_DEVICE_ID,
-        x25519_public_key_b64: newPublicKey,
-        attestation_b64: newAttestation,
-      });
+    const res = await request(app).post('/api/device-keys').set('Authorization', `Bearer ${token}`).send({
+      v: 1,
+      device_id: TEST_DEVICE_ID,
+      x25519_public_key_b64: newPublicKey,
+      attestation_b64: newAttestation,
+    });
 
     expect(res.status).toBe(200);
     expect(res.body.key_version).toBe(4);
