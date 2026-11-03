@@ -14,24 +14,6 @@ const MAX_THUMBS = 4;
 
 // ── Helpers ──
 
-function typeBadge(t?: string): string {
-  switch (t) {
-    case 'snap':
-      return '📸 Snap';
-    case 'quiz':
-    case 'quiz_food':
-      return '❓ Quiz';
-    case 'quiz_most_likely':
-      return '🔥 Most likely';
-    case 'quiz_rate_day':
-      return '⭐ Rate the day';
-    case 'prompt':
-      return '💬 Prompt';
-    default:
-      return '📸 Snap';
-  }
-}
-
 function formatRemaining(ms: number): string {
   if (ms <= 0) return '0:00';
   const totalSec = Math.floor(ms / 1000);
@@ -152,7 +134,7 @@ export default function ChallengeCard({ item }: { item: FeedItemData }) {
 
         {/* Type badge */}
         <View style={styles.typeBadge}>
-          <Text style={styles.typeBadgeText}>{typeBadge(item.challengeType)}</Text>
+          <Text style={styles.typeBadgeText}>📸 Snap</Text>
         </View>
 
         {/* Prompt */}

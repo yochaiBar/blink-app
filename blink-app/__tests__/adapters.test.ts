@@ -8,7 +8,6 @@
  * - apiGroupListToGroup
  * - apiMemberToGroupMember
  * - apiGroupDetailToGroup
- * - apiSpotlightToUI
  * - apiResponseToSnap
  * - apiMembersToLeaderboard
  * - apiUserToProfile
@@ -20,19 +19,12 @@ import {
   apiGroupListToGroup,
   apiMemberToGroupMember,
   apiGroupDetailToGroup,
-  apiSpotlightToUI,
   apiResponseToSnap,
   apiMembersToLeaderboard,
   apiUserToProfile,
 } from '../utils/adapters';
 
-import type {
-  ApiGroupListItem,
-  ApiGroupMember,
-  ApiGroupDetail,
-  ApiSpotlight,
-  ApiChallengeResponse,
-} from '../types/api';
+import type { ApiGroupListItem, ApiGroupMember, ApiGroupDetail, ApiChallengeResponse } from '../types/api';
 
 const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
 
@@ -45,11 +37,9 @@ describe('apiGroupListToGroup', () => {
       id: 'group-1',
       name: 'Test Group',
       icon: '🔥',
-      category: 'friends',
       invite_code: 'ABCD1234',
       member_count: 5,
       role: 'admin',
-      skip_penalty_type: 'wanted_poster',
       has_active_challenge: false,
     };
 
@@ -58,41 +48,10 @@ describe('apiGroupListToGroup', () => {
     expect(result.id).toBe('group-1');
     expect(result.name).toBe('Test Group');
     expect(result.emoji).toBe('🔥');
-    expect(result.category).toBe('close_friends'); // 'friends' maps to 'close_friends'
     expect(result.inviteCode).toBe('ABCD1234');
     expect(result.hasActiveChallenge).toBe(false);
     expect(result.challengeEndTime).toBeUndefined();
     expect(result.members).toEqual([]);
-  });
-
-  it('should map "friends" category to "close_friends"', () => {
-    const apiItem: ApiGroupListItem = {
-      id: 'g1',
-      name: 'G',
-      icon: '',
-      category: 'friends',
-      invite_code: 'X',
-      member_count: 1,
-      role: 'member',
-      skip_penalty_type: 'none',
-    };
-
-    expect(apiGroupListToGroup(apiItem).category).toBe('close_friends');
-  });
-
-  it('should keep "family" category as-is', () => {
-    const apiItem: ApiGroupListItem = {
-      id: 'g1',
-      name: 'G',
-      icon: '',
-      category: 'family',
-      invite_code: 'X',
-      member_count: 1,
-      role: 'member',
-      skip_penalty_type: 'none',
-    };
-
-    expect(apiGroupListToGroup(apiItem).category).toBe('family');
   });
 
   it('should handle active challenge with countdown', () => {
@@ -101,11 +60,9 @@ describe('apiGroupListToGroup', () => {
       id: 'g1',
       name: 'G',
       icon: '📸',
-      category: 'friends',
       invite_code: 'X',
       member_count: 1,
       role: 'member',
-      skip_penalty_type: 'none',
       has_active_challenge: true,
       challenge_expires_at: futureTime,
     };
@@ -121,11 +78,9 @@ describe('apiGroupListToGroup', () => {
       id: 'g1',
       name: 'G',
       icon: '',
-      category: 'custom',
       invite_code: 'X',
       member_count: 1,
       role: 'member',
-      skip_penalty_type: 'none',
     };
 
     expect(apiGroupListToGroup(apiItem).emoji).toBe('🔥');
@@ -136,11 +91,9 @@ describe('apiGroupListToGroup', () => {
       id: 'g1',
       name: 'G',
       icon: '🔥',
-      category: 'work',
       invite_code: 'X',
       member_count: 1,
       role: 'member',
-      skip_penalty_type: 'none',
     };
 
     const result = apiGroupListToGroup(apiItem);
@@ -219,9 +172,7 @@ describe('apiGroupDetailToGroup', () => {
     id: 'group-1',
     name: 'Test Group',
     icon: '🔥',
-    category: 'friends',
     invite_code: 'ABCD1234',
-    skip_penalty_type: 'wanted_poster',
     created_by: 'user-1',
     created_at: '2024-01-01T00:00:00Z',
     members: [
@@ -273,75 +224,6 @@ describe('apiGroupDetailToGroup', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-// apiSpotlightToUI
-// ─────────────────────────────────────────────────────────────────
-describe('apiSpotlightToUI', () => {
-  it('should convert spotlight data to UI model', () => {
-    const spotlight: ApiSpotlight = {
-      id: 'spot-1',
-      group_id: 'group-1',
-      featured_user_id: 'user-1',
-      display_name: 'Alice',
-      avatar_url: 'https://example.com/alice.jpg',
-      superlative: 'Fastest Responder',
-      stats_json: {
-        streak: 10,
-        total_responses: 50,
-        participation_rate: 95,
-        fun_fact: 'Always first to respond!',
-      },
-      date: '2024-01-01',
-    };
-
-    const result = apiSpotlightToUI(spotlight);
-
-    expect(result.userId).toBe('user-1');
-    expect(result.userName).toBe('Alice');
-    expect(result.title).toBe('Fastest Responder');
-    expect(result.subtitle).toBe('Always first to respond!');
-    expect(result.stats).toHaveLength(3);
-    expect(result.stats[0].value).toBe('50');
-    expect(result.stats[1].value).toBe('10 days');
-    expect(result.stats[2].value).toBe('95%');
-  });
-
-  it('should use defaults for null display_name and avatar_url', () => {
-    const spotlight: ApiSpotlight = {
-      id: 'spot-2',
-      group_id: 'group-1',
-      featured_user_id: 'user-2',
-      display_name: null,
-      avatar_url: null,
-      superlative: '',
-      stats_json: { streak: 0, total_responses: 0, participation_rate: 0, fun_fact: '' },
-      date: '2024-01-01',
-    };
-
-    const result = apiSpotlightToUI(spotlight);
-
-    expect(result.userName).toBe('User');
-    expect(result.userAvatar).toBe(DEFAULT_AVATAR);
-    expect(result.title).toBe("Today's Star");
-  });
-
-  it('should use default subtitle when fun_fact is empty', () => {
-    const spotlight: ApiSpotlight = {
-      id: 'spot-3',
-      group_id: 'group-1',
-      featured_user_id: 'user-3',
-      display_name: 'Bob',
-      avatar_url: null,
-      superlative: 'Test',
-      stats_json: { streak: 1, total_responses: 5, participation_rate: 80, fun_fact: '' },
-      date: '2024-01-01',
-    };
-
-    const result = apiSpotlightToUI(spotlight);
-    expect(result.subtitle).toBe('Top performer this week!');
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────
 // apiResponseToSnap
 // ─────────────────────────────────────────────────────────────────
 describe('apiResponseToSnap', () => {
@@ -353,7 +235,6 @@ describe('apiResponseToSnap', () => {
       display_name: 'Alice',
       avatar_url: 'https://example.com/alice.jpg',
       photo_url: 'https://example.com/photo.jpg',
-      answer_index: null,
       response_time_ms: 3500,
       responded_at: '2024-01-01T12:00:00Z',
       created_at: '2024-01-01T12:00:00Z',
@@ -377,7 +258,6 @@ describe('apiResponseToSnap', () => {
       display_name: null,
       avatar_url: null,
       photo_url: null,
-      answer_index: 1,
       response_time_ms: null,
       responded_at: '2024-01-01T12:00:00Z',
       created_at: '2024-01-01T12:00:00Z',
@@ -398,7 +278,6 @@ describe('apiResponseToSnap', () => {
       display_name: 'Bob',
       avatar_url: null,
       photo_url: null,
-      answer_index: null,
       response_time_ms: null,
       responded_at: '2024-06-15T10:00:00Z',
       created_at: '2024-06-15T09:59:00Z',

@@ -112,13 +112,7 @@ export function useGroups() {
     mutationFn: async (group: Group) => {
       const result = await api<{ id: string }>('/groups', {
         method: 'POST',
-        body: JSON.stringify({
-          name: group.name,
-          icon: group.emoji,
-          category: group.category === 'close_friends' ? 'friends' : group.category,
-          skip_penalty_type: 'none',
-          ai_personality: group.aiPersonality ?? 'funny',
-        }),
+        body: JSON.stringify({ name: group.name, icon: group.emoji }),
       });
       // Group creator becomes the source of truth for the group key. No
       // handshake needed — we ARE the only member. Subsequent joiners

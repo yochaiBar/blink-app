@@ -2,7 +2,7 @@ import React, { useEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, Camera, Heart, MessageCircle, Flame, UserPlus, Star, Mail } from 'lucide-react-native';
+import { ArrowLeft, Bell, Camera, Heart, Flame, UserPlus, Mail } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -13,10 +13,8 @@ import { getRelativeTime } from '@/utils/time';
 const notifIcons: Record<string, { icon: typeof Bell; color: string }> = {
   challenge: { icon: Camera, color: theme.coral },
   reaction: { icon: Heart, color: theme.pink },
-  prompt: { icon: MessageCircle, color: theme.blue },
   streak: { icon: Flame, color: theme.yellow },
   join: { icon: UserPlus, color: theme.green },
-  spotlight: { icon: Star, color: theme.yellow },
   invite: { icon: Mail, color: theme.purple },
 };
 

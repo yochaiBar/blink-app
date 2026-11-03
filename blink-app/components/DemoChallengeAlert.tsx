@@ -23,7 +23,7 @@ export default function DemoChallengeAlert({ visible, onDismiss }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const [shown, setShown] = useState(false);
 
-  const promptText = DEMO_CHALLENGE.prompt_text ?? DEMO_CHALLENGE.prompt ?? 'Show us your view right now!';
+  const promptText = DEMO_CHALLENGE.prompt ?? 'Show us your view right now!';
 
   useEffect(() => {
     if (!visible) {

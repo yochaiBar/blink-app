@@ -151,7 +151,6 @@ function makeApiMembers() {
 export const DEMO_GROUP: Group = {
   id: DEMO_GROUP_ID,
   name: 'Welcome Crew',
-  category: 'close_friends',
   emoji: '🎉',
   members: DEMO_MEMBERS,
   lastActive: new Date().toISOString(),
@@ -166,9 +165,7 @@ export const DEMO_GROUP_DETAIL: ApiGroupDetail = {
   id: DEMO_GROUP_ID,
   name: 'Welcome Crew',
   icon: '🎉',
-  category: 'friends',
   invite_code: 'DEMO00',
-  skip_penalty_type: 'none',
   created_by: 'demo_user_1',
   created_at: new Date().toISOString(),
   members: makeApiMembers(),
@@ -179,16 +176,11 @@ export const DEMO_GROUP_DETAIL: ApiGroupDetail = {
 export const DEMO_CHALLENGE: ApiChallenge = {
   id: 'demo_challenge_1',
   group_id: DEMO_GROUP_ID,
-  type: 'snap',
   prompt: getDailyPrompt(),
-  prompt_text: getDailyPrompt(),
-  options: null,
-  options_json: null,
-  triggered_by: 'demo_user_1',
-  triggered_at: new Date().toISOString(),
+  created_by: 'demo_user_1',
+  created_at: new Date().toISOString(),
   expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
   status: 'active',
-  countdown_seconds: 300,
 };
 
 // --- Snap responses (3-4 randomly picked from the photo pool) ---
@@ -207,7 +199,6 @@ function buildDemoSnapResponses(): ApiChallengeResponse[] {
     display_name: member.name,
     avatar_url: member.avatar,
     photo_url: photos[i],
-    answer_index: null,
     response_time_ms: 2000 + i * 1500,
     responded_at: new Date(Date.now() - (respondentCount - i) * 5 * 60 * 1000).toISOString(),
     created_at: new Date(Date.now() - (respondentCount - i) * 5 * 60 * 1000).toISOString(),
@@ -215,71 +206,6 @@ function buildDemoSnapResponses(): ApiChallengeResponse[] {
 }
 
 export const DEMO_RESPONSES: ApiChallengeResponse[] = buildDemoSnapResponses();
-
-// --- Quiz challenge (quiz_most_likely) ---
-
-const QUIZ_QUESTIONS = [
-  {
-    prompt: "Who's most likely to forget their phone at home?",
-    options: ['Alex', 'Jordan', 'Sam', 'Riley'],
-  },
-  {
-    prompt: "Who's most likely to binge an entire series overnight?",
-    options: ['Maya', 'Leo', 'Alex', 'Sam'],
-  },
-  {
-    prompt: "Who's most likely to accidentally send a text to the wrong person?",
-    options: ['Riley', 'Jordan', 'Maya', 'Leo'],
-  },
-  {
-    prompt: "Who's most likely to show up late to their own party?",
-    options: ['Leo', 'Alex', 'Riley', 'Jordan'],
-  },
-  {
-    prompt: "Who's most likely to adopt every stray animal they see?",
-    options: ['Sam', 'Maya', 'Jordan', 'Alex'],
-  },
-];
-
-function getDailyQuiz() {
-  const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-  return QUIZ_QUESTIONS[dayIndex % QUIZ_QUESTIONS.length];
-}
-
-export const DEMO_QUIZ_CHALLENGE: ApiChallenge = {
-  id: 'demo_challenge_quiz_1',
-  group_id: DEMO_GROUP_ID,
-  type: 'quiz_most_likely',
-  prompt: getDailyQuiz().prompt,
-  prompt_text: getDailyQuiz().prompt,
-  options: getDailyQuiz().options,
-  options_json: getDailyQuiz().options,
-  triggered_by: 'demo_user_2',
-  triggered_at: new Date().toISOString(),
-  expires_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
-  status: 'active',
-  countdown_seconds: 180,
-};
-
-function buildDemoQuizResponses(): ApiChallengeResponse[] {
-  const daySeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-  const respondents = seededPick(DEMO_MEMBERS, 4, daySeed + 99);
-
-  return respondents.map((member, i) => ({
-    id: `demo_quiz_response_${i + 1}`,
-    challenge_id: 'demo_challenge_quiz_1',
-    user_id: member.id,
-    display_name: member.name,
-    avatar_url: member.avatar,
-    photo_url: null,
-    answer_index: (daySeed + i) % 4,
-    response_time_ms: 1200 + i * 800,
-    responded_at: new Date(Date.now() - (4 - i) * 3 * 60 * 1000).toISOString(),
-    created_at: new Date(Date.now() - (4 - i) * 3 * 60 * 1000).toISOString(),
-  }));
-}
-
-export const DEMO_QUIZ_RESPONSES: ApiChallengeResponse[] = buildDemoQuizResponses();
 
 // --- Helper ---
 

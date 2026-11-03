@@ -9,9 +9,6 @@ import {
   Animated,
   Platform,
   Dimensions,
-  ScrollView,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useScrollToTop } from '@react-navigation/native';
@@ -26,26 +23,21 @@ import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services/api';
 import { getSocket } from '@/services/socket';
-import { getRelativeTime } from '@/utils/time';
 import { Group } from '@/types';
-import { ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
+import { ApiChallenge, ApiChallengeResponse } from '@/types/api';
 import AvatarRing from '@/components/ui/AvatarRing';
-import FeedItem, { FeedItemData } from '@/components/FeedItem';
+import { FeedItemData } from '@/components/FeedItem';
 import ChallengeCard from '@/components/ChallengeCard';
-import LaneTabs, { Lane } from '@/components/LaneTabs';
 import DemoChallengeAlert from '@/components/DemoChallengeAlert';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { isDemoGroup } from '@/constants/demoData';
-import { WORLDWIDE_CHALLENGES } from '@/constants/worldwideExamples';
 
 // ── Types ──
 
 interface ChallengeHistoryItem {
   id: string;
   group_id: string;
-  type: string;
   prompt: string | null;
-  options: string[] | null;
   created_by: string | null;
   created_at: string;
   expires_at: string;
@@ -61,8 +53,16 @@ interface PendingChallenge {
   responses?: ApiChallengeResponse[];
 }
 
+/** A challenge the user answered, with the photo responses to thumbnail on its card. */
+interface AnsweredChallenge {
+  group: Group;
+  challenge: ChallengeHistoryItem;
+  photoResponses: { responseId: string; userName?: string; photoUrl?: string; timestamp: string }[];
+  /** Responses fetch failed: show the card with the history row's count and no thumbnails. */
+  responsesUnavailable: boolean;
+}
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const LANE_ORDER: Lane[] = ['groups', 'world', 'foryou'];
 
 // ── Feed Skeleton ──
 
@@ -111,37 +111,6 @@ function FeedSkeleton() {
   );
 }
 
-// ── Animated Feed Item Wrapper ──
-
-const AnimatedFeedItem = React.memo(function AnimatedFeedItem({ item }: { item: FeedItemData }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim]);
-
-  return (
-    <Animated.View style={{ opacity: fadeAnim }}>
-      <FeedItem item={item} />
-    </Animated.View>
-  );
-});
-
-// ── Lane empty state (e.g. For You placeholder) ──
-
-function LaneEmpty({ item }: { item: FeedItemData }) {
-  return (
-    <View style={styles.laneEmpty}>
-      <Text style={styles.emptyTitle}>{item.emptyTitle}</Text>
-      <Text style={styles.emptySubtitle}>{item.emptySubtitle}</Text>
-    </View>
-  );
-}
-
 // ── Main Screen ──
 
 export default function BlinksScreen() {
@@ -162,12 +131,6 @@ export default function BlinksScreen() {
   const demoChallengeCompleted = useOnboardingStore((s) => s.demoChallengeCompleted);
   const [demoDismissed, setDemoDismissed] = useState(false);
   const showDemoAlert = shouldShowDemoGroup && !demoChallengeCompleted && !demoDismissed;
-
-  // Which Home lane is showing: 🔒 Groups (private), 🌍 World, ✨ For You.
-  const [activeLane, setActiveLane] = useState<Lane>('groups');
-  // Measured height of the pager viewport so each lane page can bound its
-  // FlatList (required for vertical scroll inside a horizontal pager).
-  const [pagerHeight, setPagerHeight] = useState(0);
 
   const flatListRef = useRef<FlatList>(null);
   useScrollToTop(flatListRef);
@@ -212,13 +175,13 @@ export default function BlinksScreen() {
 
   const pendingChallenges = activeChallengesQuery.data ?? [];
 
-  // ── Build the feed from challenge history + individual responses ──
+  // ── Answered challenges: history + the photo responses for each ──
   const feedQuery = useQuery({
     queryKey: ['blinks-feed-v2', [...groups.map((g) => g.id)].sort().join(',')],
-    queryFn: async (): Promise<FeedItemData[]> => {
+    queryFn: async (): Promise<AnsweredChallenge[]> => {
       if (groups.length === 0) return [];
 
-      const allItems: FeedItemData[] = [];
+      const answered: AnsweredChallenge[] = [];
 
       // Fetch history + responses for each group in parallel (skip demo groups)
       const realGroups = groups.filter((g) => !isDemoGroup(g.id));
@@ -229,65 +192,29 @@ export default function BlinksScreen() {
           );
           if (!Array.isArray(history)) return;
 
-          // For each challenge, try to get individual responses
-          const challengeFetches = history.map(async (challenge) => {
-            if (challenge.user_responded) {
-              // User responded -- try to get individual responses (photos)
+          // Unanswered challenges only show in the group mini-feed, not here.
+          const challengeFetches = history
+            .filter((challenge) => challenge.user_responded)
+            .map(async (challenge) => {
               try {
                 const responses: ApiChallengeResponse[] = await api(`/challenges/${challenge.id}/responses`);
-                if (Array.isArray(responses) && responses.length > 0) {
-                  // Create a feed item for each individual response
-                  for (const resp of responses) {
-                    if (challenge.type === 'snap' && resp.photo_url) {
-                      allItems.push({
-                        id: `photo_${resp.id}`,
-                        type: 'photo',
-                        userName: resp.display_name || 'User',
-                        userAvatar: resp.avatar_url || undefined,
-                        groupName: group.name,
-                        groupEmoji: group.emoji,
-                        groupId: group.id,
-                        challengeId: challenge.id,
-                        photoUrl: resp.photo_url,
-                        challengePrompt: challenge.prompt || undefined,
-                        timeAgo: getRelativeTime(resp.responded_at || resp.created_at),
-                        timestamp: resp.responded_at || resp.created_at,
-                        reactions: [], // Will be enriched separately if needed
-                      });
-                    } else if (challenge.type !== 'snap' && (resp.answer_text || resp.answer_index !== null)) {
-                      // Quiz responses are aggregated per challenge, not per response
-                      // We handle them below
-                    }
-                  }
-
-                  // For quiz-type challenges, create one quiz result item
-                  if (challenge.type !== 'snap') {
-                    const quizResults = buildQuizResults(responses, challenge);
-                    if (quizResults.length > 0) {
-                      allItems.push({
-                        id: `quiz_${challenge.id}`,
-                        type: 'quiz_result',
-                        groupName: group.name,
-                        groupEmoji: group.emoji,
-                        groupId: group.id,
-                        challengeId: challenge.id,
-                        quizQuestion: challenge.prompt || 'Quiz',
-                        quizResults,
-                        timeAgo: getRelativeTime(challenge.created_at),
-                        timestamp: challenge.created_at,
-                      });
-                    }
-                  }
+                if (!Array.isArray(responses)) return;
+                const photoResponses = responses
+                  .filter((resp) => resp.photo_url)
+                  .map((resp) => ({
+                    responseId: resp.id,
+                    userName: resp.display_name || 'User',
+                    photoUrl: resp.photo_url ?? undefined,
+                    timestamp: resp.responded_at || resp.created_at,
+                  }));
+                if (photoResponses.length > 0) {
+                  answered.push({ group, challenge, photoResponses, responsesUnavailable: false });
                 }
               } catch {
-                // Responses endpoint failed -- create a summary card
-                createFallbackItem(allItems, challenge, group);
+                // Responses endpoint failed -- still show the card, without thumbnails
+                answered.push({ group, challenge, photoResponses: [], responsesUnavailable: true });
               }
-            } else {
-              // User has NOT responded -- skip from main feed
-              // Unresponded challenges only show in the group mini-feed
-            }
-          });
+            });
 
           await Promise.all(challengeFetches);
         } catch {
@@ -295,46 +222,18 @@ export default function BlinksScreen() {
         }
       });
 
-      // Fetch spotlights for each group (skip demo groups)
-      const spotlightFetches = realGroups.map(async (group) => {
-        try {
-          const spotlight: ApiSpotlight = await api(`/spotlight/${group.id}`);
-          if (spotlight && spotlight.featured_user_id) {
-            allItems.push({
-              id: `spotlight_${spotlight.id}`,
-              type: 'spotlight',
-              groupName: group.name,
-              groupEmoji: group.emoji,
-              groupId: group.id,
-              spotlightUser: spotlight.display_name || 'Someone',
-              superlative: spotlight.superlative,
-              funFact: spotlight.stats_json?.fun_fact,
-              timeAgo: getRelativeTime(spotlight.date),
-              timestamp: spotlight.date,
-            });
-          }
-        } catch {
-          // Non-critical: spotlight endpoint may not exist or group has no spotlight
-        }
-      });
-
-      await Promise.all([...fetches, ...spotlightFetches]);
-
-      // Sort by timeAgo relevance (most recent first)
-      // We parse timeAgo back or sort by creation. Since timeAgo is already computed,
-      // we use the original timestamps embedded in the IDs or just keep insertion order.
-      // For a proper sort, we track timestamps separately.
-      return allItems;
+      await Promise.all(fetches);
+      return answered;
     },
     enabled: groups.length > 0,
     staleTime: 30_000,
   });
 
-  // ── 🔒 GROUPS lane: challenge-grouped feed ──
+  // ── Challenge-grouped feed ──
   // The atomic unit is a CHALLENGE, not a photo. Live (unanswered) challenges
   // become cards with an "Add yours" CTA; answered/closed challenges become a
-  // card header with their response photos rendered underneath.
-  const groupsLaneData = useMemo<FeedItemData[]>(() => {
+  // card with their response photos as thumbnails.
+  const feedData = useMemo<FeedItemData[]>(() => {
     const out: FeedItemData[] = [];
 
     // Live challenges first — one card each, sorted soonest-to-expire.
@@ -351,89 +250,41 @@ export default function BlinksScreen() {
         groupName: pc.group.name,
         groupEmoji: pc.group.emoji,
         challengeId: pc.challenge.id,
-        challengePrompt: pc.challenge.prompt_text || pc.challenge.prompt || undefined,
-        challengeType: pc.challenge.type,
+        challengePrompt: pc.challenge.prompt || undefined,
         isLive: true,
         expiresAt: pc.challenge.expires_at,
         responseCount: pc.responses?.length ?? 0,
         memberCount: pc.group.memberCount ?? pc.group.members?.length ?? 0,
-        timestamp: pc.challenge.triggered_at || new Date().toISOString(),
+        timestamp: pc.challenge.created_at || new Date().toISOString(),
       });
     }
 
-    // Answered/closed challenges from the feed, grouped by challengeId.
-    const items = feedQuery.data ?? [];
-    const byChallenge = new Map<string, FeedItemData[]>();
-    const orderKeys: string[] = [];
-    for (const it of items) {
-      if (!it.challengeId) continue; // spotlight / ai commentary — omit from Groups
-      if (!byChallenge.has(it.challengeId)) {
-        byChallenge.set(it.challengeId, []);
-        orderKeys.push(it.challengeId);
-      }
-      byChallenge.get(it.challengeId)!.push(it);
-    }
-    const newest = (arr: FeedItemData[]) =>
-      Math.max(...arr.map((a) => (a.timestamp ? new Date(a.timestamp).getTime() : 0)), 0);
-    orderKeys.sort((a, b) => newest(byChallenge.get(b)!) - newest(byChallenge.get(a)!));
-
-    for (const cid of orderKeys) {
-      const grp = byChallenge.get(cid)!;
-      const first = grp[0];
-      const photoItems = grp.filter((g) => g.type === 'photo');
-      const quizItems = grp.filter((g) => g.type === 'quiz_result');
-      // Snap responses become inline thumbnails inside the card; quiz results
-      // still render as their own card beneath (different visualization).
-      const challengeResponses = photoItems.map((p) => ({
-        responseId: p.id.startsWith('photo_') ? p.id.slice('photo_'.length) : p.id,
-        userName: p.userName,
-        photoUrl: p.photoUrl,
-      }));
+    // Answered/closed challenges, newest activity first.
+    const newest = (a: AnsweredChallenge) =>
+      Math.max(
+        ...a.photoResponses.map((p) => new Date(p.timestamp).getTime()),
+        a.responsesUnavailable ? new Date(a.challenge.created_at).getTime() : 0,
+        0,
+      );
+    const answered = [...(feedQuery.data ?? [])].sort((a, b) => newest(b) - newest(a));
+    for (const a of answered) {
       out.push({
-        id: `cc_${cid}`,
+        id: `cc_${a.challenge.id}`,
         type: 'challenge_card',
-        groupId: first.groupId,
-        groupName: first.groupName,
-        groupEmoji: first.groupEmoji,
-        challengeId: cid,
-        challengePrompt: first.challengePrompt || first.quizQuestion,
-        challengeType: first.challengeType || (first.type === 'quiz_result' ? 'quiz' : 'snap'),
+        groupId: a.group.id,
+        groupName: a.group.name,
+        groupEmoji: a.group.emoji,
+        challengeId: a.challenge.id,
+        challengePrompt: a.challenge.prompt || undefined,
         isLive: false,
-        responseCount: photoItems.length || grp.length,
-        challengeResponses: challengeResponses.length > 0 ? challengeResponses : undefined,
-        timestamp: first.timestamp,
+        responseCount: a.responsesUnavailable ? Number(a.challenge.response_count) || 0 : a.photoResponses.length,
+        challengeResponses: a.photoResponses.length > 0 ? a.photoResponses : undefined,
+        timestamp: a.challenge.created_at,
       });
-      // Keep quiz result bars beneath the card header.
-      out.push(...quizItems);
     }
 
     return out;
   }, [pendingChallenges, feedQuery.data]);
-
-  // ── 🌍 WORLD lane: global challenges (seeded until "Share to world" ships) ──
-  const worldLaneData = useMemo<FeedItemData[]>(
-    () =>
-      WORLDWIDE_CHALLENGES.map((ch) => ({
-        id: `ww_challenge_${ch.promptId}`,
-        type: 'worldwide_challenge' as const,
-        worldwideChallenge: ch,
-      })),
-    [],
-  );
-
-  // ── ✨ FOR YOU lane: personalized public discovery (Phase 3) ──
-  const forYouLaneData = useMemo<FeedItemData[]>(
-    () => [
-      {
-        id: 'foryou_empty',
-        type: 'lane_empty',
-        emptyTitle: '✨ For You is coming soon',
-        emptySubtitle:
-          'Once the World fills up with public challenges, this lane will surface the ones you’ll love — picked just for you.',
-      },
-    ],
-    [],
-  );
 
   // ── Socket listeners ──
   useEffect(() => {
@@ -466,37 +317,6 @@ export default function BlinksScreen() {
     router.push('/notifications' as never);
   }, [router]);
 
-  const navigateToChallenge = useCallback(
-    (group: Group, challenge?: ApiChallenge | null) => {
-      if (
-        challenge &&
-        (challenge.type === 'quiz' ||
-          challenge.type === 'quiz_food' ||
-          challenge.type === 'quiz_most_likely' ||
-          challenge.type === 'quiz_rate_day' ||
-          challenge.type === 'prompt')
-      ) {
-        router.push({
-          pathname: '/quiz-challenge' as never,
-          params: {
-            groupId: group.id,
-            challengeId: challenge.id,
-            type: challenge.type,
-            promptText: challenge.prompt_text ?? challenge.prompt ?? '',
-            optionsJson: JSON.stringify(challenge.options_json ?? challenge.options ?? []),
-            expiresAt: challenge.expires_at,
-          },
-        });
-      } else {
-        router.push({
-          pathname: '/snap-challenge' as never,
-          params: { groupId: group.id },
-        });
-      }
-    },
-    [router],
-  );
-
   const handleFeedItemPress = useCallback(
     (item: FeedItemData) => {
       if (item.groupId) {
@@ -519,19 +339,12 @@ export default function BlinksScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
 
-      // Find matching pending challenge
-      const pending = pendingChallenges.find((pc) => pc.group.id === item.groupId);
-      if (pending) {
-        navigateToChallenge(pending.group, pending.challenge);
-      } else {
-        // Navigate to snap challenge as fallback
-        router.push({
-          pathname: '/snap-challenge' as never,
-          params: { groupId: item.groupId },
-        });
-      }
+      router.push({
+        pathname: '/snap-challenge' as never,
+        params: { groupId: group.id },
+      });
     },
-    [groups, pendingChallenges, navigateToChallenge, router],
+    [groups, router],
   );
 
   const handleReact = useCallback(
@@ -554,7 +367,7 @@ export default function BlinksScreen() {
     ]);
   }, [refreshGroups, queryClient]);
 
-  // ── Wire callbacks into each lane's items ──
+  // ── Wire callbacks into each item ──
   const wire = useCallback(
     (items: FeedItemData[]) =>
       items.map((item) => ({
@@ -565,55 +378,22 @@ export default function BlinksScreen() {
       })),
     [handleFeedItemPress, handleFeedItemRespond, handleReact],
   );
-  const groupsData = useMemo(() => wire(groupsLaneData), [wire, groupsLaneData]);
-  const worldData = useMemo(() => wire(worldLaneData), [wire, worldLaneData]);
-  const forYouData = useMemo(() => wire(forYouLaneData), [wire, forYouLaneData]);
-
-  // ── Horizontal lane paging ──
-  const pagerRef = useRef<ScrollView>(null);
-  const goToLane = useCallback((lane: Lane) => {
-    setActiveLane(lane);
-    const idx = LANE_ORDER.indexOf(lane);
-    pagerRef.current?.scrollTo({ x: idx * SCREEN_WIDTH, animated: true });
-  }, []);
-  const onPagerScrollEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-      const lane = LANE_ORDER[idx];
-      if (lane && lane !== activeLane) setActiveLane(lane);
-    },
-    [activeLane],
-  );
+  const wiredFeedData = useMemo(() => wire(feedData), [wire, feedData]);
 
   // ── Render ──
 
-  const renderItem = useCallback(({ item }: { item: FeedItemData }) => {
-    if (item.type === 'challenge_card') {
-      return (
-        <Animated.View>
-          <ChallengeCard item={item} />
-        </Animated.View>
-      );
-    }
-    if (item.type === 'lane_empty') {
-      return <LaneEmpty item={item} />;
-    }
-    return <AnimatedFeedItem item={item} />;
-  }, []);
+  const renderItem = useCallback(({ item }: { item: FeedItemData }) => <ChallengeCard item={item} />, []);
 
   const keyExtractor = useCallback((item: FeedItemData) => item.id, []);
 
   const isLoading = isGroupsLoading || (groups.length > 0 && feedQuery.isLoading);
-  // "User has no real feed content of their own" — true when not loading AND
-  // either no groups or groups with no activity yet. Worldwide items don't
-  // count toward "real content" so they aren't checked here.
+  // "User has no feed content" — true when not loading AND either no groups
+  // or groups with no answered challenges yet.
   const hasNoGroups = !isGroupsLoading && groups.length === 0;
   const hasNoUserContent =
     !isLoading && (hasNoGroups || (groups.length > 0 && feedQuery.isFetched && (feedQuery.data ?? []).length === 0));
 
-  // ── List Header ──
-  // Groups lane only: the no-content / no-groups CTA. Other lanes carry their
-  // own content (World cards, For You placeholder).
+  // ── List Header: the no-content / no-groups CTA ──
   const ListHeader = useMemo(() => {
     if (!hasNoUserContent) return null;
     return (
@@ -624,8 +404,8 @@ export default function BlinksScreen() {
         <Text style={styles.emptyTitle}>{hasNoGroups ? 'Welcome to Blink' : 'No challenges yet'}</Text>
         <Text style={styles.emptySubtitle}>
           {hasNoGroups
-            ? 'Capture moments with your closest crew via daily snap challenges. Join a group to start, or swipe to World to see what people are sharing.'
-            : 'When your groups run challenges, they show up here. Swipe to World to see what people are sharing around the globe.'}
+            ? 'Capture moments with your closest crew via daily snap challenges. Join a group to start.'
+            : 'When your groups run challenges, they show up here.'}
         </Text>
         <TouchableOpacity
           style={styles.emptyAction}
@@ -649,11 +429,11 @@ export default function BlinksScreen() {
     );
   }, [hasNoUserContent, hasNoGroups, router]);
 
-  // ── List Empty (Groups lane first-load skeleton) ──
+  // ── List Empty (first-load skeleton) ──
   const ListEmpty = useMemo(() => (isLoading ? <FeedSkeleton /> : null), [isLoading]);
 
   // ── List Footer ──
-  // Trailing spacer so the last worldwide card isn't flush with the tab bar.
+  // Trailing spacer so the last card isn't flush with the tab bar.
   const ListFooter = useMemo(() => <View style={{ height: 100 }} />, []);
 
   return (
@@ -691,135 +471,24 @@ export default function BlinksScreen() {
         </View>
       </View>
 
-      {/* Lane switcher: 🔒 Groups · 🌍 World · ✨ For You */}
-      <LaneTabs active={activeLane} onChange={goToLane} />
-
-      {/* Horizontally-paged lanes — swipe L/R to switch, ↑/↓ within a lane */}
-      <View style={styles.pager} onLayout={(e) => setPagerHeight(e.nativeEvent.layout.height)}>
-        <ScrollView
-          ref={pagerRef}
-          horizontal
-          pagingEnabled
-          directionalLockEnabled
-          disableIntervalMomentum
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={onPagerScrollEnd}
-          scrollEventThrottle={16}
-        >
-          {/* 🔒 Groups */}
-          <View style={[styles.page, { height: pagerHeight }]}>
-            <FlatList
-              ref={flatListRef}
-              data={groupsData}
-              renderItem={renderItem}
-              keyExtractor={keyExtractor}
-              contentContainerStyle={styles.feedContent}
-              showsVerticalScrollIndicator={false}
-              ListHeaderComponent={ListHeader}
-              ListEmptyComponent={ListEmpty}
-              ListFooterComponent={ListFooter}
-              refreshControl={
-                <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.coral} />
-              }
-              removeClippedSubviews={Platform.OS !== 'web'}
-              maxToRenderPerBatch={5}
-              windowSize={7}
-              initialNumToRender={4}
-            />
-          </View>
-
-          {/* 🌍 World */}
-          <View style={[styles.page, { height: pagerHeight }]}>
-            <FlatList
-              data={worldData}
-              renderItem={renderItem}
-              keyExtractor={keyExtractor}
-              contentContainerStyle={styles.feedContent}
-              showsVerticalScrollIndicator={false}
-              ListFooterComponent={ListFooter}
-              removeClippedSubviews={Platform.OS !== 'web'}
-            />
-          </View>
-
-          {/* ✨ For You */}
-          <View style={[styles.page, { height: pagerHeight }]}>
-            <FlatList
-              data={forYouData}
-              renderItem={renderItem}
-              keyExtractor={keyExtractor}
-              contentContainerStyle={styles.feedContent}
-              showsVerticalScrollIndicator={false}
-              ListFooterComponent={ListFooter}
-            />
-          </View>
-        </ScrollView>
-      </View>
+      <FlatList
+        ref={flatListRef}
+        data={wiredFeedData}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        contentContainerStyle={styles.feedContent}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={ListEmpty}
+        ListFooterComponent={ListFooter}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.coral} />}
+        removeClippedSubviews={Platform.OS !== 'web'}
+        maxToRenderPerBatch={5}
+        windowSize={7}
+        initialNumToRender={4}
+      />
     </View>
   );
-}
-
-// ── Helper Functions ──
-
-function buildQuizResults(
-  responses: ApiChallengeResponse[],
-  challenge: ChallengeHistoryItem,
-): Array<{ name: string; votes: number }> {
-  // If the challenge has options, tally votes by option index
-  if (challenge.options && challenge.options.length > 0) {
-    const tally = new Map<string, number>();
-    for (const resp of responses) {
-      if (resp.answer_index !== null && resp.answer_index !== undefined) {
-        const label = challenge.options[resp.answer_index] || resp.display_name || 'Unknown';
-        tally.set(label, (tally.get(label) || 0) + 1);
-      } else if (resp.answer_text) {
-        tally.set(resp.answer_text, (tally.get(resp.answer_text) || 0) + 1);
-      }
-    }
-    return Array.from(tally.entries())
-      .map(([name, votes]) => ({ name, votes }))
-      .sort((a, b) => b.votes - a.votes);
-  }
-
-  // For "most likely" quizzes, tally by display_name voted for
-  if (challenge.type === 'quiz_most_likely') {
-    const tally = new Map<string, number>();
-    for (const resp of responses) {
-      const votedFor = resp.answer_text || resp.display_name || 'Unknown';
-      tally.set(votedFor, (tally.get(votedFor) || 0) + 1);
-    }
-    return Array.from(tally.entries())
-      .map(([name, votes]) => ({ name, votes }))
-      .sort((a, b) => b.votes - a.votes);
-  }
-
-  // Fallback: just list who answered
-  return responses
-    .filter((r) => r.answer_text)
-    .map((r) => ({
-      name: r.display_name || 'User',
-      votes: 1,
-    }));
-}
-
-function createFallbackItem(items: FeedItemData[], challenge: ChallengeHistoryItem, group: Group) {
-  // Create a simple quiz result item as fallback
-  items.push({
-    id: `fallback_${challenge.id}`,
-    type: 'quiz_result',
-    groupName: group.name,
-    groupEmoji: group.emoji,
-    groupId: group.id,
-    challengeId: challenge.id,
-    quizQuestion: challenge.prompt || 'Challenge',
-    quizResults: [
-      {
-        name: `${challenge.response_count} response${Number(challenge.response_count) !== 1 ? 's' : ''}`,
-        votes: Number(challenge.response_count) || 0,
-      },
-    ],
-    timeAgo: getRelativeTime(challenge.created_at),
-    timestamp: challenge.created_at,
-  });
 }
 
 // ── Styles ──
@@ -880,14 +549,6 @@ const styles = StyleSheet.create({
     color: theme.white,
   },
 
-  // Lane pager
-  pager: {
-    flex: 1,
-  },
-  page: {
-    width: SCREEN_WIDTH,
-  },
-
   // Feed
   feedContent: {
     paddingTop: spacing.sm,
@@ -938,12 +599,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 80,
     paddingHorizontal: spacing.xl,
-  },
-  laneEmpty: {
-    alignItems: 'center',
-    paddingTop: 100,
-    paddingHorizontal: spacing.xl,
-    gap: spacing.sm,
   },
   emptyIconContainer: {
     width: 96,

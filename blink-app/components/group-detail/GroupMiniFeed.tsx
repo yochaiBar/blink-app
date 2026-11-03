@@ -13,9 +13,7 @@ import { ApiChallengeResponse } from '@/types/api';
 interface ChallengeHistoryItem {
   id: string;
   group_id: string;
-  type: string;
   prompt: string | null;
-  options: string[] | null;
   created_by: string | null;
   created_at: string;
   expires_at: string;
@@ -29,39 +27,6 @@ interface Props {
   groupId: string;
   groupName: string;
   groupEmoji: string;
-}
-
-function buildQuizResults(
-  responses: ApiChallengeResponse[],
-  challenge: ChallengeHistoryItem,
-): Array<{ name: string; votes: number }> {
-  if (challenge.options && challenge.options.length > 0) {
-    const tally = new Map<string, number>();
-    for (const resp of responses) {
-      if (resp.answer_index !== null && resp.answer_index !== undefined) {
-        const label = challenge.options[resp.answer_index] || resp.display_name || 'Unknown';
-        tally.set(label, (tally.get(label) || 0) + 1);
-      } else if (resp.answer_text) {
-        tally.set(resp.answer_text, (tally.get(resp.answer_text) || 0) + 1);
-      }
-    }
-    return Array.from(tally.entries())
-      .map(([name, votes]) => ({ name, votes }))
-      .sort((a, b) => b.votes - a.votes);
-  }
-
-  if (challenge.type === 'quiz_most_likely') {
-    const tally = new Map<string, number>();
-    for (const resp of responses) {
-      const votedFor = resp.answer_text || resp.display_name || 'Unknown';
-      tally.set(votedFor, (tally.get(votedFor) || 0) + 1);
-    }
-    return Array.from(tally.entries())
-      .map(([name, votes]) => ({ name, votes }))
-      .sort((a, b) => b.votes - a.votes);
-  }
-
-  return responses.filter((r) => r.answer_text).map((r) => ({ name: r.display_name || 'User', votes: 1 }));
 }
 
 export default function GroupMiniFeed({ groupId, groupName, groupEmoji }: Props) {
@@ -82,40 +47,22 @@ export default function GroupMiniFeed({ groupId, groupName, groupEmoji }: Props)
           const responses: ApiChallengeResponse[] = await api(`/challenges/${challenge.id}/responses`);
           if (!Array.isArray(responses) || responses.length === 0) return;
 
-          if (challenge.type === 'snap') {
-            for (const resp of responses) {
-              if (resp.photo_url) {
-                items.push({
-                  id: `mini_photo_${resp.id}`,
-                  type: 'photo',
-                  userName: resp.display_name || 'User',
-                  userAvatar: resp.avatar_url || undefined,
-                  groupName,
-                  groupEmoji,
-                  groupId,
-                  challengeId: challenge.id,
-                  photoUrl: resp.photo_url,
-                  challengePrompt: challenge.prompt || undefined,
-                  timeAgo: getRelativeTime(resp.responded_at || resp.created_at),
-                  timestamp: resp.responded_at || resp.created_at,
-                  reactions: [],
-                });
-              }
-            }
-          } else {
-            const quizResults = buildQuizResults(responses, challenge);
-            if (quizResults.length > 0) {
+          for (const resp of responses) {
+            if (resp.photo_url) {
               items.push({
-                id: `mini_quiz_${challenge.id}`,
-                type: 'quiz_result',
+                id: `mini_photo_${resp.id}`,
+                type: 'photo',
+                userName: resp.display_name || 'User',
+                userAvatar: resp.avatar_url || undefined,
                 groupName,
                 groupEmoji,
                 groupId,
                 challengeId: challenge.id,
-                quizQuestion: challenge.prompt || 'Quiz',
-                quizResults,
-                timeAgo: getRelativeTime(challenge.created_at),
-                timestamp: challenge.created_at,
+                photoUrl: resp.photo_url,
+                challengePrompt: challenge.prompt || undefined,
+                timeAgo: getRelativeTime(resp.responded_at || resp.created_at),
+                timestamp: resp.responded_at || resp.created_at,
+                reactions: [],
               });
             }
           }

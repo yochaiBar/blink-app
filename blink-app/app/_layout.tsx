@@ -43,12 +43,10 @@ import {
   getNotificationRoute,
   setBadgeCount,
 } from '@/utils/notifications';
-import { OfflineBanner } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import * as Linking from 'expo-linking';
 import { useSocket } from '@/hooks/useSocket';
 import { useDeviceKeyRegistration } from '@/hooks/useDeviceKeyRegistration';
-import { api as apiCall } from '@/services/api';
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || '',
@@ -111,17 +109,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       if (user?.display_name) {
         router.replace('/' as never);
       }
-    }
-
-    // After auth is confirmed, check for pending challenges.
-    if (isAuthenticated) {
-      apiCall('/challenges/pending')
-        .then(() => {
-          // Pending challenges are handled by the feed UI pills.
-        })
-        .catch(() => {
-          // Non-critical: pending challenges check is supplementary; feed handles this
-        });
     }
   }, [isAuthenticated, isLoading, segments]);
 
@@ -236,13 +223,6 @@ function RootLayoutNav() {
           }}
         />
         <Stack.Screen
-          name="quiz-challenge"
-          options={{
-            presentation: 'fullScreenModal',
-            headerShown: false,
-          }}
-        />
-        <Stack.Screen
           name="challenge-reveal"
           options={{
             presentation: 'fullScreenModal',
@@ -282,7 +262,6 @@ function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <AppProvider>
           <StatusBar style="light" />
-          <OfflineBanner visible={false} />
           <ErrorBoundary>
             <RootLayoutNav />
           </ErrorBoundary>

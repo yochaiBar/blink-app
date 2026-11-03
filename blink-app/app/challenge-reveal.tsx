@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,7 +24,6 @@ import { api, addReactionApi, removeReactionApi } from '@/services/api';
 import { useApp } from '@/providers/AppProvider';
 import AvatarRing from '@/components/ui/AvatarRing';
 import GlassCard from '@/components/ui/GlassCard';
-import AiCommentaryCard from '@/components/AiCommentaryCard';
 import EncryptedImage from '@/components/EncryptedImage';
 import { ApiChallengeResponse, ApiChallenge, ApiGroupDetail, ApiReaction } from '@/types/api';
 import { isDemoGroup, DEMO_RESPONSES, DEMO_GROUP_DETAIL, DEMO_CHALLENGE } from '@/constants/demoData';
@@ -90,7 +88,6 @@ function useConfetti(count: number) {
 // ─── Types ───────────────────────────────────────────────────────────
 interface RevealData {
   responses: ApiChallengeResponse[];
-  aiCommentary: string | null;
   challenge: ApiChallenge | null;
 }
 
@@ -100,10 +97,9 @@ interface AnimatedReactionBtnProps {
   isSelected: boolean;
   count: number;
   onPress: () => void;
-  variant: 'photo' | 'quiz';
 }
 
-function AnimatedReactionBtn({ emoji, isSelected, count, onPress, variant }: AnimatedReactionBtnProps) {
+function AnimatedReactionBtn({ emoji, isSelected, count, onPress }: AnimatedReactionBtnProps) {
   const bounceAnim = useRef(new Animated.Value(1)).current;
 
   const handlePress = useCallback(() => {
@@ -125,11 +121,11 @@ function AnimatedReactionBtn({ emoji, isSelected, count, onPress, variant }: Ani
     onPress();
   }, [bounceAnim, onPress]);
 
-  const btnStyle = variant === 'photo' ? styles.quickReactBtn : styles.quizReactBtn;
-
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
-      <Animated.View style={[btnStyle, isSelected && styles.reactionSelected, { transform: [{ scale: bounceAnim }] }]}>
+      <Animated.View
+        style={[styles.quickReactBtn, isSelected && styles.reactionSelected, { transform: [{ scale: bounceAnim }] }]}
+      >
         <Text style={styles.quickReactEmoji}>{emoji}</Text>
         {count > 0 && (
           <View style={styles.countBadge}>
@@ -207,15 +203,12 @@ export default function ChallengeRevealScreen() {
           display_name: user.name ?? 'You',
           avatar_url: user.avatar ?? null,
           photo_url: demoPhotoUri,
-          answer_index: null,
           response_time_ms: 3200,
           responded_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
         };
         return {
           responses: [userResponse, ...DEMO_RESPONSES],
-          aiCommentary:
-            'Welcome to Blink! This is what it looks like when your friends respond to challenges. Pretty cool, right?',
           challenge: DEMO_CHALLENGE,
         };
       }
@@ -224,19 +217,16 @@ export default function ChallengeRevealScreen() {
       try {
         const res = await api<{
           responses?: ApiChallengeResponse[];
-          aiCommentary?: string | null;
-          ai_commentary?: string | null;
           challenge?: ApiChallenge | null;
         }>(`/challenges/${challengeId}/reveal`);
         return {
           responses: res.responses ?? [],
-          aiCommentary: res.aiCommentary ?? res.ai_commentary ?? null,
           challenge: res.challenge ?? null,
         };
       } catch {
         // Reveal endpoint may not exist yet -- fall back to responses endpoint
         const responses: ApiChallengeResponse[] = await api(`/challenges/${challengeId}/responses`);
-        return { responses: Array.isArray(responses) ? responses : [], aiCommentary: null, challenge: null };
+        return { responses: Array.isArray(responses) ? responses : [], challenge: null };
       }
     },
     enabled: !!challengeId,
@@ -289,9 +279,7 @@ export default function ChallengeRevealScreen() {
     sortedResponses[sortedResponses.length - 1]?.user_id === user.id;
 
   // Challenge info
-  const challengePrompt = revealData?.challenge?.prompt_text ?? revealData?.challenge?.prompt ?? null;
-  const challengeType = revealData?.challenge?.type ?? 'snap';
-  const challengeOptions = revealData?.challenge?.options_json ?? revealData?.challenge?.options ?? null;
+  const challengePrompt = revealData?.challenge?.prompt ?? null;
 
   // Average response time
   const avgResponseTime = useMemo(() => {
@@ -635,7 +623,6 @@ export default function ChallengeRevealScreen() {
                   isSelected={selectedReactions[response.id]?.has(emoji) ?? false}
                   count={getReactionCount(response, emoji)}
                   onPress={() => handleReact(response.id, emoji)}
-                  variant="photo"
                 />
               ))}
             </View>
@@ -643,137 +630,6 @@ export default function ChallengeRevealScreen() {
         </View>
       </Animated.View>
     );
-  };
-
-  // Quiz response card
-  const renderQuizCard = (response: ApiChallengeResponse, index: number) => {
-    const isOwnResponse = response.user_id === user.id;
-    const anim = cardAnims[index];
-    const responseTime = formatTime(response.response_time_ms);
-    const answerText =
-      response.answer_text ??
-      (response.answer_index != null && challengeOptions ? challengeOptions[response.answer_index] : null) ??
-      'No answer';
-
-    // Tally votes per option and collect voter info
-    const voteCounts: Record<number, number> = {};
-    const votersByOption: Record<number, { userId: string; name: string; avatar: string }[]> = {};
-    if (challengeOptions) {
-      sortedResponses.forEach((r) => {
-        if (r.answer_index != null) {
-          voteCounts[r.answer_index] = (voteCounts[r.answer_index] ?? 0) + 1;
-          if (!votersByOption[r.answer_index]) votersByOption[r.answer_index] = [];
-          votersByOption[r.answer_index].push({
-            userId: r.user_id,
-            name: r.display_name ?? 'User',
-            avatar: r.avatar_url ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
-          });
-        }
-      });
-    }
-
-    return (
-      <Animated.View
-        key={response.id}
-        style={[
-          styles.quizCardWrapper,
-          {
-            transform: [{ translateY: anim.translateY }, { scale: anim.scale }],
-            opacity: anim.opacity,
-          },
-        ]}
-      >
-        <GlassCard style={styles.quizCard} padding={16} borderRadius={16}>
-          {/* User header */}
-          <View style={styles.quizUserRow}>
-            <AvatarRing uri={response.avatar_url} name={response.display_name ?? undefined} size={32} />
-            <View style={styles.userInfoText}>
-              <View style={styles.nameRow}>
-                <Text style={styles.userName} numberOfLines={1}>
-                  {response.display_name ?? 'User'}
-                </Text>
-                {isOwnResponse && (
-                  <View style={styles.youBadge}>
-                    <Text style={styles.youBadgeText}>You</Text>
-                  </View>
-                )}
-              </View>
-              {responseTime !== '' && <Text style={styles.responseTime}>{responseTime}</Text>}
-            </View>
-          </View>
-
-          {/* Answer */}
-          <View style={styles.quizAnswer}>
-            <Text style={styles.quizAnswerText}>{answerText}</Text>
-          </View>
-
-          {/* Aggregated results (if options available) */}
-          {challengeOptions && challengeOptions.length > 0 && (
-            <View style={styles.quizResults}>
-              {challengeOptions.map((option, optIdx) => {
-                const count = voteCounts[optIdx] ?? 0;
-                const pct = totalResponses > 0 ? (count / totalResponses) * 100 : 0;
-                const isSelected = response.answer_index === optIdx;
-                const voters = votersByOption[optIdx] ?? [];
-                return (
-                  <View key={optIdx} style={styles.quizOptionGroup}>
-                    <View style={styles.quizOptionRow}>
-                      <View
-                        style={[
-                          styles.quizOptionBar,
-                          { width: `${Math.max(pct, 4)}%` as `${number}%` },
-                          isSelected && styles.quizOptionBarSelected,
-                        ]}
-                      />
-                      <Text
-                        style={[styles.quizOptionLabel, isSelected && styles.quizOptionLabelSelected]}
-                        numberOfLines={1}
-                      >
-                        {option}
-                      </Text>
-                      <Text style={styles.quizOptionPct}>{Math.round(pct)}%</Text>
-                    </View>
-                    {voters.length > 0 && (
-                      <View style={styles.quizVoterAvatars}>
-                        {voters.slice(0, 5).map((v, vi) => (
-                          <Image
-                            key={v.userId}
-                            source={{ uri: v.avatar }}
-                            style={[styles.quizVoterAvatar, { marginLeft: vi > 0 ? -6 : 0, zIndex: 5 - vi }]}
-                            contentFit="cover"
-                          />
-                        ))}
-                        {voters.length > 5 && <Text style={styles.quizVoterOverflow}>+{voters.length - 5}</Text>}
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Reactions */}
-          <View style={styles.quizReactions}>
-            {QUICK_REACTIONS.map((emoji) => (
-              <AnimatedReactionBtn
-                key={emoji}
-                emoji={emoji}
-                isSelected={selectedReactions[response.id]?.has(emoji) ?? false}
-                count={getReactionCount(response, emoji)}
-                onPress={() => handleReact(response.id, emoji)}
-                variant="quiz"
-              />
-            ))}
-          </View>
-        </GlassCard>
-      </Animated.View>
-    );
-  };
-
-  const renderCard = (response: ApiChallengeResponse, index: number) => {
-    const isQuiz = challengeType !== 'snap' && challengeType !== 'prompt' && !response.photo_url;
-    if (isQuiz) return renderQuizCard(response, index);
-    return renderPhotoCard(response, index);
   };
 
   // ── RENDER ──────────────────────────────────────────────────────
@@ -887,7 +743,7 @@ export default function ChallengeRevealScreen() {
             />
           )}
           {/* Response cards */}
-          {sortedResponses.map((response, index) => renderCard(response, index))}
+          {sortedResponses.map((response, index) => renderPhotoCard(response, index))}
 
           {/* Loading placeholder */}
           {isLoading && (
@@ -908,13 +764,6 @@ export default function ChallengeRevealScreen() {
               },
             ]}
           >
-            {/* AI Commentary */}
-            {revealData?.aiCommentary && (
-              <View style={styles.aiCommentaryWrapper}>
-                <AiCommentaryCard commentary={revealData.aiCommentary} />
-              </View>
-            )}
-
             {/* Stats row */}
             <GlassCard style={styles.statsCard} padding={16} borderRadius={16}>
               <View style={styles.statsRow}>
@@ -1234,106 +1083,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Quiz card ──
-  quizCardWrapper: {
-    paddingHorizontal: spacing.lg,
-  },
-  quizCard: {
-    marginBottom: 0,
-  },
-  quizUserRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  quizAnswer: {
-    backgroundColor: theme.coralMuted,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  quizAnswerText: {
-    ...typography.bodyBold,
-    color: theme.coral,
-    textAlign: 'center',
-  },
-  quizResults: {
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  quizOptionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 32,
-    backgroundColor: theme.surface,
-    borderRadius: borderRadius.sm,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  quizOptionBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: theme.border,
-    borderRadius: borderRadius.sm,
-  },
-  quizOptionBarSelected: {
-    backgroundColor: theme.coralMuted,
-  },
-  quizOptionLabel: {
-    ...typography.bodyMedium,
-    color: theme.textSecondary,
-    flex: 1,
-    paddingHorizontal: spacing.sm,
-    zIndex: 1,
-  },
-  quizOptionLabelSelected: {
-    color: theme.coral,
-    fontWeight: '600',
-  },
-  quizOptionGroup: {
-    gap: 4,
-  },
-  quizOptionPct: {
-    ...typography.labelSmall,
-    color: theme.textMuted,
-    paddingHorizontal: spacing.sm,
-    zIndex: 1,
-  },
-  quizVoterAvatars: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: spacing.xs,
-  },
-  quizVoterAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: theme.bgCard,
-  },
-  quizVoterOverflow: {
-    ...typography.labelSmall,
-    color: theme.textMuted,
-    marginLeft: 4,
-    fontSize: 10,
-  },
-  quizReactions: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  quizReactBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // ── Loading ──
   loadingContainer: {
     paddingVertical: 60,
     alignItems: 'center',
@@ -1348,9 +1097,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.lg,
     marginTop: spacing.sm,
-  },
-  aiCommentaryWrapper: {
-    marginBottom: 0,
   },
   statsCard: {
     marginBottom: 0,

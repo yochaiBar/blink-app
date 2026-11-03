@@ -33,7 +33,7 @@ Notifications.setNotificationHandler({
   },
 });
 
-export async function registerForPushNotifications(): Promise<string | null> {
+async function registerForPushNotifications(): Promise<string | null> {
   if (Platform.OS === 'web') {
     // console.log('[Notifications] Push notifications not supported on web');
     return null;
@@ -68,19 +68,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
   } catch {
     // Non-critical: push token registration is best-effort
     return null;
-  }
-}
-
-export async function schedulePushNotification(title: string, body: string, seconds: number = 1): Promise<void> {
-  try {
-    await Notifications.scheduleNotificationAsync({
-      content: { title, body, sound: true },
-      trigger:
-        Platform.OS === 'web' ? null : { seconds, type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL },
-    });
-    // console.log('[Notifications] Scheduled:', title);
-  } catch {
-    // Non-critical: scheduling a local notification is best-effort
   }
 }
 
@@ -127,18 +114,9 @@ export async function sendPushTokenToServer(): Promise<void> {
 /**
  * Extracts the notification data payload and returns a route path
  * for expo-router navigation, or null if the payload is unrecognised.
- */
-/**
- * Quiz challenge types that should route to the quiz screen.
- */
-const QUIZ_TYPES = new Set(['quiz', 'quiz_food', 'quiz_most_likely', 'quiz_rate_day']);
-
-/**
- * Extracts the notification data payload and returns a route path
- * for expo-router navigation, or null if the payload is unrecognised.
  *
- * Challenge notifications route directly to the challenge screen (camera or quiz)
- * instead of the group detail page — this is the "camera-first" flow.
+ * Challenge notifications route directly to the camera instead of the group
+ * detail page — this is the "camera-first" flow.
  */
 export function getNotificationRoute(
   data: Record<string, string | undefined> | undefined,
@@ -152,17 +130,9 @@ export function getNotificationRoute(
     case 'social_obligation': {
       const groupId = data.groupId;
       const challengeId = data.challengeId;
-      const challengeType = data.challengeType;
 
-      // If we have both groupId and challengeId, route directly to the challenge screen
+      // If we have both groupId and challengeId, route directly to the camera
       if (groupId && challengeId) {
-        if (challengeType && QUIZ_TYPES.has(challengeType)) {
-          return {
-            pathname: '/quiz-challenge',
-            params: { groupId, challengeId },
-          };
-        }
-        // Default: snap challenge (camera-first)
         return {
           pathname: '/snap-challenge',
           params: { groupId, challengeId },
@@ -229,8 +199,6 @@ export function getNotificationRoute(
     case 'group':
     case 'group_joined':
     case 'streak_milestone':
-    case 'streak_shield_earned':
-    case 'streak_shield_used':
     case 'group_streak_broken': {
       if (data.groupId) {
         return {
@@ -249,12 +217,6 @@ export function getNotificationRoute(
 
   // Handle screen-based routing (alternative payload format)
   if (data.screen === 'challenge' && data.groupId && data.challengeId) {
-    if (data.challengeType && QUIZ_TYPES.has(data.challengeType)) {
-      return {
-        pathname: '/quiz-challenge',
-        params: { groupId: data.groupId, challengeId: data.challengeId },
-      };
-    }
     return {
       pathname: '/snap-challenge',
       params: { groupId: data.groupId, challengeId: data.challengeId },

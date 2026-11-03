@@ -1,8 +1,3 @@
-export type GroupCategory = 'close_friends' | 'family' | 'students' | 'work' | 'custom';
-
-export type AiPersonality =
-  'family_friendly' | 'funny' | 'spicy' | 'sarcastic' | 'motivational' | 'extreme' | 'sexy' | 'no_filter';
-
 export interface GroupMember {
   id: string;
   name: string;
@@ -17,7 +12,6 @@ export interface GroupMember {
 export interface Group {
   id: string;
   name: string;
-  category: GroupCategory;
   emoji: string;
   members: GroupMember[];
   memberCount?: number;
@@ -27,10 +21,8 @@ export interface Group {
   challengeEndTime?: number;
   color: string;
   inviteCode: string;
-  activePrompt?: PromptQuestion;
   createdAt: string;
   createdBy?: string;
-  aiPersonality?: AiPersonality;
   /** This user's role in the group ('admin' | 'member'). */
   role?: string;
   /** Server-tracked group key version (bumped on admin key reset). */
@@ -61,35 +53,6 @@ export interface Reaction {
   userIds: string[];
 }
 
-export interface DailySpotlight {
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  groupId: string;
-  title: string;
-  subtitle: string;
-  stats: SpotlightStat[];
-}
-
-export interface SpotlightStat {
-  label: string;
-  value: string;
-  emoji: string;
-}
-
-export interface ActivityItem {
-  id: string;
-  type: 'snap' | 'join' | 'spotlight' | 'quiz' | 'prompt' | 'reaction' | 'streak' | 'challenge_triggered';
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  groupName: string;
-  groupId: string;
-  message: string;
-  timestamp: string;
-  imageUrl?: string;
-}
-
 export interface UserProfile {
   id: string;
   name: string;
@@ -106,29 +69,9 @@ export interface UserProfile {
   privacyMode: 'everyone' | 'friends' | 'groups_only';
 }
 
-export interface PromptQuestion {
-  id: string;
-  groupId: string;
-  question: string;
-  options?: string[];
-  type: 'poll' | 'open' | 'quiz';
-  correctAnswer?: number;
-}
-
-export interface PromptResponse {
-  id: string;
-  promptId: string;
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  answer: string;
-  selectedOption?: number;
-  timestamp: string;
-}
-
 export interface NotificationItem {
   id: string;
-  type: 'challenge' | 'reaction' | 'prompt' | 'streak' | 'join' | 'spotlight' | 'invite' | 'system' | string;
+  type: 'challenge' | 'reaction' | 'streak' | 'join' | 'invite' | 'system' | string;
   title: string;
   body: string;
   timestamp: string;

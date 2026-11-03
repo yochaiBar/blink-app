@@ -1,41 +1,22 @@
-import {
-  Group,
-  GroupMember,
-  UserProfile,
-  DailySpotlight,
-  SnapSubmission,
-  LeaderboardEntry,
-  AiPersonality,
-} from '@/types';
-import { ApiGroupListItem, ApiGroupDetail, ApiGroupMember, ApiSpotlight, ApiChallengeResponse } from '@/types/api';
+import { Group, GroupMember, UserProfile, SnapSubmission, LeaderboardEntry } from '@/types';
+import { ApiGroupListItem, ApiGroupDetail, ApiGroupMember, ApiChallengeResponse } from '@/types/api';
 import { theme } from '@/constants/colors';
 
 const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
 
-const categoryColorMap: Record<string, string> = {
-  close_friends: theme.coral,
-  friends: theme.coral,
-  family: theme.yellow,
-  students: theme.blue,
-  work: theme.green,
-  custom: theme.purple,
-};
-
 export function apiGroupListToGroup(item: ApiGroupListItem): Group {
-  const cat = item.category === 'friends' ? 'close_friends' : item.category;
   const hasActive = item.has_active_challenge ?? false;
   const endTime = item.challenge_expires_at ? new Date(item.challenge_expires_at).getTime() : undefined;
   return {
     id: item.id,
     name: item.name,
-    category: (cat as Group['category']) || 'custom',
     emoji: item.icon || '🔥',
     members: [],
     memberCount: item.member_count ?? 0,
     lastActive: item.challenge_expires_at ?? new Date().toISOString(),
     hasActiveChallenge: hasActive,
     challengeEndTime: hasActive ? endTime : undefined,
-    color: categoryColorMap[item.category] ?? theme.coral,
+    color: theme.coral,
     inviteCode: item.invite_code,
     createdAt: new Date().toISOString(),
     role: item.role,
@@ -57,7 +38,6 @@ export function apiMemberToGroupMember(m: ApiGroupMember): GroupMember {
 }
 
 export function apiGroupDetailToGroup(detail: ApiGroupDetail, activeChallenge?: { expires_at: string } | null): Group {
-  const cat = detail.category === 'friends' ? 'close_friends' : detail.category;
   const members = detail.members.map(apiMemberToGroupMember);
   const hasActive = !!activeChallenge;
   const endTime = activeChallenge ? new Date(activeChallenge.expires_at).getTime() : undefined;
@@ -65,34 +45,15 @@ export function apiGroupDetailToGroup(detail: ApiGroupDetail, activeChallenge?: 
   return {
     id: detail.id,
     name: detail.name,
-    category: (cat as Group['category']) || 'custom',
     emoji: detail.icon || '🔥',
     members,
     lastActive: detail.created_at,
     hasActiveChallenge: hasActive,
     challengeEndTime: endTime,
-    color: categoryColorMap[detail.category] ?? theme.coral,
+    color: theme.coral,
     inviteCode: detail.invite_code,
     createdAt: detail.created_at,
     createdBy: detail.created_by,
-    aiPersonality: (detail.ai_personality as AiPersonality) ?? undefined,
-  };
-}
-
-export function apiSpotlightToUI(s: ApiSpotlight, groupId?: string): DailySpotlight {
-  const stats = s.stats_json;
-  return {
-    userId: s.featured_user_id,
-    userName: s.display_name ?? 'User',
-    userAvatar: s.avatar_url ?? DEFAULT_AVATAR,
-    groupId: groupId ?? s.group_id ?? '',
-    title: s.superlative || "Today's Star",
-    subtitle: stats.fun_fact || 'Top performer this week!',
-    stats: [
-      { label: 'Responses', value: String(stats.total_responses), emoji: '📸' },
-      { label: 'Streak', value: `${stats.streak} days`, emoji: '🔥' },
-      { label: 'Rate', value: `${stats.participation_rate}%`, emoji: '🎯' },
-    ],
   };
 }
 

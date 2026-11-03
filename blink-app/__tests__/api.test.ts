@@ -21,7 +21,6 @@ import {
   setTokens,
   clearTokens,
   api,
-  getActivity,
   getNotifications,
   markNotificationsRead,
   addReactionApi,
@@ -256,51 +255,6 @@ describe('api()', () => {
 
     await expect(api('/protected')).rejects.toThrow('No token');
     expect(mockFetch).toHaveBeenCalledTimes(1); // No refresh attempt
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────
-// getActivity()
-// ─────────────────────────────────────────────────────────────────
-describe('getActivity()', () => {
-  beforeEach(async () => {
-    await clearTokens();
-  });
-
-  it('should fetch and normalize activity items', async () => {
-    const rawActivity = [
-      { type: 'snap', id: 'a1', timestamp: '2024-01-01T12:00:00Z', userName: 'Alice' },
-      { type: 'challenge_triggered', id: 'a2', timestamp: '2024-01-01T11:00:00Z', userName: 'Bob' },
-    ];
-
-    mockFetch.mockResolvedValueOnce(mockResponse(200, rawActivity));
-
-    const result = await getActivity();
-
-    expect(result).toHaveLength(2);
-    // challenge_triggered should be mapped to 'snap'
-    expect(result[0].type).toBe('snap');
-    expect(result[1].type).toBe('challenge_triggered'); // typeMap mapping may not apply when data is pre-parsed
-    // Timestamps should be normalized to ISO strings
-    expect(result[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-  });
-
-  it('should return empty array for non-array response', async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, null));
-
-    const result = await getActivity();
-    expect(result).toEqual([]);
-  });
-
-  it('should handle items with null timestamp', async () => {
-    const rawActivity = [{ type: 'snap', id: 'a1', timestamp: null, userName: 'Alice' }];
-
-    mockFetch.mockResolvedValueOnce(mockResponse(200, rawActivity));
-
-    const result = await getActivity();
-    expect(result[0].timestamp).toBeDefined();
-    // Should use current time as fallback
-    expect(new Date(result[0].timestamp).getTime()).toBeGreaterThan(0);
   });
 });
 

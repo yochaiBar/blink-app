@@ -88,7 +88,7 @@ function SnapChallengeScreen() {
   });
 
   const challengeData = challengeQuery.data;
-  const promptText = challengeData?.prompt_text ?? challengeData?.prompt ?? null;
+  const promptText = challengeData?.prompt ?? null;
   const resolvedChallengeId = challengeId ?? challengeData?.id;
 
   // Check if the challenge has expired (skip for demo mode)

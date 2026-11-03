@@ -21,31 +21,28 @@ import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
 import ReportModal from '@/components/ReportModal';
-import { api, blockUser, getSpotlight, resetGroupKey } from '@/services/api';
+import { api, blockUser, resetGroupKey } from '@/services/api';
 import { newGroupKey, storeGroupKey } from '@/services/groupCrypto';
 import { Skeleton, SnapCardSkeleton } from '@/components/ui';
-import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse, ApiSpotlight } from '@/types/api';
-import { apiGroupDetailToGroup, apiResponseToSnap, apiSpotlightToUI, apiMembersToLeaderboard } from '@/utils/adapters';
+import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse } from '@/types/api';
+import { apiGroupDetailToGroup, apiResponseToSnap, apiMembersToLeaderboard } from '@/utils/adapters';
 import { isDemoGroup, DEMO_GROUP_DETAIL, DEMO_CHALLENGE, DEMO_RESPONSES } from '@/constants/demoData';
 import { useOnboardingStore, tourMessages } from '@/stores/onboardingStore';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
 import StreakCelebration from '@/components/StreakCelebration';
-import AiPersonalityPill from '@/components/AiPersonalityPill';
 import { getSocket } from '@/services/socket';
 import { EmptyState, ErrorState } from '@/components/ui';
 
 import {
   MemberAvatarRow,
   ChallengeSection,
-  ChallengeTypeSelector,
-  PhotoTimeline,
   GroupSettingsModal,
   ChallengeResponsesList,
   BottomActions,
   GroupMiniFeed,
   GroupStatsCard,
 } from '@/components/group-detail';
-import type { ChallengeType, ProgressData, GroupPhoto } from '@/components/group-detail';
+import type { ProgressData } from '@/components/group-detail';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -63,7 +60,6 @@ export default function GroupDetailScreen() {
 
   // ── Local state ──
   const [countdown, setCountdown] = useState<string>('');
-  const [showRingModal, setShowRingModal] = useState(false);
   const [showGroupMenu, setShowGroupMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportTarget, setReportTarget] = useState<{
@@ -74,7 +70,6 @@ export default function GroupDetailScreen() {
   const [challengeBarLayout, setChallengeBarLayout] = useState<TargetLayout | null>(null);
   const challengeBarRef = useRef<View>(null);
   const [streakCelebration, setStreakCelebration] = useState<{ userName: string; streakDays: number } | null>(null);
-  const [aiCommentary, setAiCommentary] = useState<{ challengeId: string; commentary: string } | null>(null);
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [previewData, setPreviewData] = useState<{
     respondedCount: number;
@@ -139,15 +134,7 @@ export default function GroupDetailScreen() {
 
   const photosQuery = useQuery({
     queryKey: ['group-photos', id],
-    queryFn: async () => ((await api(`/challenges/groups/${id}/photos?limit=30`)) ?? []) as GroupPhoto[],
-    enabled: !!id && !isDemo,
-    staleTime: 60_000,
-    retry: false,
-  });
-
-  const spotlightQuery = useQuery({
-    queryKey: ['spotlight', id],
-    queryFn: async () => (await getSpotlight(id!)) as ApiSpotlight | null,
+    queryFn: async () => ((await api(`/challenges/groups/${id}/photos?limit=30`)) ?? []) as { id: string }[],
     enabled: !!id && !isDemo,
     staleTime: 60_000,
     retry: false,
@@ -156,57 +143,16 @@ export default function GroupDetailScreen() {
   // ── Derived data ──
   const group = groupQuery.data ? apiGroupDetailToGroup(groupQuery.data, activeChallenge) : null;
   const leaderboard = groupQuery.data?.members ? apiMembersToLeaderboard(groupQuery.data.members) : [];
-  const groupPhotos: GroupPhoto[] = photosQuery.data ?? [];
-  const spotlight = spotlightQuery.data ? apiSpotlightToUI(spotlightQuery.data, id) : null;
+  const groupPhotosCount = photosQuery.data?.length ?? 0;
   const snaps = (responsesQuery.data ?? []).map((r) => ({ ...apiResponseToSnap(r), groupId: id ?? '' }));
   const hasSubmittedToday = isDemo
     ? false
     : snaps.some((s) => s.userId === user.id) || (responsesQuery.data ?? []).some((r) => r.user_id === user.id);
-  const isQuizChallenge = !!(activeChallenge?.type && activeChallenge.type !== 'snap');
-
-  const challengeTriggerInfo = React.useMemo(() => {
-    if (!activeChallenge) return null;
-    if (!activeChallenge.triggered_by) return { isAi: true as const, name: 'Blink AI' };
-    const member = groupQuery.data?.members?.find((m) => m.user_id === activeChallenge.triggered_by);
-    return { isAi: false as const, name: member?.display_name ?? 'Someone' };
+  const challengeStarterName = React.useMemo(() => {
+    if (!activeChallenge?.created_by) return null;
+    const member = groupQuery.data?.members?.find((m) => m.user_id === activeChallenge.created_by);
+    return member?.display_name ?? 'Someone';
   }, [activeChallenge, groupQuery.data?.members]);
-
-  const quizOptions: string[] = React.useMemo(() => {
-    if (!isQuizChallenge || !activeChallenge) return [];
-    const opts = activeChallenge.options_json ?? activeChallenge.options ?? [];
-    if (typeof opts === 'string') {
-      try {
-        return JSON.parse(opts);
-      } catch {
-        return []; /* Malformed JSON */
-      }
-    }
-    return Array.isArray(opts) ? opts : [];
-  }, [activeChallenge, isQuizChallenge]);
-
-  const quizDistribution = React.useMemo(() => {
-    if (!isQuizChallenge || !responsesQuery.data || quizOptions.length === 0) return [];
-    const counts = quizOptions.map(() => 0);
-    const respondents: Record<number, { name: string; avatar: string }[]> = {};
-    for (const r of responsesQuery.data) {
-      const idx = r.answer_index;
-      if (idx !== null && idx !== undefined && idx < counts.length) {
-        counts[idx]++;
-        if (!respondents[idx]) respondents[idx] = [];
-        respondents[idx].push({
-          name: r.display_name ?? 'User',
-          avatar: r.avatar_url ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
-        });
-      }
-    }
-    const total = counts.reduce((a, b) => a + b, 0);
-    return quizOptions.map((opt: string, i: number) => ({
-      label: opt,
-      count: counts[i],
-      percentage: total > 0 ? Math.round((counts[i] / total) * 100) : 0,
-      respondents: respondents[i] ?? [],
-    }));
-  }, [responsesQuery.data, quizOptions, isQuizChallenge]);
 
   const respondedUserIds = React.useMemo(() => {
     const ids = new Set<string>();
@@ -306,38 +252,23 @@ export default function GroupDetailScreen() {
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     };
-    const handleCommentary = (data: { challengeId?: string; commentary?: string }) => {
-      if (data.challengeId && data.commentary)
-        setAiCommentary({ challengeId: data.challengeId, commentary: data.commentary });
-    };
     socket.on('challenge:progress', handleProgress);
     socket.on('challenge:response', handleResponse);
     socket.on('streak:milestone', handleStreak);
-    socket.on('challenge:commentary', handleCommentary);
     return () => {
       socket.off('challenge:progress', handleProgress);
       socket.off('challenge:response', handleResponse);
       socket.off('streak:milestone', handleStreak);
-      socket.off('challenge:commentary', handleCommentary);
     };
   }, [isDemo, activeChallenge?.id, responsesQuery]);
 
   // ── Mutations ──
   const ringMutation = useMutation({
-    mutationFn: async (type: ChallengeType) => {
-      return api<{
-        id?: string;
-        prompt_text?: string;
-        prompt?: string;
-        options_json?: string[];
-        options?: string[];
-        expires_at?: string;
-      }>(`/challenges/groups/${id}/challenges`, { method: 'POST', body: JSON.stringify({ type }) });
-    },
-    onSuccess: (data, type) => {
+    // Every challenge is a snap; the server picks the prompt.
+    mutationFn: async () => api(`/challenges/groups/${id}/challenges`, { method: 'POST', body: JSON.stringify({}) }),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['challenge', id] });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
-      setShowRingModal(false);
 
       // Optimistic UI: show challenge started state without inflating the response count
       const memberCount = groupQuery.data?.members?.length ?? group?.memberCount ?? group?.members.length ?? 0;
@@ -353,23 +284,7 @@ export default function GroupDetailScreen() {
         respondedUsers: [],
       });
 
-      if (type === 'snap') {
-        router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
-      } else if (type === 'quiz_food' || type === 'quiz_most_likely' || type === 'quiz_rate_day') {
-        router.push({
-          pathname: '/quiz-challenge' as never,
-          params: {
-            groupId: id,
-            challengeId: data?.id ?? '',
-            type,
-            promptText: data?.prompt_text ?? data?.prompt ?? '',
-            optionsJson: JSON.stringify(data?.options_json ?? data?.options ?? []),
-            expiresAt: data?.expires_at ?? '',
-          },
-        });
-      } else {
-        router.push({ pathname: '/group-prompt' as never, params: { groupId: id } });
-      }
+      router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
     },
     onError: (error: Error) => Alert.alert('Error', error.message || 'Failed to create challenge'),
   });
@@ -390,33 +305,23 @@ export default function GroupDetailScreen() {
   // ── Event handlers ──
   const handleSnapChallenge = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (isDemo) {
-      router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
+    router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
+  }, [router, id]);
+
+  // Two-step start (tap, then confirm) as before, now that there is no type picker.
+  const handleChallengeNow = useCallback(() => {
+    if (ringMutation.isPending) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    const msg = 'Everyone in the group gets a few minutes to snap a photo.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Start a snap challenge?\n\n${msg}`)) ringMutation.mutate();
       return;
     }
-    if (activeChallenge?.type === 'snap') {
-      router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
-    } else if (
-      activeChallenge?.type === 'quiz' ||
-      activeChallenge?.type === 'quiz_food' ||
-      activeChallenge?.type === 'quiz_most_likely' ||
-      activeChallenge?.type === 'quiz_rate_day'
-    ) {
-      router.push({
-        pathname: '/quiz-challenge' as never,
-        params: {
-          groupId: id,
-          challengeId: activeChallenge.id,
-          type: activeChallenge.type,
-          promptText: activeChallenge.prompt_text ?? activeChallenge.prompt ?? '',
-          optionsJson: JSON.stringify(activeChallenge.options_json ?? activeChallenge.options ?? []),
-          expiresAt: activeChallenge.expires_at,
-        },
-      });
-    } else {
-      router.push({ pathname: '/group-prompt' as never, params: { groupId: id } });
-    }
-  }, [router, id, activeChallenge, isDemo, advanceTour]);
+    Alert.alert('Start a snap challenge?', msg, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Start', onPress: () => ringMutation.mutate() },
+    ]);
+  }, [ringMutation]);
 
   const handleReaction = useCallback((snapId: string, emoji: string) => addReaction(snapId, emoji), [addReaction]);
 
@@ -535,9 +440,8 @@ export default function GroupDetailScreen() {
     if (isDemo) return;
     groupQuery.refetch();
     challengeQuery.refetch();
-    spotlightQuery.refetch();
     if (activeChallenge?.id) responsesQuery.refetch();
-  }, [groupQuery, challengeQuery, responsesQuery, spotlightQuery, activeChallenge, isDemo]);
+  }, [groupQuery, challengeQuery, responsesQuery, activeChallenge, isDemo]);
 
   // ── Countdown timer ──
   useEffect(() => {
@@ -684,17 +588,10 @@ export default function GroupDetailScreen() {
 
         {!isDemo && id && <GroupStatsCard groupId={id} />}
 
-        {group.aiPersonality && (
-          <View style={s.personalityRow}>
-            <AiPersonalityPill personality={group.aiPersonality} />
-          </View>
-        )}
-
         {activeChallenge && (
           <ChallengeSection
             activeChallenge={activeChallenge}
-            challengeTriggerInfo={challengeTriggerInfo}
-            isQuizChallenge={isQuizChallenge}
+            challengeStarterName={challengeStarterName}
             hasSubmittedToday={hasSubmittedToday}
             countdown={countdown}
             pulseAnim={pulseAnim}
@@ -711,19 +608,14 @@ export default function GroupDetailScreen() {
           isDemo={isDemo}
           responsesLoading={responsesQuery.isLoading}
           responsesError={responsesQuery.isError}
-          responsesData={responsesQuery.data}
           onRetryResponses={() => responsesQuery.refetch()}
-          isQuizChallenge={isQuizChallenge}
           hasSubmittedToday={hasSubmittedToday}
-          quizDistribution={quizDistribution}
           currentUserId={user.id}
           snaps={snaps}
-          groupPhotosCount={groupPhotos.length}
+          groupPhotosCount={groupPhotosCount}
           groupMemberCount={groupQuery.data?.members?.length ?? group.memberCount ?? group.members.length}
-          spotlight={spotlight}
           previewData={previewData}
           progressData={progressData}
-          aiCommentary={aiCommentary}
           challengeJustTriggered={challengeJustTriggered}
           onRespond={handleSnapChallenge}
           onReact={handleReaction}
@@ -739,10 +631,8 @@ export default function GroupDetailScreen() {
           groupStreak={groupStreak}
           longestGroupStreak={longestGroupStreak}
           leaderboardCount={leaderboard.length}
-          onChallengeNow={() => {
-            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            setShowRingModal(true);
-          }}
+          isStartingChallenge={ringMutation.isPending}
+          onChallengeNow={handleChallengeNow}
           onViewLeaderboard={() => router.push({ pathname: '/group-leaderboard' as never, params: { groupId: id } })}
         />
 
@@ -759,13 +649,6 @@ export default function GroupDetailScreen() {
         nextLabel="Got it"
         step={2}
         totalSteps={3}
-      />
-
-      <ChallengeTypeSelector
-        visible={showRingModal}
-        isPending={ringMutation.isPending}
-        onClose={() => setShowRingModal(false)}
-        onSelect={(type) => ringMutation.mutate(type)}
       />
 
       <GroupSettingsModal
@@ -845,5 +728,4 @@ const s = StyleSheet.create({
   },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
-  personalityRow: { flexDirection: 'row', marginBottom: spacing.md },
 });

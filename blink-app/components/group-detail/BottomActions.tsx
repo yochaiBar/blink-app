@@ -12,6 +12,7 @@ export interface BottomActionsProps {
   groupStreak: number;
   longestGroupStreak: number;
   leaderboardCount: number;
+  isStartingChallenge?: boolean;
   onChallengeNow: () => void;
   onViewLeaderboard: () => void;
 }
@@ -22,6 +23,7 @@ export default function BottomActions({
   groupStreak,
   longestGroupStreak,
   leaderboardCount,
+  isStartingChallenge = false,
   onChallengeNow,
   onViewLeaderboard,
 }: BottomActionsProps) {
@@ -32,7 +34,12 @@ export default function BottomActions({
       )}
 
       {!isDemo && !hasActiveChallenge && (
-        <TouchableOpacity style={styles.challengeNowBtn} onPress={onChallengeNow} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={[styles.challengeNowBtn, isStartingChallenge && styles.challengeNowBtnBusy]}
+          onPress={onChallengeNow}
+          disabled={isStartingChallenge}
+          activeOpacity={0.85}
+        >
           <Zap size={20} color={theme.white} />
           <Text style={styles.challengeNowText}>Challenge Now</Text>
         </TouchableOpacity>
@@ -62,6 +69,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.coral,
     paddingVertical: 14,
     borderRadius: borderRadius.lg,
+  },
+  challengeNowBtnBusy: {
+    opacity: 0.6,
   },
   challengeNowText: {
     ...typography.labelLarge,
