@@ -2,9 +2,12 @@ import { Router, Response } from 'express';
 import { query } from '../../config/database';
 import { AuthRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import { validateUuidParams } from '../../middleware/validateParams';
+import { uuidParams } from '../../middleware/params';
+import { requireMember } from '../../services/membership';
+import { validateQuery, parsedQuery } from '../../middleware/validate';
+import { paginationQuerySchema, PaginationQuery } from '../../utils/schemas';
 import { CHALLENGE_SELECT, CHALLENGE_SELECT_C, processSkipsForChallenge } from './shared';
-import { GroupMemberRow, ChallengeRow, ChallengeResponseRow, CountRow } from '../../types/db';
+import { ChallengeRow, ChallengeResponseRow, CountRow } from '../../types/db';
 
 /** Response row with user info from JOIN */
 interface ResponseWithUserRow {
@@ -32,22 +35,15 @@ interface UserSummaryRow {
 }
 
 const router = Router();
+uuidParams(router, 'groupId', 'id');
 
 // ── GET active challenge ──
 router.get(
   '/groups/:groupId/challenges/active',
-  validateUuidParams('groupId'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const groupId = req.params.groupId as string;
 
-    const membership = await query<GroupMemberRow>(`SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`, [
-      groupId,
-      req.userId,
-    ]);
-    if (membership.rows.length === 0) {
-      res.status(403).json({ error: 'Not a member of this group' });
-      return;
-    }
+    await requireMember(req.userId!, { groupId });
 
     // Auto-expire and process skips
     const expired = await query<Pick<ChallengeRow, 'id'>>(
@@ -95,7 +91,6 @@ router.get(
 // ── GET responses (can't peek until you play) ──
 router.get(
   '/:id/responses',
-  validateUuidParams('id'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
 
@@ -109,12 +104,12 @@ router.get(
     }
 
     const responses = await query<ResponseWithUserRow>(
-      `SELECT cr.*, COALESCE(u.display_name, u.phone_number) AS display_name
+      `SELECT cr.*, u.display_name
      FROM challenge_responses cr
-     JOIN users u ON u.id = cr.user_id
-     WHERE cr.challenge_id = $1
+     JOIN public_users u ON u.id = cr.user_id
+     WHERE cr.challenge_id = $1 AND NOT blocked_between(cr.user_id, $2)
      ORDER BY cr.responded_at`,
-      [id],
+      [id, req.userId],
     );
 
     // Fetch reactions for all responses in this challenge
@@ -124,13 +119,13 @@ router.get(
     if (responseIds.length > 0) {
       const reactions = await query<ReactionAggregateRow>(
         `SELECT r.response_id, r.emoji, COUNT(*) as count,
-              ARRAY_AGG(COALESCE(u.display_name, u.phone_number)) as user_names
+              ARRAY_AGG(u.display_name) as user_names
        FROM reactions r
-       JOIN users u ON u.id = r.user_id
-       WHERE r.response_id = ANY($1)
+       JOIN public_users u ON u.id = r.user_id
+       WHERE r.response_id = ANY($1) AND NOT blocked_between(r.user_id, $2)
        GROUP BY r.response_id, r.emoji
        ORDER BY count DESC`,
-        [responseIds],
+        [responseIds, req.userId],
       );
 
       for (const row of reactions.rows) {
@@ -157,7 +152,6 @@ router.get(
 // ── GET /api/challenges/:id/reveal — Full reveal data for completed challenge ──
 router.get(
   '/:id/reveal',
-  validateUuidParams('id'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
 
@@ -176,14 +170,7 @@ router.get(
     const c = challengeResult.rows[0];
 
     // Verify user is a group member
-    const membership = await query<GroupMemberRow>(`SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`, [
-      c.group_id,
-      req.userId,
-    ]);
-    if (membership.rows.length === 0) {
-      res.status(403).json({ error: 'Not a member of this group' });
-      return;
-    }
+    await requireMember(req.userId!, { groupId: c.group_id });
 
     // Can't peek gate — user must have responded
     const userResponse = await query<Pick<ChallengeResponseRow, 'id'>>(
@@ -197,13 +184,13 @@ router.get(
 
     // Fetch all responses with user info (only from current group members)
     const responses = await query<ResponseWithUserRow>(
-      `SELECT cr.*, COALESCE(u.display_name, u.phone_number) AS display_name
+      `SELECT cr.*, u.display_name
      FROM challenge_responses cr
-     JOIN users u ON u.id = cr.user_id
+     JOIN public_users u ON u.id = cr.user_id
      JOIN group_members gm ON gm.group_id = $2 AND gm.user_id = cr.user_id
-     WHERE cr.challenge_id = $1
+     WHERE cr.challenge_id = $1 AND NOT blocked_between(cr.user_id, $3)
      ORDER BY cr.responded_at ASC`,
-      [id, c.group_id],
+      [id, c.group_id, req.userId],
     );
 
     // Fetch reactions for all responses
@@ -214,10 +201,10 @@ router.get(
       const reactions = await query(
         `SELECT r.response_id, r.emoji, COUNT(*)::int as count
        FROM reactions r
-       WHERE r.response_id = ANY($1)
+       WHERE r.response_id = ANY($1) AND NOT blocked_between(r.user_id, $2)
        GROUP BY r.response_id, r.emoji
        ORDER BY count DESC`,
-        [responseIds],
+        [responseIds, req.userId],
       );
 
       for (const row of reactions.rows) {
@@ -274,20 +261,13 @@ router.get(
 // ── GET challenge history ──
 router.get(
   '/groups/:groupId/challenges/history',
-  validateUuidParams('groupId'),
+  validateQuery(paginationQuerySchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const groupId = req.params.groupId as string;
+    const { limit, before } = parsedQuery<PaginationQuery>(res);
 
-    const membership = await query<GroupMemberRow>(`SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`, [
-      groupId,
-      req.userId,
-    ]);
-    if (membership.rows.length === 0) {
-      res.status(403).json({ error: 'Not a member of this group' });
-      return;
-    }
+    await requireMember(req.userId!, { groupId });
 
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const result = await query(
       `SELECT ${CHALLENGE_SELECT_C},
        LEAST(
@@ -298,9 +278,10 @@ router.get(
        EXISTS(SELECT 1 FROM challenge_responses WHERE challenge_id = c.id AND user_id = $2) as user_responded
      FROM challenges c
      WHERE c.group_id = $1 AND c.status IN ('completed', 'expired')
+       AND ($4::timestamptz IS NULL OR c.created_at < $4::timestamptz)
      ORDER BY c.created_at DESC
      LIMIT $3`,
-      [groupId, req.userId, limit],
+      [groupId, req.userId, limit, before ?? null],
     );
 
     res.json(result.rows);
@@ -310,31 +291,25 @@ router.get(
 // ── GET group photo timeline ──
 router.get(
   '/groups/:groupId/photos',
-  validateUuidParams('groupId'),
+  validateQuery(paginationQuerySchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const groupId = req.params.groupId as string;
-    const limit = Math.min(parseInt(req.query.limit as string) || 30, 100);
+    const { limit, before } = parsedQuery<PaginationQuery>(res);
 
-    const membership = await query(`SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`, [
-      groupId,
-      req.userId,
-    ]);
-    if (membership.rows.length === 0) {
-      res.status(403).json({ error: 'Not a member of this group' });
-      return;
-    }
+    await requireMember(req.userId!, { groupId });
 
     const result = await query(
       `SELECT cr.id, cr.challenge_id, cr.has_photo, cr.responded_at,
        c.prompt,
-       COALESCE(u.display_name, u.phone_number) AS display_name
+       u.display_name
      FROM challenge_responses cr
      JOIN challenges c ON c.id = cr.challenge_id
-     JOIN users u ON u.id = cr.user_id
-     WHERE c.group_id = $1 AND cr.has_photo = TRUE
+     JOIN public_users u ON u.id = cr.user_id
+     WHERE c.group_id = $1 AND cr.has_photo = TRUE AND NOT blocked_between(cr.user_id, $3)
+       AND ($4::timestamptz IS NULL OR cr.responded_at < $4::timestamptz)
      ORDER BY cr.responded_at DESC
      LIMIT $2`,
-      [groupId, limit],
+      [groupId, limit, req.userId, before ?? null],
     );
 
     res.json(result.rows);
@@ -344,7 +319,6 @@ router.get(
 // ── GET /api/challenges/:id/progress — Who responded (no can't-peek gate) ──
 router.get(
   '/:id/progress',
-  validateUuidParams('id'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
 
@@ -359,31 +333,24 @@ router.get(
     const groupId = challenge.rows[0].group_id;
 
     // Verify user is a group member
-    const membership = await query<GroupMemberRow>(`SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`, [
-      groupId,
-      req.userId,
-    ]);
-    if (membership.rows.length === 0) {
-      res.status(403).json({ error: 'Not a member of this group' });
-      return;
-    }
+    await requireMember(req.userId!, { groupId });
 
     // Get all group members
     const allMembers = await query<UserSummaryRow>(
-      `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name
+      `SELECT gm.user_id, u.display_name
      FROM group_members gm
-     JOIN users u ON u.id = gm.user_id
-     WHERE gm.group_id = $1`,
-      [groupId],
+     JOIN public_users u ON u.id = gm.user_id
+     WHERE gm.group_id = $1 AND NOT blocked_between(gm.user_id, $2)`,
+      [groupId, req.userId],
     );
 
     // Get who responded
     const responded = await query<UserSummaryRow>(
-      `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name
+      `SELECT cr.user_id, u.display_name
      FROM challenge_responses cr
-     JOIN users u ON u.id = cr.user_id
-     WHERE cr.challenge_id = $1`,
-      [id],
+     JOIN public_users u ON u.id = cr.user_id
+     WHERE cr.challenge_id = $1 AND NOT blocked_between(cr.user_id, $2)`,
+      [id, req.userId],
     );
     const respondedIds = new Set(responded.rows.map((r) => r.user_id));
 
@@ -407,7 +374,6 @@ router.get(
 // ── GET /api/challenges/:id/preview — Tease data without content ──
 router.get(
   '/:id/preview',
-  validateUuidParams('id'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
 
@@ -422,14 +388,7 @@ router.get(
     const groupId = challenge.rows[0].group_id;
 
     // Verify user is a group member
-    const membership = await query<GroupMemberRow>(`SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`, [
-      groupId,
-      req.userId,
-    ]);
-    if (membership.rows.length === 0) {
-      res.status(403).json({ error: 'Not a member of this group' });
-      return;
-    }
+    await requireMember(req.userId!, { groupId });
 
     // Total members
     const totalMembersResult = await query<CountRow>(
@@ -440,11 +399,11 @@ router.get(
 
     // Who responded
     const responded = await query<UserSummaryRow>(
-      `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name
+      `SELECT cr.user_id, u.display_name
      FROM challenge_responses cr
-     JOIN users u ON u.id = cr.user_id
-     WHERE cr.challenge_id = $1`,
-      [id],
+     JOIN public_users u ON u.id = cr.user_id
+     WHERE cr.challenge_id = $1 AND NOT blocked_between(cr.user_id, $2)`,
+      [id, req.userId],
     );
 
     // Total reactions across all responses in this challenge

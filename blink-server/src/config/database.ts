@@ -1,27 +1,25 @@
 import { Pool, PoolClient, QueryResult } from 'pg';
-import dotenv from 'dotenv';
 import logger from '../utils/logger';
+import { env } from './env';
 
-dotenv.config();
-
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = env.NODE_ENV === 'production';
 // Railway's private network (*.railway.internal) is already TLS-encrypted at
 // the transport layer, and its Postgres image rejects client-side SSL
 // handshakes ("could not accept SSL connection: EOF detected"). Skip SSL
 // automatically for internal hosts; keep it for external managed Postgres.
-const isRailwayInternal = (process.env.DATABASE_URL || '').includes('.railway.internal');
+const isRailwayInternal = env.DATABASE_URL.includes('.railway.internal');
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: parseInt(process.env.DB_POOL_MAX || '20', 10),
+  connectionString: env.DATABASE_URL,
+  max: parseInt(env.DB_POOL_MAX || '20', 10),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
   ...(isProduction &&
     !isRailwayInternal && {
       ssl: {
-        rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
-        ...(process.env.DB_SSL_CERT && {
-          ca: process.env.DB_SSL_CERT,
+        rejectUnauthorized: env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+        ...(env.DB_SSL_CERT && {
+          ca: env.DB_SSL_CERT,
         }),
       },
     }),

@@ -5,17 +5,17 @@ import { validateBody } from '../../middleware/validate';
 import { respondChallengeSchema } from '../../utils/schemas';
 import logger from '../../utils/logger';
 import { emitToGroup } from '../../socket';
-import { validateUuidParams } from '../../middleware/validateParams';
+import { uuidParams } from '../../middleware/params';
 import { submitResponse, checkChallengeCompletion } from '../../services/challengeService';
 import { notifyUserOfResponse, notifySocialObligation } from '../../services/notificationService';
 import { processStreakRewards } from '../../services/streakService';
 
 const router = Router();
+uuidParams(router, 'id');
 
 // ── POST respond to challenge ──
 router.post(
   '/:id/respond',
-  validateUuidParams('id'),
   validateBody(respondChallengeSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
@@ -24,17 +24,7 @@ router.post(
     // Submit the response (validates challenge, membership, duplicates).
     // has_photo carries the client's signal that bytes will arrive via
     // /api/photos/relay separately — the response row never holds a photo.
-    let response, challenge;
-    try {
-      ({ response, challenge } = await submitResponse(id, req.userId!, response_time_ms || null, has_photo === true));
-    } catch (err: unknown) {
-      if (err instanceof Error && 'statusCode' in err) {
-        const statusErr = err as Error & { statusCode: number };
-        res.status(statusErr.statusCode).json({ error: statusErr.message });
-        return;
-      }
-      throw err;
-    }
+    const { response, challenge } = await submitResponse(id, req.userId!, response_time_ms || null, has_photo === true);
 
     const c = challenge;
 

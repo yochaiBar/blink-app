@@ -6,33 +6,25 @@ import { validateBody } from '../../middleware/validate';
 import { createChallengeSchema } from '../../utils/schemas';
 import logger from '../../utils/logger';
 import { emitToGroup } from '../../socket';
-import { validateUuidParams } from '../../middleware/validateParams';
+import { uuidParams } from '../../middleware/params';
+import { HttpError } from '../../utils/httpError';
 import { CHALLENGE_SELECT } from './shared';
 import { ChallengeRow } from '../../types/db';
 import { processSkipsForChallenge } from '../../services/streakService';
 import { notifyGroupOfChallenge } from '../../services/notificationService';
-import { verifyMembership } from '../../services/groupService';
+import { requireMember } from '../../services/membership';
 
 const router = Router();
+uuidParams(router, 'groupId');
 
 // ── POST /api/challenges/groups/:groupId/challenges -- Trigger a challenge ──
 router.post(
   '/groups/:groupId/challenges',
-  validateUuidParams('groupId'),
   validateBody(createChallengeSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const groupId = req.params.groupId as string;
 
-    try {
-      await verifyMembership(req.userId!, groupId);
-    } catch (err: unknown) {
-      if (err instanceof Error && 'statusCode' in err) {
-        const statusErr = err as Error & { statusCode: number };
-        res.status(statusErr.statusCode).json({ error: statusErr.message });
-        return;
-      }
-      throw err;
-    }
+    await requireMember(req.userId!, { groupId });
 
     // Wrap entire create flow in a transaction to prevent race conditions
     const result = await withTransaction(async (client) => {
@@ -48,7 +40,7 @@ router.post(
         [groupId],
       );
       if (recentChallenge.rows.length > 0) {
-        throw Object.assign(new Error('A challenge was just started'), { statusCode: 409 });
+        throw new HttpError(409, 'A challenge was just started');
       }
 
       // Lock and expire any active challenges
@@ -73,16 +65,8 @@ router.post(
 
       const row = result.rows[0];
       return { challenge: row, expiredChallengeIds };
-    }).catch((err: unknown) => {
-      if (err instanceof Error && 'statusCode' in err) {
-        const statusErr = err as Error & { statusCode: number };
-        res.status(statusErr.statusCode).json({ error: statusErr.message });
-        return null;
-      }
-      throw err;
     });
 
-    if (!result) return;
     const { challenge, expiredChallengeIds } = result;
 
     // Process skips for expired challenges AFTER transaction commits

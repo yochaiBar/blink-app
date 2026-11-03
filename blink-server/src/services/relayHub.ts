@@ -47,53 +47,27 @@ export interface DispatchResult {
   queuedUserIds: string[];
 }
 
-interface BlockRow {
-  blocker_id: string;
-  blocked_id: string;
-}
-
 interface MemberRow {
   user_id: string;
 }
 
 /**
  * Returns the recipient_user_ids that should actually receive the photo:
- *   - must be a current member of the group
- *   - must not have blocked the sender, and must not be blocked by the sender
- *   - must not be the sender themselves
+ * the requested ids that are in the sender's audience for this group
+ * (current members, not the sender, not blocked with the sender).
  *
  * Plan: defense in depth. The app filters too, but the server is the
  * authoritative gate — we never trust the sender's list verbatim.
  */
 async function filterRecipients(groupId: string, senderUserId: string, requested: string[]): Promise<string[]> {
   if (requested.length === 0) return [];
-
-  // Strip the sender from their own list if it slips through.
-  const candidates = requested.filter((id) => id !== senderUserId);
-  if (candidates.length === 0) return [];
-
-  // Membership check.
-  const members = await query<MemberRow>(
-    `SELECT user_id FROM group_members
-      WHERE group_id = $1 AND user_id = ANY($2::uuid[])`,
-    [groupId, candidates],
-  );
-  const memberIds = new Set(members.rows.map((r) => r.user_id));
-
-  // Block-list check, symmetric. If sender blocked recipient OR recipient
-  // blocked sender, drop.
-  const blocks = await query<BlockRow>(
-    `SELECT blocker_id, blocked_id FROM user_blocks
-      WHERE (blocker_id = $1 AND blocked_id = ANY($2::uuid[]))
-         OR (blocked_id = $1 AND blocker_id = ANY($2::uuid[]))`,
-    [senderUserId, candidates],
-  );
-  const blockedIds = new Set<string>();
-  for (const b of blocks.rows) {
-    blockedIds.add(b.blocker_id === senderUserId ? b.blocked_id : b.blocker_id);
-  }
-
-  return candidates.filter((id) => memberIds.has(id) && !blockedIds.has(id));
+  const result = await query<MemberRow>(`SELECT user_id FROM audience($1, $2) WHERE user_id = ANY($3::uuid[])`, [
+    groupId,
+    senderUserId,
+    requested,
+  ]);
+  const allowed = new Set(result.rows.map((r) => r.user_id));
+  return requested.filter((id, i) => allowed.has(id) && requested.indexOf(id) === i);
 }
 
 /**

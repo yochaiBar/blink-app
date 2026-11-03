@@ -98,3 +98,57 @@ export async function countRows(sql: string, params: unknown[] = []): Promise<nu
   const result = await query<{ count: string }>(sql, params);
   return parseInt(result.rows[0].count, 10);
 }
+
+export async function block(blocker: { id: string }, blocked: { id: string }): Promise<void> {
+  await query(`INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, [blocker.id, blocked.id]);
+}
+
+/** Give `user` an Expo push token, so pushes to them reach the HTTP stub. */
+export async function setPushToken(user: { id: string }): Promise<string> {
+  const token = `ExponentPushToken[${user.id}]`;
+  await query(`UPDATE users SET push_token = $1 WHERE id = $2`, [token, user.id]);
+  return token;
+}
+
+export async function createComment(opts: {
+  responseId: string;
+  user: { id: string };
+  text?: string;
+  parentId?: string;
+}): Promise<{ id: string }> {
+  const result = await query<{ id: string }>(
+    `INSERT INTO response_comments (response_id, user_id, parent_comment_id, text)
+     VALUES ($1, $2, $3, $4) RETURNING id`,
+    [opts.responseId, opts.user.id, opts.parentId ?? null, opts.text ?? 'nice'],
+  );
+  return result.rows[0];
+}
+
+export async function createReaction(opts: {
+  responseId: string;
+  user: { id: string };
+  emoji?: string;
+}): Promise<void> {
+  await query(`INSERT INTO reactions (response_id, user_id, emoji) VALUES ($1, $2, $3)`, [
+    opts.responseId,
+    opts.user.id,
+    opts.emoji ?? '🔥',
+  ]);
+}
+
+/** Wait until the push stub has recorded a request satisfying `predicate`. */
+export async function waitForPush(
+  predicate: (tokens: string[]) => boolean,
+  requests: { body: unknown }[],
+  timeoutMs = 2000,
+): Promise<string[]> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const tokens = requests
+      .flatMap((r) => (Array.isArray(r.body) ? r.body : [r.body]))
+      .map((m) => (m as { to: string }).to);
+    if (predicate(tokens)) return tokens;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Expected push request was not sent');
+}

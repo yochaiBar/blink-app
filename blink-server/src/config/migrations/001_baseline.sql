@@ -266,3 +266,29 @@ CREATE TABLE content_reports (
 );
 CREATE INDEX idx_content_reports_reporter ON content_reports(reporter_id);
 CREATE INDEX idx_content_reports_reported_user ON content_reports(reported_user_id);
+
+-- ── Views and helpers ────────────────────────────────────────────
+
+-- What other users may see about a user. Phone numbers stay private: code
+-- outside auth reads names from here (lint forbids phone_number elsewhere).
+CREATE VIEW public_users AS
+SELECT id, COALESCE(display_name, 'New member') AS display_name, bio, created_at, last_active_at
+  FROM users;
+
+-- Either user blocked the other.
+CREATE FUNCTION blocked_between(a UUID, b UUID) RETURNS BOOLEAN
+LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_blocks
+     WHERE (blocker_id = a AND blocked_id = b) OR (blocker_id = b AND blocked_id = a)
+  )
+$$;
+
+-- The members of group g who may see or be told about what `actor` does
+-- there: everyone else in the group, minus anyone blocked with the actor.
+CREATE FUNCTION audience(g UUID, actor UUID) RETURNS TABLE (user_id UUID)
+LANGUAGE sql STABLE AS $$
+  SELECT gm.user_id
+    FROM group_members gm
+   WHERE gm.group_id = g AND gm.user_id <> actor AND NOT blocked_between(gm.user_id, actor)
+$$;

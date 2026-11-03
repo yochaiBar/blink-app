@@ -185,11 +185,15 @@ export function createApp(): express.Express {
     Sentry.setupExpressErrorHandler(app);
   }
 
-  // Error handler
+  // Error handler. HttpError (and anything else carrying `status`) answers
+  // with its status; everything else is a 500 whose message is hidden in
+  // production.
   app.use(
     (err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       const statusCode = err.status || 500;
-      logger.error('Unhandled error', { error: err.message, stack: err.stack });
+      if (statusCode >= 500) {
+        logger.error('Unhandled error', { error: err.message, stack: err.stack });
+      }
       const message =
         statusCode >= 500 && env.NODE_ENV === 'production'
           ? 'Internal server error'

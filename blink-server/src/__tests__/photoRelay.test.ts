@@ -119,9 +119,7 @@ describe('POST /api/photos/relay — dispatch', () => {
   const token = generateAccessToken(TEST_USER_ID);
 
   it('delivers to a single online recipient (membership + ack OK)', async () => {
-    mockQuery
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])) // members
-      .mockResolvedValueOnce(queryResult([])); // blocks
+    mockQuery.mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])); // audience
     mockIsUserOnline.mockResolvedValueOnce(true);
     mockEmitWithAck.mockResolvedValueOnce({ acked: 1, nacked: 0, failed: 0 });
 
@@ -147,8 +145,7 @@ describe('POST /api/photos/relay — dispatch', () => {
 
   it('queues an offline recipient and returns them in queued_user_ids', async () => {
     mockQuery
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])) // members
-      .mockResolvedValueOnce(queryResult([])) // blocks
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])) // audience
       .mockResolvedValueOnce(queryResult([])); // INSERT pending row
     mockIsUserOnline.mockResolvedValueOnce(false);
 
@@ -173,9 +170,8 @@ describe('POST /api/photos/relay — dispatch', () => {
 
   it('queues an online recipient whose socket NACKed (no successful ack)', async () => {
     mockQuery
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([]));
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])) // audience
+      .mockResolvedValueOnce(queryResult([])); // INSERT pending row
     mockIsUserOnline.mockResolvedValueOnce(true);
     mockEmitWithAck.mockResolvedValueOnce({ acked: 0, nacked: 1, failed: 0 });
 
@@ -188,9 +184,7 @@ describe('POST /api/photos/relay — dispatch', () => {
 
   it('drops non-members silently (defense in depth — sender lied about who is in the group)', async () => {
     // Sender claims to relay to USER_2 + USER_3, but only USER_2 is a member.
-    mockQuery
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])) // only USER_2 returned
-      .mockResolvedValueOnce(queryResult([])); // no blocks
+    mockQuery.mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])); // audience: only USER_2 is a member
     mockIsUserOnline.mockResolvedValueOnce(true);
     mockEmitWithAck.mockResolvedValueOnce({ acked: 1, nacked: 0, failed: 0 });
 
@@ -206,28 +200,8 @@ describe('POST /api/photos/relay — dispatch', () => {
     expect(mockEmitWithAck).toHaveBeenCalledTimes(1);
   });
 
-  it('drops blocked recipients (symmetric: either direction)', async () => {
-    mockQuery
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }, { user_id: TEST_USER_ID_3 }]))
-      .mockResolvedValueOnce(
-        // Sender blocked USER_3 → drop USER_3
-        queryResult([{ blocker_id: TEST_USER_ID, blocked_id: TEST_USER_ID_3 }]),
-      );
-    mockIsUserOnline.mockResolvedValueOnce(true);
-    mockEmitWithAck.mockResolvedValueOnce({ acked: 1, nacked: 0, failed: 0 });
-
-    const res = await request(app)
-      .post('/api/photos/relay')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody({ recipient_user_ids: [TEST_USER_ID_2, TEST_USER_ID_3] }));
-
-    expect(res.status).toBe(200);
-    expect(res.body.delivered_user_ids).toEqual([TEST_USER_ID_2]);
-    expect(res.body.queued_user_ids).toEqual([]);
-  });
-
   it('removes the sender from the recipient list (defensive)', async () => {
-    mockQuery.mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])).mockResolvedValueOnce(queryResult([]));
+    mockQuery.mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])); // audience excludes the sender
     mockIsUserOnline.mockResolvedValueOnce(true);
     mockEmitWithAck.mockResolvedValueOnce({ acked: 1, nacked: 0, failed: 0 });
 
@@ -244,8 +218,7 @@ describe('POST /api/photos/relay — dispatch', () => {
 
   it('ACKs the pickup row when pickup_id is provided', async () => {
     mockQuery
-      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }]))
-      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])) // audience
       .mockResolvedValueOnce(queryResult([])); // ACK pending UPDATE
     mockIsUserOnline.mockResolvedValueOnce(true);
     mockEmitWithAck.mockResolvedValueOnce({ acked: 1, nacked: 0, failed: 0 });

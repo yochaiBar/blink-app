@@ -1,9 +1,15 @@
+import dotenv from 'dotenv';
 import { z } from 'zod';
+
+// Every entry point (server, standalone migration runner) gets .env loaded
+// before the schema runs; existing variables always win.
+dotenv.config();
 
 /**
  * Zod-validated environment configuration.
  *
- * This module parses `process.env` at import time. Because the test setup
+ * This module parses `process.env` at import time and is the only place
+ * that may read it (lint enforces this). Because the test setup
  * (`__tests__/setup.ts`) assigns all required env vars before any source
  * imports, the eager parse is safe for both production and test environments.
  */
@@ -42,6 +48,10 @@ const baseSchema = z.object({
     .regex(/^\d{6}$/, 'APP_REVIEW_OTP must be 6 digits')
     .optional()
     .or(z.literal('')),
+
+  // ── Jobs and push ───────────────────────────────────────────────
+  CHALLENGE_SCHEDULER_ENABLED: z.string().optional(),
+  EXPO_ACCESS_TOKEN: z.string().optional(),
 
   // ── Observability ───────────────────────────────────────────────
   SENTRY_DSN: z.string().optional(),

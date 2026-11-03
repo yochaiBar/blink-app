@@ -4,6 +4,7 @@ import path from 'path';
 import * as Sentry from '@sentry/node';
 import type { PoolClient } from 'pg';
 import logger from '../utils/logger';
+import { env } from './env';
 
 // Every runner (each booting replica, or a manual `npm run migrate`) takes
 // this transaction-scoped advisory lock before touching schema_migrations,
@@ -98,10 +99,10 @@ export async function runMigrations(): Promise<void> {
 if (require.main === module) {
   // Init Sentry locally so a startup-time crash (e.g. DB connect failure)
   // gets reported. The main server initializes its own in instrument.ts.
-  if (process.env.SENTRY_DSN) {
+  if (env.SENTRY_DSN) {
     Sentry.init({
-      dsn: process.env.SENTRY_DSN,
-      environment: process.env.NODE_ENV,
+      dsn: env.SENTRY_DSN,
+      environment: env.NODE_ENV,
       tracesSampleRate: 0,
       sendDefaultPii: false,
     });

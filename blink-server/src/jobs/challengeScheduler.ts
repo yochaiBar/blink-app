@@ -4,6 +4,7 @@ import { emitToGroup } from '../socket';
 import { sendPushToGroup } from '../services/pushNotifications';
 import { createNotification } from '../utils/notifications';
 import logger from '../utils/logger';
+import { env } from '../config/env';
 
 /** Shape returned by the scheduler's group query */
 interface SchedulerGroupRow {
@@ -35,7 +36,7 @@ export function pickAutoPrompt(recentPrompts: string[]): string {
 }
 
 function isEnabled(): boolean {
-  return process.env.CHALLENGE_SCHEDULER_ENABLED === 'true';
+  return env.CHALLENGE_SCHEDULER_ENABLED === 'true';
 }
 
 // Check if current hour is within quiet hours
