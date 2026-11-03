@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, Share2, ArrowLeft } from 'lucide-react-native';
+import { Check, Share2, ArrowLeft, Users } from 'lucide-react-native';
 
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
@@ -27,7 +27,6 @@ import EncryptedImage from '@/components/EncryptedImage';
 import { ApiChallengeResponse } from '@/types/api';
 import { useChallengeReveal } from '@/hooks/useChallenge';
 import { resolvePhotoUri } from '@/hooks/usePhotoUri';
-import { Users } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PHOTO_ASPECT = 4 / 5;

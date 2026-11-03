@@ -320,7 +320,7 @@ export function useSocket() {
    */
   async function fetchAndJoinGroups() {
     try {
-      const groups: Array<{ id: string }> = await api('/groups');
+      const groups: { id: string }[] = await api('/groups');
       if (Array.isArray(groups) && groups.length > 0) {
         const groupIds = groups.map((g) => g.id);
         joinGroups(groupIds);

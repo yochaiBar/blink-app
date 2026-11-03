@@ -121,7 +121,7 @@ interface V2Args {
 }
 
 interface MemberListResponse {
-  members?: Array<{ user_id?: string; id?: string }>;
+  members?: { user_id?: string; id?: string }[];
 }
 
 interface RespondResponse {

@@ -6,7 +6,6 @@ import ActivityPulse, { ActivityPulseProps } from '@/components/ActivityPulse';
 
 export interface BlurredPreviewCardProps {
   respondedCount: number;
-  totalMembers: number;
   totalReactions: number;
   topReactionEmoji?: string;
   respondedUsers: { displayName: string }[];
@@ -19,7 +18,6 @@ const PLACEHOLDER_COLORS = [`${theme.coral}30`, `${theme.purple}25`, `${theme.bl
 
 export default function BlurredPreviewCard({
   respondedCount,
-  totalMembers,
   totalReactions,
   topReactionEmoji,
   respondedUsers,
@@ -64,11 +62,6 @@ export default function BlurredPreviewCard({
     inputRange: [0, 1],
     outputRange: [1, 1.01],
   });
-
-  const respondedNames = respondedUsers
-    .slice(0, 3)
-    .map((u) => u.displayName)
-    .join(', ');
 
   return (
     <Animated.View style={[styles.wrapper, { opacity: fadeInAnim }]}>

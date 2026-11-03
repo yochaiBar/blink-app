@@ -102,7 +102,7 @@ export default function HelpFAQScreen() {
             <Text style={styles.emailLink} onPress={() => Linking.openURL('mailto:support@blink.app')}>
               support@blink.app
             </Text>{' '}
-            and we'll get back to you within 24 hours.
+            and we&apos;ll get back to you within 24 hours.
           </Text>
         </View>
 

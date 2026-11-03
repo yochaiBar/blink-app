@@ -21,7 +21,6 @@ export interface ChallengeSectionProps {
   countdown: string;
   pulseAnim: Animated.Value;
   progressData: ProgressData | null;
-  currentUserId: string;
   onRespond: () => void;
   challengeBarRef: React.RefObject<View | null>;
   challengeJustTriggered?: boolean;
@@ -34,7 +33,6 @@ export default function ChallengeSection({
   countdown,
   pulseAnim,
   progressData,
-  currentUserId,
   onRespond,
   challengeBarRef,
   challengeJustTriggered,
@@ -80,7 +78,6 @@ export default function ChallengeSection({
               <ActivityPulse
                 respondedUsers={progressData.responded}
                 totalMembers={progressData.totalMembers}
-                currentUserId={currentUserId}
                 hasResponded={hasSubmittedToday}
               />
             )}

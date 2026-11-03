@@ -11,7 +11,6 @@ interface RespondedUser {
 export interface ActivityPulseProps {
   respondedUsers: RespondedUser[];
   totalMembers: number;
-  currentUserId: string;
   hasResponded: boolean;
   challengeJustStarted?: boolean;
 }
@@ -23,7 +22,6 @@ const MAX_VISIBLE = 6;
 export default function ActivityPulse({
   respondedUsers,
   totalMembers,
-  currentUserId,
   hasResponded,
   challengeJustStarted,
 }: ActivityPulseProps) {

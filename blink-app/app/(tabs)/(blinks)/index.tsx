@@ -176,7 +176,7 @@ export default function BlinksScreen() {
     refetchInterval: 30_000,
   });
 
-  const pendingChallenges = activeChallengesQuery.data ?? [];
+  const pendingChallenges = useMemo(() => activeChallengesQuery.data ?? [], [activeChallengesQuery.data]);
 
   // ── Answered challenges: history + the photo responses for each ──
   const feedQuery = useQuery({

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Share } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Copy, Share2, Link, Check } from 'lucide-react-native';

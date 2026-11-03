@@ -14,7 +14,6 @@ import {
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,10 +29,8 @@ import {
   ChevronRight,
   ChevronDown,
   ArrowLeft,
-  ImagePlus,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/services/api';
@@ -91,7 +88,7 @@ export default function OnboardingScreen() {
   const isProcessing = useRef(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const otpInputRefs = useRef<Array<TextInput | null>>(Array(OTP_LENGTH).fill(null));
+  const otpInputRefs = useRef<(TextInput | null)[]>(Array(OTP_LENGTH).fill(null));
   const phoneInputRef = useRef<TextInput | null>(null);
 
   // Welcome screen animations
@@ -521,8 +518,8 @@ export default function OnboardingScreen() {
                 <View style={styles.stepIconContainer}>
                   <Phone size={32} color={theme.coral} />
                 </View>
-                <Text style={styles.stepTitle}>What's your number?</Text>
-                <Text style={styles.stepSubtitle}>We'll text you a code to verify</Text>
+                <Text style={styles.stepTitle}>What&apos;s your number?</Text>
+                <Text style={styles.stepSubtitle}>We&apos;ll text you a code to verify</Text>
 
                 <View style={styles.phoneRow}>
                   <TouchableOpacity
@@ -667,7 +664,7 @@ export default function OnboardingScreen() {
             {step === 'name' && (
               <View style={styles.inputStep}>
                 <Text style={styles.stepEmoji}>👋</Text>
-                <Text style={styles.stepTitle}>What's your name?</Text>
+                <Text style={styles.stepTitle}>What&apos;s your name?</Text>
                 <Text style={styles.stepSubtitle}>This is how friends will see you</Text>
                 <TextInput
                   style={styles.input}

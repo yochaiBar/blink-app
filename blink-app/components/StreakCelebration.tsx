@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
+import { Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { theme } from '@/constants/colors';
 
 export interface StreakCelebrationProps {

@@ -1,15 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, ErrorInfo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Platform,
-  Dimensions,
-  Alert,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform, Alert, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Check, RotateCcw, SwitchCamera, Clock } from 'lucide-react-native';
@@ -22,8 +12,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { useActiveChallenge, useChallengeProgress } from '@/hooks/useChallenge';
 import AvatarRing from '@/components/ui/AvatarRing';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type ChallengePhase = 'countdown' | 'capture' | 'preview';
 
@@ -403,7 +391,7 @@ function SnapChallengeScreen() {
             </View>
             <Text style={styles.expiredTitle}>This challenge has expired</Text>
             <Text style={styles.expiredSubtitle}>
-              You can no longer submit a snap for this challenge. Head back to the group to see what's next.
+              You can no longer submit a snap for this challenge. Head back to the group to see what&apos;s next.
             </Text>
           </View>
           <TouchableOpacity

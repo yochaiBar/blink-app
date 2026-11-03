@@ -34,7 +34,7 @@ export function useGroups() {
     staleTime: 30_000,
   });
 
-  const realGroups = groupsQuery.data ?? [];
+  const realGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
   const querySettled = groupsQuery.isFetched || groupsQuery.isError;
   const shouldShowDemoGroup = querySettled && realGroups.length === 0 && !tourComplete;
 

@@ -15,7 +15,7 @@ export function useNotifications() {
     staleTime: 30_000,
   });
 
-  const notifications = notificationsQuery.data ?? [];
+  const notifications = useMemo(() => notificationsQuery.data ?? [], [notificationsQuery.data]);
 
   const unreadNotificationCount = useMemo(() => {
     return notifications.filter((n) => !n.read).length;

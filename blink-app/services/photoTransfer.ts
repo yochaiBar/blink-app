@@ -171,7 +171,7 @@ export async function receivePhoto(
 
   try {
     await putReceivedPhoto(envelope.response_id, plaintext);
-  } catch (err) {
+  } catch {
     // Disk write failed — return NACK so the server keeps the pickup row
     // pending; we'll retry on the next pickup_request roundtrip.
     return {

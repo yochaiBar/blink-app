@@ -23,7 +23,7 @@ import { useApp } from '@/providers/AppProvider';
 import ReportModal from '@/components/ReportModal';
 import { api, blockUser, resetGroupKey } from '@/services/api';
 import { newGroupKey, storeGroupKey } from '@/services/groupCrypto';
-import { Skeleton, SnapCardSkeleton } from '@/components/ui';
+import { Skeleton, SnapCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
 import { apiGroupDetailToGroup, apiResponseToSnap, apiMembersToLeaderboard } from '@/utils/adapters';
 import {
   useGroupDetail,
@@ -35,7 +35,6 @@ import { useOnboardingStore, tourMessages } from '@/stores/onboardingStore';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
 import StreakCelebration from '@/components/StreakCelebration';
 import { getSocket } from '@/services/socket';
-import { EmptyState, ErrorState } from '@/components/ui';
 
 import {
   MemberAvatarRow,
@@ -521,7 +520,6 @@ export default function GroupDetailScreen() {
             countdown={countdown}
             pulseAnim={pulseAnim}
             progressData={progressData}
-            currentUserId={user.id}
             onRespond={handleSnapChallenge}
             challengeBarRef={challengeBarRef}
             challengeJustTriggered={challengeJustTriggered}
@@ -538,7 +536,6 @@ export default function GroupDetailScreen() {
           currentUserId={user.id}
           snaps={snaps}
           groupPhotosCount={groupPhotosCount}
-          groupMemberCount={groupQuery.data?.members?.length ?? group.memberCount ?? group.members.length}
           previewData={previewData}
           progressData={progressData}
           challengeJustTriggered={challengeJustTriggered}

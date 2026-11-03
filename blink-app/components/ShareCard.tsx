@@ -4,8 +4,6 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { theme } from '@/constants/colors';
-import { typography } from '@/constants/typography';
-import { spacing, borderRadius } from '@/constants/spacing';
 
 export interface ShareCardProps {
   photoUri: string;

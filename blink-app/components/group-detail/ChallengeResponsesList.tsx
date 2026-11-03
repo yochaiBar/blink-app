@@ -25,7 +25,6 @@ export interface ChallengeResponsesListProps {
   currentUserId: string;
   snaps: SnapItem[];
   groupPhotosCount: number;
-  groupMemberCount: number;
   previewData: {
     respondedCount: number;
     totalMembers: number;
@@ -51,7 +50,6 @@ export default function ChallengeResponsesList({
   currentUserId,
   snaps,
   groupPhotosCount,
-  groupMemberCount,
   previewData,
   progressData,
   challengeJustTriggered,
@@ -66,7 +64,6 @@ export default function ChallengeResponsesList({
       {showTeaser && !hasSubmittedToday && activeChallenge && (previewData || snaps.length > 0) && (
         <BlurredPreviewCard
           respondedCount={previewData?.respondedCount ?? snaps.length}
-          totalMembers={previewData?.totalMembers ?? groupMemberCount}
           totalReactions={previewData?.totalReactions ?? 0}
           topReactionEmoji={previewData?.topReactionEmoji}
           respondedUsers={previewData?.respondedUsers ?? snaps.map((sn) => ({ displayName: sn.userName }))}
@@ -77,7 +74,6 @@ export default function ChallengeResponsesList({
               ? {
                   respondedUsers: progressData.responded,
                   totalMembers: progressData.totalMembers,
-                  currentUserId,
                   hasResponded: false,
                   challengeJustStarted: challengeJustTriggered,
                 }
