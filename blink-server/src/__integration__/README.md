@@ -51,6 +51,13 @@ it('...', async () => {
 - Every table is truncated before each test; after each test the harness waits
   for fire-and-forget DB work to settle.
 - Files run serially (`--runInBand`) because they share one database.
+- `createUser()` signs the user in through a real `auth_sessions` row, so its
+  token passes the real `authenticate` middleware and socket handshake.
+- Factory members join a day back by default (factory challenges are
+  backdated); pass `joinedSecondsAgo: 0` to `addMember` for a late joiner.
+- Races: `raceBehindLock(table, waiters, fire)` (`support/db.ts`) holds a table
+  lock until every concurrent request is queued behind it, so a race test
+  hits the worst interleaving every run instead of by luck.
 
 ## Known bugs
 
@@ -58,3 +65,7 @@ A known bug enters as an `it.failing(...)` test with a `KNOWN BUG` comment that
 names the recovery-plan phase that fixes it. `it.failing` passes while the
 assertion fails; when the fix lands Jest reports it, and the fix PR flips it to
 a plain `it(...)`.
+
+Status: (a) account deletion, (b) double-counted finalize and (d) joins past
+`max_members` are fixed (Stages 1a, 2c, 2b). (c), a relay from a non-member
+sender, stays `it.failing` until Stage 3.
