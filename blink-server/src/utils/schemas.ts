@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidTimeZone } from '../jobs/dailyChallenge';
 
 // ── Shared query schemas ──────────────────────────────────────
 
@@ -35,9 +36,10 @@ export const updateProfileSchema = z
   .object({
     display_name: z.string().trim().min(1, 'Display name is required').max(50, 'Display name too long').optional(),
     bio: z.string().max(200, 'Bio must be at most 200 characters').optional(),
+    push_enabled: z.boolean().optional(),
   })
-  .refine((data) => data.display_name !== undefined || data.bio !== undefined, {
-    message: 'At least one field (display_name or bio) must be provided',
+  .refine((data) => data.display_name !== undefined || data.bio !== undefined || data.push_enabled !== undefined, {
+    message: 'At least one field (display_name, bio or push_enabled) must be provided',
   });
 
 // ── Group schemas ─────────────────────────────────────────────
@@ -50,6 +52,8 @@ export const createGroupSchema = z.object({
   icon: z.string().max(10).optional(),
   quiet_hours_start: z.string().optional(),
   quiet_hours_end: z.string().optional(),
+  // IANA zone (e.g. 'Asia/Jerusalem') for the daily challenge's day hours.
+  timezone: z.string().max(64).refine(isValidTimeZone, { message: 'timezone must be an IANA time zone' }).optional(),
 });
 
 export const joinGroupSchema = z.object({
@@ -69,7 +73,6 @@ export const respondChallengeSchema = z.object({
   // The client tells us "I will relay the actual bytes via /api/photos/relay
   // separately." The server records has_photo=true and never sees the photo.
   has_photo: z.boolean().optional(),
-  response_time_ms: z.number().int().positive().optional(),
 });
 
 // ── Reaction schemas ─────────────────────────────────────────

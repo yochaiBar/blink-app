@@ -18,6 +18,7 @@ import moderationRoutes from './routes/moderation';
 import deviceKeysRoutes from './routes/deviceKeys';
 import photoRelayRoutes from './routes/photos/relay';
 import keyshareRoutes from './routes/keyshare';
+import feedRoutes from './routes/feed';
 import logger from './utils/logger';
 import { RATE_LIMITS } from './utils/constants';
 
@@ -156,6 +157,7 @@ export function createApp(): express.Express {
   app.use('/api/device-keys', deviceKeysRoutes);
   app.use('/api/photos', photoRelayRoutes);
   app.use('/api/keyshare', keyshareRoutes);
+  app.use('/api/feed', feedRoutes);
 
   app.get('/privacy', (_req, res) => {
     res.setHeader('Content-Security-Policy', privacyCsp);

@@ -31,8 +31,22 @@ export async function createUser(overrides: { phone_number?: string; display_nam
   return { ...user, token: tokens.access_token, refreshToken: tokens.refresh_token };
 }
 
-export async function addMember(groupId: string, userId: string, role: 'admin' | 'member' = 'member'): Promise<void> {
-  await query(`INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, $3)`, [groupId, userId, role]);
+/**
+ * Members join a day before "now" by default, so they're eligible for
+ * factory challenges (which are backdated). Pass `joinedSecondsAgo: 0` for
+ * a member who joined after a challenge started.
+ */
+export async function addMember(
+  groupId: string,
+  userId: string,
+  role: 'admin' | 'member' = 'member',
+  joinedSecondsAgo = 24 * 3600,
+): Promise<void> {
+  await query(
+    `INSERT INTO group_members (group_id, user_id, role, joined_at)
+     VALUES ($1, $2, $3, NOW() - make_interval(secs => $4))`,
+    [groupId, userId, role, joinedSecondsAgo],
+  );
 }
 
 /** A group created by `createdBy` (as admin), plus any extra members. */
@@ -64,20 +78,40 @@ export async function createGroup(opts: {
  */
 export async function createChallenge(opts: {
   groupId: string;
-  createdBy: { id: string };
+  /** null = created by the scheduler. */
+  createdBy: { id: string } | null;
   expiresInSeconds?: number;
   status?: 'active' | 'completed' | 'expired';
+  prompt?: string;
 }): Promise<ChallengeRow> {
   const result = await query<ChallengeRow>(
-    `INSERT INTO challenges (group_id, created_by, created_at, expires_at, status)
-     VALUES ($1, $2,
+    `INSERT INTO challenges (group_id, created_by, prompt, created_at, expires_at, status, is_auto_generated)
+     VALUES ($1, $2::uuid, $5,
              NOW() + make_interval(secs => $3) - INTERVAL '5 minutes',
              NOW() + make_interval(secs => $3),
-             $4)
+             $4, $2::uuid IS NULL)
      RETURNING *`,
-    [opts.groupId, opts.createdBy.id, opts.expiresInSeconds ?? 300, opts.status ?? 'active'],
+    [
+      opts.groupId,
+      opts.createdBy?.id ?? null,
+      opts.expiresInSeconds ?? 300,
+      opts.status ?? 'active',
+      opts.prompt ?? null,
+    ],
   );
   return result.rows[0];
+}
+
+export async function memberStats(groupId: string) {
+  const result = await query<{
+    user_id: string;
+    total_challenges: number;
+    total_responses: number;
+    current_streak: number;
+  }>('SELECT user_id, total_challenges, total_responses, current_streak FROM group_members WHERE group_id = $1', [
+    groupId,
+  ]);
+  return Object.fromEntries(result.rows.map((r) => [r.user_id, r]));
 }
 
 export async function createResponse(opts: {

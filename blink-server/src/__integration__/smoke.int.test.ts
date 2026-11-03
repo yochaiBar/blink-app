@@ -4,7 +4,7 @@
  */
 import { query } from '../config/database';
 import { useTestServer } from './support/server';
-import { bearer, countRows, createChallenge, createGroup, createUser } from './support/factories';
+import { bearer, countRows, createGroup, createUser } from './support/factories';
 
 const server = useTestServer();
 
@@ -98,7 +98,7 @@ describe('smoke', () => {
       .api()
       .post(`/api/challenges/${created.body.id}/respond`)
       .set(bearer(bob))
-      .send({ has_photo: true, response_time_ms: 1200 });
+      .send({ has_photo: true });
     expect(responded.status).toBe(201);
     expect(responded.body).toMatchObject({ challenge_id: created.body.id, user_id: bob.id, has_photo: true });
 
@@ -111,18 +111,5 @@ describe('smoke', () => {
     const res = await server.api().get('/api/groups');
 
     expect(res.status).toBe(401);
-  });
-
-  it('expired challenges are expired lazily by GET .../challenges/active', async () => {
-    const alice = await createUser();
-    const group = await createGroup({ createdBy: alice });
-    const challenge = await createChallenge({ groupId: group.id, createdBy: alice, expiresInSeconds: -60 });
-
-    const res = await server.api().get(`/api/challenges/groups/${group.id}/challenges/active`).set(bearer(alice));
-
-    expect(res.status).toBe(200);
-    expect(res.body).toBeNull();
-    const row = await query('SELECT status FROM challenges WHERE id = $1', [challenge.id]);
-    expect(row.rows[0].status).toBe('expired');
   });
 });

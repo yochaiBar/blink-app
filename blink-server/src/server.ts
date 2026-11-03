@@ -12,7 +12,8 @@ import { registerRelayHub, expireStalePendingPickups } from './services/relayHub
 import { registerKeyshareHub, expireStalePendingJoins } from './services/keyshareHub';
 import { OTP_RATE_LIMIT_PER_HOUR } from './utils/constants';
 import { initSocket } from './socket';
-import { startChallengeScheduler } from './jobs/challengeScheduler';
+import { startChallengeJobs } from './jobs/challengeJobs';
+import { startDailyChallengeJob } from './jobs/dailyChallenge';
 
 const PORT = env.PORT;
 
@@ -71,8 +72,9 @@ async function main(): Promise<void> {
       );
     }
 
-    // Start AI-powered challenge scheduler
-    startChallengeScheduler();
+    // Challenge expiry + reminders (always), daily auto-challenge (if enabled)
+    startChallengeJobs();
+    startDailyChallengeJob();
     startPendingCleanup();
   });
 

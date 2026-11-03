@@ -93,7 +93,7 @@ export async function sendPushNotification(
       }
     } else if (ticket.id) {
       // Fire-and-forget receipt check after a delay
-      setTimeout(() => checkReceipts([ticket.id!]).catch(() => {}), 15_000);
+      setTimeout(() => checkReceipts([ticket.id!]).catch(() => {}), 15_000).unref();
     }
   } catch (err: unknown) {
     logger.error('Failed to send push notification', {
@@ -149,13 +149,48 @@ async function sendPushBatch(messages: PushMessage[]): Promise<void> {
 
     // Fire-and-forget receipt check
     if (receiptIds.length > 0) {
-      setTimeout(() => checkReceipts(receiptIds).catch(() => {}), 15_000);
+      setTimeout(() => checkReceipts(receiptIds).catch(() => {}), 15_000).unref();
     }
   } catch (err: unknown) {
     logger.error('Failed to send push batch', {
       error: err instanceof Error ? err.message : String(err),
       count: messages.length,
     });
+  }
+}
+
+/**
+ * Send one notification to each listed user who has a push token and hasn't
+ * turned push off (users.push_enabled). The single path every push takes.
+ */
+export async function sendPushToUsers(
+  userIds: string[],
+  title: string,
+  body: string,
+  data?: Record<string, unknown>,
+): Promise<void> {
+  if (userIds.length === 0) return;
+  try {
+    const result = await query<{ push_token: string }>(
+      `SELECT push_token FROM users
+        WHERE id = ANY($1::uuid[]) AND push_enabled AND push_token LIKE 'ExponentPushToken[%'`,
+      [userIds],
+    );
+    const messages: PushMessage[] = result.rows.map((r) => ({
+      to: r.push_token,
+      title,
+      body,
+      data: data || {},
+      sound: 'default' as const,
+    }));
+
+    // Expo Push API supports batches of up to 100 messages
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+      sendPushBatch(messages.slice(i, i + BATCH_SIZE)).catch(() => {});
+    }
+  } catch (err: unknown) {
+    logger.error('Failed to send push', { error: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -174,45 +209,14 @@ export async function sendPushToGroup(
 ): Promise<void> {
   try {
     const result = actorId
-      ? await query(
-          `SELECT u.push_token FROM audience($1, $2) a JOIN users u ON u.id = a.user_id
-            WHERE u.push_token IS NOT NULL`,
-          [groupId, actorId],
-        )
-      : await query(
-          `SELECT u.push_token FROM group_members gm JOIN users u ON u.id = gm.user_id
-            WHERE gm.group_id = $1 AND u.push_token IS NOT NULL`,
-          [groupId],
-        );
-    const tokens: string[] = result.rows
-      .map((r) => r.push_token as string)
-      .filter((t) => t && t.startsWith('ExponentPushToken['));
-
-    if (tokens.length === 0) {
-      logger.debug('No push tokens for group', { groupId });
-      return;
-    }
-
-    const messages: PushMessage[] = tokens.map((token) => ({
-      to: token,
+      ? await query<{ user_id: string }>(`SELECT user_id FROM audience($1, $2)`, [groupId, actorId])
+      : await query<{ user_id: string }>(`SELECT user_id FROM group_members WHERE group_id = $1`, [groupId]);
+    await sendPushToUsers(
+      result.rows.map((r) => r.user_id),
       title,
       body,
-      data: data || {},
-      sound: 'default' as const,
-    }));
-
-    // Expo Push API supports batches of up to 100 messages
-    const BATCH_SIZE = 100;
-    for (let i = 0; i < messages.length; i += BATCH_SIZE) {
-      const batch = messages.slice(i, i + BATCH_SIZE);
-      // Fire-and-forget each batch
-      sendPushBatch(batch).catch(() => {});
-    }
-
-    logger.info('Push notifications queued for group', {
-      groupId,
-      tokenCount: tokens.length,
-    });
+      data,
+    );
   } catch (err: unknown) {
     logger.error('Failed to send push to group', {
       error: err instanceof Error ? err.message : String(err),
@@ -221,32 +225,14 @@ export async function sendPushToGroup(
   }
 }
 
-/**
- * Send a push notification to a specific user by their user ID.
- * Looks up their push_token and sends if available.
- */
+/** Send a push notification to one user (if they have a token and push on). */
 export async function sendPushToUser(
   userId: string,
   title: string,
   body: string,
   data?: Record<string, unknown>,
 ): Promise<void> {
-  try {
-    const result = await query(`SELECT push_token FROM users WHERE id = $1`, [userId]);
-
-    const token = result.rows[0]?.push_token;
-    if (!token) {
-      logger.debug('No push token for user', { userId });
-      return;
-    }
-
-    await sendPushNotification(token, title, body, data);
-  } catch (err: unknown) {
-    logger.error('Failed to send push to user', {
-      error: err instanceof Error ? err.message : String(err),
-      userId,
-    });
-  }
+  await sendPushToUsers([userId], title, body, data);
 }
 
 /**

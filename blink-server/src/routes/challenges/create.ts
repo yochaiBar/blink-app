@@ -1,96 +1,23 @@
 import { Router, Response } from 'express';
-import { withTransaction } from '../../config/database';
 import { AuthRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { validateBody } from '../../middleware/validate';
 import { createChallengeSchema } from '../../utils/schemas';
-import logger from '../../utils/logger';
-import { emitToGroup } from '../../socket';
 import { uuidParams } from '../../middleware/params';
-import { HttpError } from '../../utils/httpError';
-import { CHALLENGE_SELECT } from './shared';
-import { ChallengeRow } from '../../types/db';
-import { processSkipsForChallenge } from '../../services/streakService';
-import { notifyGroupOfChallenge } from '../../services/notificationService';
 import { requireMember } from '../../services/membership';
+import { createChallenge } from '../../services/challengeLifecycle';
 
 const router = Router();
 uuidParams(router, 'groupId');
 
-// ── POST /api/challenges/groups/:groupId/challenges -- Trigger a challenge ──
+// ── POST /api/challenges/groups/:groupId/challenges -- Start a snap challenge ──
 router.post(
   '/groups/:groupId/challenges',
   validateBody(createChallengeSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const groupId = req.params.groupId as string;
-
     await requireMember(req.userId!, { groupId });
-
-    // Wrap entire create flow in a transaction to prevent race conditions
-    const result = await withTransaction(async (client) => {
-      // Advisory lock keyed on group_id to serialize challenge creation per group.
-      // This closes the race window where two concurrent requests could both pass
-      // the cooldown check before either INSERT commits (FOR UPDATE cannot lock
-      // rows that don't exist yet).
-      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [groupId]);
-
-      // Cooldown check: reject if a challenge was created in the last 5 seconds for this group.
-      const recentChallenge = await client.query(
-        `SELECT id FROM challenges WHERE group_id = $1 AND created_at > NOW() - INTERVAL '5 seconds' ORDER BY created_at DESC LIMIT 1`,
-        [groupId],
-      );
-      if (recentChallenge.rows.length > 0) {
-        throw new HttpError(409, 'A challenge was just started');
-      }
-
-      // Lock and expire any active challenges
-      const activeChallenges = await client.query<Pick<ChallengeRow, 'id'>>(
-        `SELECT id FROM challenges WHERE group_id = $1 AND status = 'active' FOR UPDATE`,
-        [groupId],
-      );
-      const expiredChallengeIds = activeChallenges.rows.map((ac) => ac.id);
-      if (expiredChallengeIds.length > 0) {
-        await client.query(`UPDATE challenges SET status = 'expired' WHERE group_id = $1 AND status = 'active'`, [
-          groupId,
-        ]);
-      }
-
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-      const result = await client.query(
-        `INSERT INTO challenges (group_id, created_by, expires_at)
-       VALUES ($1, $2, $3)
-       RETURNING ${CHALLENGE_SELECT}`,
-        [groupId, req.userId, expiresAt],
-      );
-
-      const row = result.rows[0];
-      return { challenge: row, expiredChallengeIds };
-    });
-
-    const { challenge, expiredChallengeIds } = result;
-
-    // Process skips for expired challenges AFTER transaction commits
-    for (const expiredId of expiredChallengeIds) {
-      processSkipsForChallenge(expiredId, groupId).catch((err: unknown) => {
-        logger.error('Skip processing error', {
-          error: err instanceof Error ? err.message : String(err),
-          challengeId: expiredId,
-        });
-      });
-    }
-
-    // Emit real-time event
-    emitToGroup(groupId, 'challenge:started', challenge);
-
-    // Notify all group members except trigger-er (fire-and-forget)
-    notifyGroupOfChallenge(groupId, challenge.id, req.userId!).catch((err: unknown) => {
-      logger.error('Challenge notification error', {
-        error: err instanceof Error ? err.message : String(err),
-        challengeId: challenge.id,
-      });
-    });
-
-    logger.info('Challenge triggered', { groupId, challengeId: challenge.id });
+    const challenge = await createChallenge({ groupId, createdBy: req.userId! });
     res.status(201).json(challenge);
   }),
 );

@@ -16,6 +16,10 @@ import { getGroupWithMembers, handleAdminLeave } from '../services/groupService'
 import { requireMember } from '../services/membership';
 import { audienceOf } from '../services/audience';
 import { HttpError } from '../utils/httpError';
+import { nextAutoChallengeAt } from '../jobs/dailyChallenge';
+import { validateQuery, parsedQuery } from '../middleware/validate';
+import { paginationQuerySchema, PaginationQuery } from '../utils/schemas';
+import { listChallenges } from '../services/challengeReads';
 
 // (Legacy server-side group encryption removed in Phase 6 — group keys
 // now live exclusively on member devices and arrive via the courier
@@ -36,7 +40,8 @@ router.post(
   '/',
   validateBody(createGroupSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { name, icon, quiet_hours_start, quiet_hours_end } = req.body;
+    const { name, icon, quiet_hours_start, quiet_hours_end, timezone } = req.body;
+    const zone: string = timezone || 'UTC';
 
     // 3-group free tier limit
     const userGroups = await query<CountRow>(`SELECT COUNT(*) FROM group_members WHERE user_id = $1`, [req.userId]);
@@ -49,10 +54,20 @@ router.post(
 
     const newGroup = await withTransaction(async (client) => {
       const group = await client.query<GroupRow>(
-        `INSERT INTO groups (name, icon, created_by, invite_code, quiet_hours_start, quiet_hours_end)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO groups
+           (name, icon, created_by, invite_code, quiet_hours_start, quiet_hours_end, timezone, next_auto_challenge_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
-        [name, icon || '\u{1F465}', req.userId, inviteCode, quiet_hours_start || '22:00', quiet_hours_end || '08:00'],
+        [
+          name,
+          icon || '\u{1F465}',
+          req.userId,
+          inviteCode,
+          quiet_hours_start || '22:00',
+          quiet_hours_end || '08:00',
+          zone,
+          nextAutoChallengeAt(zone),
+        ],
       );
 
       // Add creator as admin
@@ -288,6 +303,26 @@ router.delete(
 
     logger.info('Group deleted by admin', { groupId: id, userId: req.userId });
     res.json({ message: 'Group deleted successfully' });
+  }),
+);
+
+// ── GET /api/groups/:id/challenges -- the group's challenges, newest first ──
+// Cursor pagination: pass the last item's created_at as `before`.
+router.get(
+  '/:id/challenges',
+  validateQuery(paginationQuerySchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const id = req.params.id as string;
+    const { limit, before } = parsedQuery<PaginationQuery>(res);
+    await requireMember(req.userId!, { groupId: id });
+
+    const items = await listChallenges(
+      `c.group_id = $2 AND ($3::timestamptz IS NULL OR c.created_at < $3::timestamptz)`,
+      [id, before ?? null],
+      req.userId!,
+      limit,
+    );
+    res.json(items);
   }),
 );
 
