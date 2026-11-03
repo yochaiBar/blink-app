@@ -19,7 +19,7 @@ import { HttpError } from '../utils/httpError';
 import { nextAutoChallengeAt } from '../jobs/dailyChallenge';
 import { validateQuery, parsedQuery } from '../middleware/validate';
 import { paginationQuerySchema, PaginationQuery } from '../utils/schemas';
-import { listChallenges } from '../services/challengeReads';
+import { listChallenges, loadResponses } from '../services/challengeReads';
 
 // (Legacy server-side group encryption removed in Phase 6 — group keys
 // now live exclusively on member devices and arrive via the courier
@@ -305,7 +305,8 @@ router.delete(
 );
 
 // ── GET /api/groups/:id/challenges -- the group's challenges, newest first ──
-// Cursor pagination: pass the last item's created_at as `before`.
+// Each item carries its visible responses (one query for the page), like
+// GET /feed. Cursor pagination: pass the last item's created_at as `before`.
 router.get(
   '/:id/challenges',
   validateQuery(paginationQuerySchema),
@@ -320,7 +321,11 @@ router.get(
       req.userId!,
       limit,
     );
-    res.json(items);
+    const responses = await loadResponses(
+      items.map((c) => c.id),
+      req.userId!,
+    );
+    res.json(items.map((c) => ({ ...c, responses: responses.get(c.id) ?? [] })));
   }),
 );
 

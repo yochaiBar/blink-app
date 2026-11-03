@@ -494,6 +494,9 @@ export default function ChallengeRevealScreen() {
               contentFit="cover"
               transition={300}
               cachePolicy="none"
+              // Open challenge you haven't answered: others' photos stay
+              // blurred until you do (the server doesn't gate them).
+              blurRadius={revealData?.blurOthers && !isOwnResponse ? 40 : undefined}
             />
           ) : (
             <View style={styles.photoPlaceholder}>

@@ -1,16 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
 import { demoSource, isDemoChallenge, isDemoGroup, type ChallengeProgress } from '@/services/demoSource';
+import { fetchChallenge, previewOf, progressOf, type ChallengePreview } from '@/services/challengeReads';
 import { ApiChallenge, ApiChallengeResponse, ApiGroupDetail } from '@/types/api';
 
-/** GET /challenges/:id/preview */
-export interface ChallengePreview {
-  respondedCount: number;
-  totalMembers: number;
-  totalReactions: number;
-  topReactionEmoji?: string;
-  respondedUsers: { userId: string; displayName: string }[];
-}
+export type { ChallengePreview };
 
 /**
  * Everything the group detail screen reads: the group, its active challenge,
@@ -45,7 +39,7 @@ export function useGroupDetail(groupId: string | undefined) {
     queryFn: async (): Promise<ApiChallengeResponse[]> =>
       isDemoChallenge(activeChallenge?.id)
         ? demoSource.responses()
-        : api<ApiChallengeResponse[]>(`/challenges/${activeChallenge?.id}/responses`),
+        : (await fetchChallenge(activeChallenge!.id)).responses,
     enabled: !!activeChallenge?.id,
     staleTime: isSample ? Infinity : undefined,
   });
@@ -65,11 +59,11 @@ export function useGroupDetail(groupId: string | undefined) {
 /** Who has answered the challenge so far; null when there is nothing to fetch. */
 export async function fetchChallengeProgress(challengeId: string): Promise<ChallengeProgress | null> {
   if (isDemoChallenge(challengeId)) return null;
-  return api<ChallengeProgress>(`/challenges/${challengeId}/progress`);
+  return progressOf(await fetchChallenge(challengeId));
 }
 
 /** Teaser numbers for members who haven't answered yet; null when there is nothing to fetch. */
 export async function fetchChallengePreview(challengeId: string): Promise<ChallengePreview | null> {
   if (isDemoChallenge(challengeId)) return null;
-  return api<ChallengePreview>(`/challenges/${challengeId}/preview`);
+  return previewOf(await fetchChallenge(challengeId));
 }

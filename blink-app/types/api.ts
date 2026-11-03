@@ -67,6 +67,27 @@ export interface ApiChallengeResponse {
   has_photo?: boolean;
   response_time_ms: number | null;
   responded_at: string;
-  created_at: string;
+  created_at?: string;
   reactions?: ApiReaction[];
+  comment_count?: number;
+}
+
+/** A challenge as GET /feed, /groups/:id/challenges and /challenges/:id list it. */
+export interface ApiChallengeSummary extends ApiChallenge {
+  group_name: string;
+  group_emoji: string;
+  member_count: number;
+  response_count: number;
+  user_has_responded: boolean;
+}
+
+/** …with its responses the viewer may see (blocks filtered server-side). */
+export interface ApiChallengeDetail extends ApiChallengeSummary {
+  responses: ApiChallengeResponse[];
+}
+
+/** GET /feed — pass `next_before` back as `before` for the next page. */
+export interface ApiFeedPage {
+  items: ApiChallengeDetail[];
+  next_before: string | null;
 }

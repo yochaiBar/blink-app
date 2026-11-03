@@ -21,44 +21,13 @@ import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
-import { api } from '@/services/api';
-import { Group } from '@/types';
-import { ApiChallenge, ApiChallengeResponse } from '@/types/api';
+import { fetchFeed, shouldBlurOthers } from '@/services/challengeReads';
+import type { ApiChallengeDetail } from '@/types/api';
 import AvatarRing from '@/components/ui/AvatarRing';
 import { FeedItemData } from '@/components/FeedItem';
 import ChallengeCard from '@/components/ChallengeCard';
 import DemoChallengeAlert from '@/components/DemoChallengeAlert';
 import { useOnboardingStore } from '@/stores/onboardingStore';
-
-// ── Types ──
-
-interface ChallengeHistoryItem {
-  id: string;
-  group_id: string;
-  prompt: string | null;
-  created_by: string | null;
-  created_at: string;
-  expires_at: string;
-  status: string;
-  response_count: number;
-  member_count: number;
-  user_responded: boolean;
-}
-
-interface PendingChallenge {
-  group: Group;
-  challenge: ApiChallenge;
-  responses?: ApiChallengeResponse[];
-}
-
-/** A challenge the user answered, with the photo responses to thumbnail on its card. */
-interface AnsweredChallenge {
-  group: Group;
-  challenge: ChallengeHistoryItem;
-  photoResponses: { responseId: string; userName?: string; timestamp: string }[];
-  /** Responses fetch failed: show the card with the history row's count and no thumbnails. */
-  responsesUnavailable: boolean;
-}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -134,155 +103,54 @@ export default function BlinksScreen() {
   const flatListRef = useRef<FlatList>(null);
   useScrollToTop(flatListRef);
 
-  // Feed queries only call the API for server groups (the demo group has its own alert).
-  const serverGroupKey = [...serverGroups.map((g) => g.id)].sort().join(',');
-
-  // ── Fetch active challenges across all groups ──
-  const activeChallengesQuery = useQuery({
-    queryKey: ['feed-active-challenges', serverGroupKey],
-    queryFn: async (): Promise<PendingChallenge[]> => {
-      const results: PendingChallenge[] = [];
-      const groupsWithChallenge = serverGroups.filter((g) => g.hasActiveChallenge);
-      const fetches = groupsWithChallenge.map(async (group) => {
-        try {
-          const challenge: ApiChallenge = await api(`/challenges/groups/${group.id}/challenges/active`);
-          if (
-            challenge &&
-            !challenge.user_has_responded &&
-            challenge.expires_at &&
-            new Date(challenge.expires_at).getTime() > Date.now()
-          ) {
-            // Only show active challenges that haven't expired yet
-            let responses: ApiChallengeResponse[] = [];
-            try {
-              responses = await api(`/challenges/${challenge.id}/responses`);
-              if (!Array.isArray(responses)) responses = [];
-            } catch {
-              // Non-critical: responses may not be available yet
-            }
-            results.push({ group, challenge, responses });
-          }
-        } catch {
-          // Non-critical: challenge may have expired between list fetch and detail fetch
-        }
-      });
-      await Promise.all(fetches);
-      return results;
-    },
-    enabled: groups.length > 0,
-    staleTime: 15_000,
-    // Refetch every 30s so expired challenges vanish automatically
-    refetchInterval: 30_000,
-  });
-
-  const pendingChallenges = useMemo(() => activeChallengesQuery.data ?? [], [activeChallengesQuery.data]);
-
-  // ── Answered challenges: history + the photo responses for each ──
+  // ── Feed: challenges across the user's groups (GET /feed) ──
+  // The atomic unit is a CHALLENGE, not a photo. Open challenges you haven't
+  // answered become cards with an "Add yours" CTA; answered or closed ones
+  // become cards with their photo responses as thumbnails (each shows a
+  // placeholder until its photo arrives over the relay). Socket events
+  // refresh it — including expiry, which the server announces — so it
+  // doesn't poll. The demo group has its own alert and never hits the API.
   const feedQuery = useQuery({
-    queryKey: ['blinks-feed-v2', serverGroupKey],
-    queryFn: async (): Promise<AnsweredChallenge[]> => {
-      const answered: AnsweredChallenge[] = [];
-
-      // Fetch history + responses for each group in parallel
-      const fetches = serverGroups.map(async (group) => {
-        try {
-          const history: ChallengeHistoryItem[] = await api(
-            `/challenges/groups/${group.id}/challenges/history?limit=5`,
-          );
-          if (!Array.isArray(history)) return;
-
-          // Unanswered challenges only show in the group mini-feed, not here.
-          const challengeFetches = history
-            .filter((challenge) => challenge.user_responded)
-            .map(async (challenge) => {
-              try {
-                const responses: ApiChallengeResponse[] = await api(`/challenges/${challenge.id}/responses`);
-                if (!Array.isArray(responses)) return;
-                const photoResponses = responses
-                  .filter((resp) => resp.has_photo)
-                  .map((resp) => ({
-                    responseId: resp.id,
-                    userName: resp.display_name || 'User',
-                    timestamp: resp.responded_at || resp.created_at,
-                  }));
-                if (photoResponses.length > 0) {
-                  answered.push({ group, challenge, photoResponses, responsesUnavailable: false });
-                }
-              } catch {
-                // Responses endpoint failed -- still show the card, without thumbnails
-                answered.push({ group, challenge, photoResponses: [], responsesUnavailable: true });
-              }
-            });
-
-          await Promise.all(challengeFetches);
-        } catch {
-          // Non-critical: group may not have challenge history yet
-        }
-      });
-
-      await Promise.all(fetches);
-      return answered;
-    },
-    enabled: groups.length > 0,
-    staleTime: 30_000,
+    queryKey: ['blinks-feed-v2'],
+    queryFn: () => fetchFeed(),
+    enabled: serverGroups.length > 0,
+    staleTime: 15_000,
   });
 
-  // ── Challenge-grouped feed ──
-  // The atomic unit is a CHALLENGE, not a photo. Live (unanswered) challenges
-  // become cards with an "Add yours" CTA; answered/closed challenges become a
-  // card with their response photos as thumbnails.
   const feedData = useMemo<FeedItemData[]>(() => {
-    const out: FeedItemData[] = [];
-
-    // Live challenges first — one card each, sorted soonest-to-expire.
-    const liveSorted = [...pendingChallenges].sort((a, b) => {
-      const ea = a.challenge.expires_at ? new Date(a.challenge.expires_at).getTime() : Infinity;
-      const eb = b.challenge.expires_at ? new Date(b.challenge.expires_at).getTime() : Infinity;
-      return ea - eb;
+    const items = feedQuery.data?.items ?? [];
+    const card = (c: ApiChallengeDetail, isLive: boolean): FeedItemData => ({
+      id: isLive ? `cc_live_${c.id}` : `cc_${c.id}`,
+      type: 'challenge_card',
+      groupId: c.group_id,
+      groupName: c.group_name,
+      groupEmoji: c.group_emoji,
+      challengeId: c.id,
+      challengePrompt: c.prompt || undefined,
+      isLive,
+      expiresAt: isLive ? c.expires_at : undefined,
+      responseCount: c.response_count,
+      memberCount: c.member_count,
+      challengeResponses: isLive
+        ? undefined
+        : c.responses.filter((r) => r.has_photo).map((r) => ({ responseId: r.id, userName: r.display_name || 'User' })),
+      timestamp: c.created_at,
     });
-    for (const pc of liveSorted) {
-      out.push({
-        id: `cc_live_${pc.challenge.id}`,
-        type: 'challenge_card',
-        groupId: pc.group.id,
-        groupName: pc.group.name,
-        groupEmoji: pc.group.emoji,
-        challengeId: pc.challenge.id,
-        challengePrompt: pc.challenge.prompt || undefined,
-        isLive: true,
-        expiresAt: pc.challenge.expires_at,
-        responseCount: pc.responses?.length ?? 0,
-        memberCount: pc.group.memberCount ?? pc.group.members?.length ?? 0,
-        timestamp: pc.challenge.created_at || new Date().toISOString(),
-      });
-    }
+    const newestActivity = (c: ApiChallengeDetail) =>
+      Math.max(new Date(c.created_at).getTime(), ...c.responses.map((r) => new Date(r.responded_at).getTime()));
 
-    // Answered/closed challenges, newest activity first.
-    const newest = (a: AnsweredChallenge) =>
-      Math.max(
-        ...a.photoResponses.map((p) => new Date(p.timestamp).getTime()),
-        a.responsesUnavailable ? new Date(a.challenge.created_at).getTime() : 0,
-        0,
-      );
-    const answered = [...(feedQuery.data ?? [])].sort((a, b) => newest(b) - newest(a));
-    for (const a of answered) {
-      out.push({
-        id: `cc_${a.challenge.id}`,
-        type: 'challenge_card',
-        groupId: a.group.id,
-        groupName: a.group.name,
-        groupEmoji: a.group.emoji,
-        challengeId: a.challenge.id,
-        challengePrompt: a.challenge.prompt || undefined,
-        isLive: false,
-        responseCount: a.responsesUnavailable ? Number(a.challenge.response_count) || 0 : a.photoResponses.length,
-        challengeResponses: a.photoResponses.length > 0 ? a.photoResponses : undefined,
-        timestamp: a.challenge.created_at,
-      });
-    }
-
-    return out;
-  }, [pendingChallenges, feedQuery.data]);
+    // Live challenges first, soonest-to-expire first.
+    const live = items
+      .filter((c) => shouldBlurOthers(c))
+      .sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())
+      .map((c) => card(c, true));
+    // Then the ones you answered, and closed ones anyone answered, newest activity first.
+    const rest = items
+      .filter((c) => !shouldBlurOthers(c) && (c.user_has_responded || c.response_count > 0))
+      .sort((a, b) => newestActivity(b) - newestActivity(a))
+      .map((c) => card(c, false));
+    return [...live, ...rest];
+  }, [feedQuery.data]);
 
   // Live updates (started / response / finalized) invalidate this screen's
   // queries in services/socketEvents.
@@ -339,11 +207,7 @@ export default function BlinksScreen() {
   );
 
   const handleRefresh = useCallback(async () => {
-    await Promise.all([
-      refreshGroups(),
-      queryClient.invalidateQueries({ queryKey: ['blinks-feed-v2'] }),
-      queryClient.invalidateQueries({ queryKey: ['feed-active-challenges'] }),
-    ]);
+    await Promise.all([refreshGroups(), queryClient.invalidateQueries({ queryKey: ['blinks-feed-v2'] })]);
   }, [refreshGroups, queryClient]);
 
   // ── Wire callbacks into each item ──
@@ -370,7 +234,7 @@ export default function BlinksScreen() {
   // or groups with no answered challenges yet.
   const hasNoGroups = !isGroupsLoading && groups.length === 0;
   const hasNoUserContent =
-    !isLoading && (hasNoGroups || (groups.length > 0 && feedQuery.isFetched && (feedQuery.data ?? []).length === 0));
+    !isLoading && (hasNoGroups || (groups.length > 0 && feedQuery.isFetched && feedData.length === 0));
 
   // ── List Header: the no-content / no-groups CTA ──
   const ListHeader = useMemo(() => {
