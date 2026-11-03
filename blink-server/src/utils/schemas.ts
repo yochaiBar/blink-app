@@ -142,6 +142,11 @@ const base64_48bytes = z
   .length(64, 'Must be base64-encoded 48 bytes (64 chars)')
   .regex(/^[A-Za-z0-9+/]{64}$/, 'Must be valid base64');
 
+// GET /api/device-keys?group_id= — fellow members' device keys.
+export const groupDeviceKeysQuerySchema = z.object({
+  group_id: z.string().uuid(),
+});
+
 const keyVersion = z.number().int().min(1);
 
 export const keyshareDeliverSchema = z.object({
