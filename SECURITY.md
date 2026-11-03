@@ -43,6 +43,9 @@ key for one specific device of a joining member:
 - Leaving a group or deleting your account cancels your pending key
   requests, releases anything you were couriering, and drops your photo
   pickups.
+- Only an admin can introduce a new key version, by being its first
+  holder: after a reset, only the admin who reset. So another member can't
+  slip in a key they made themselves as the group's new key.
 
 **Changed device keys (trust on first use).** Each phone pins every other
 member's device public key the first time it sees it. If a member's key
@@ -56,6 +59,11 @@ shows "<name>'s security key changed" until you accept the change.
   tell whether the first key seen for a member — for example, a member the
   server itself added — really belongs to them. Comparing safety codes in
   person would; that isn't built yet.
+- **The group key itself isn't verified.** A joiner can't tell whether the
+  key a courier hands it is the group's real key. A malicious current
+  member, acting as courier, could give a joiner a fake key. The joiner
+  then can't read the group's photos, and photos it sends are readable by
+  the faker instead of the group. Verifying group keys is planned.
 - **A compromised server** can't read photos. It does control accounts,
   group membership and routing, so it could add a member or device of its
   own and have the key couriered to it (see above). It could also withhold
