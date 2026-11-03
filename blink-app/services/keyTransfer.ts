@@ -5,7 +5,8 @@
  * group detail) use these and never touch the crypto or the endpoints.
  *
  *   • respondToKeyshareRequest — we're the courier: wrap our key for a
- *     joiner's device and deliver it
+ *     joiner's device and deliver it, unless that device's key changed
+ *     since we pinned it (services/keyPins)
  *   • acceptKeyshareEnvelope   — we're the joiner: unwrap, decide, confirm, store
  *   • mintGroupKey             — we're the source (new group, solo group,
  *     reset): make a key at the server's version and confirm we hold it
@@ -27,20 +28,29 @@ import {
   newGroupKey,
   storeGroupKey,
 } from '@/services/groupCrypto';
+import { checkPin } from '@/services/keyPins';
 import type { KeyshareEnvelope, KeyshareRequest } from '@/shared/photoProtocol';
+
+export type CourierOutcome =
+  | 'delivered'
+  | 'no_key' // we don't hold exactly the requested version
+  | 'key_changed'; // the joiner's device key differs from our pin; the user must accept it first
 
 /**
  * Courier path. Shares only the exact version the server asked for — a
- * stale or newer local key would be refused at /deliver anyway. Returns
- * whether an envelope was delivered.
+ * stale or newer local key would be refused at /deliver anyway — and only
+ * to a device key that matches our pin for that member (first sight pins).
  */
-export async function respondToKeyshareRequest(request: KeyshareRequest): Promise<boolean> {
-  if (request.v !== 2) return false;
+export async function respondToKeyshareRequest(request: KeyshareRequest): Promise<CourierOutcome> {
+  if (request.v !== 2) return 'no_key';
   const [groupKey, keyVersion] = await Promise.all([
     loadGroupKey(request.group_id),
     loadGroupKeyVersion(request.group_id),
   ]);
-  if (!groupKey || keyVersion !== request.key_version) return false;
+  if (!groupKey || keyVersion !== request.key_version) return 'no_key';
+  if ((await checkPin(request.joiner_user_id, request.joiner_x25519_public_key_b64)) === 'changed') {
+    return 'key_changed';
+  }
 
   const envelope = courierEncryptGroupKey(b64ToBytes(request.joiner_x25519_public_key_b64), groupKey, {
     groupId: request.group_id,
@@ -58,7 +68,7 @@ export async function respondToKeyshareRequest(request: KeyshareRequest): Promis
     iv_b64: bytesToB64(envelope.iv),
     ciphertext_b64: bytesToB64(envelope.ciphertext),
   });
-  return true;
+  return 'delivered';
 }
 
 export type EnvelopeOutcome =

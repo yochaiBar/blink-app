@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import type { NotificationItem } from '@/types';
 import type {
+  GroupDeviceKeysResponse,
   KeyshareConfirmResult,
   KeyshareDeliverRequest,
   KeyshareDeliverResult,
@@ -200,6 +201,11 @@ export function removeReactionApi(responseId: string, emoji: string): Promise<vo
 }
 
 // ── Group-key courier handshake (protocol v2) ──
+
+/** Fellow members' active device keys (members only), for TOFU pinning. */
+export function getGroupDeviceKeys(groupId: string): Promise<GroupDeviceKeysResponse> {
+  return api<GroupDeviceKeysResponse>(`/device-keys?group_id=${encodeURIComponent(groupId)}`);
+}
 
 /** Courier: hand the encrypted key to the server for the joiner's device. */
 export function deliverKeyshare(body: KeyshareDeliverRequest): Promise<KeyshareDeliverResult> {

@@ -2,11 +2,17 @@ import { Router, Response } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { validateBody } from '../middleware/validate';
-import { registerDeviceKeySchema } from '../utils/schemas';
+import { parsedQuery, validateBody, validateQuery } from '../middleware/validate';
+import { groupDeviceKeysQuerySchema, registerDeviceKeySchema } from '../utils/schemas';
 import { query } from '../config/database';
+import { requireMember } from '../services/membership';
 import logger from '../utils/logger';
-import type { RegisterDeviceKeyRequest, RegisterDeviceKeyResponse } from '../shared/photoProtocol';
+import type {
+  DevicePublicKey,
+  GroupDeviceKeysResponse,
+  RegisterDeviceKeyRequest,
+  RegisterDeviceKeyResponse,
+} from '../shared/photoProtocol';
 
 // ─────────────────────────────────────────────────────────────────
 // E2E photo flow — device public key registration.
@@ -30,8 +36,8 @@ import type { RegisterDeviceKeyRequest, RegisterDeviceKeyResponse } from '../sha
 //   - A fully-compromised server holds the JWT secret and CAN forge
 //     attestations. This defends against client-side bugs, cross-user replay,
 //     and certain MITM classes, not against root-level server compromise.
-//   - End-to-end key authenticity (UI-visible fingerprints, out-of-band
-//     verification) is a future enhancement.
+//   - Clients pin each member's key on first sight (TOFU) and flag a change;
+//     out-of-band verification (safety codes) is a future enhancement.
 //
 // Tombstoning (Plan M3 guard)
 // ───────────────────────────
@@ -145,6 +151,42 @@ router.post(
       registered_at: row.registered_at,
     };
     res.status(200).json(response);
+  }),
+);
+
+// ── GET /api/device-keys?group_id= — the group's members' active keys ──
+// Members only, so a caller learns keys only of people they share a group
+// with. Clients compare them against their pins (TOFU).
+router.get(
+  '/',
+  validateQuery(groupDeviceKeysQuerySchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { group_id } = parsedQuery<{ group_id: string }>(res);
+    await requireMember(req.userId!, { groupId: group_id });
+
+    const result = await query<{
+      user_id: string;
+      device_id: string;
+      x25519_public_key: string;
+      key_version: number;
+    }>(
+      `SELECT dk.user_id, dk.device_id, dk.x25519_public_key, dk.key_version
+         FROM device_public_keys dk
+         JOIN group_members gm ON gm.user_id = dk.user_id AND gm.group_id = $1
+        WHERE dk.tombstoned_at IS NULL
+        ORDER BY dk.user_id, dk.last_seen DESC`,
+      [group_id],
+    );
+    const keys: DevicePublicKey[] = result.rows.map((row) => ({
+      v: 1,
+      user_id: row.user_id,
+      device_id: row.device_id,
+      x25519_public_key_b64: row.x25519_public_key,
+      key_version: row.key_version,
+      tombstoned_at: null,
+    }));
+    const response: GroupDeviceKeysResponse = { v: 1, keys };
+    res.json(response);
   }),
 );
 

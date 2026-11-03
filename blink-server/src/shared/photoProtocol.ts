@@ -49,10 +49,13 @@ export interface RegisterDeviceKeyResponse {
 }
 
 /**
- * Read endpoint result: a single device's public key, looked up in the context
- * of an in-flight handshake (Plan M2 guard — no bulk listing). The caller must
- * provide a handshake context (response_id or pending_join_id) so the read can
- * be authorized and audit-logged.
+ * One member's active device public key, as `GET /api/device-keys?group_id=`
+ * lists them. Only fellow members of that group may read them (Plan M2:
+ * no listing beyond the people you share a group with).
+ *
+ * Clients pin each member's key the first time they see it (TOFU,
+ * blink-app/services/keyPins.ts) and refuse to courier the group key to a
+ * changed one until the user accepts the change.
  */
 export interface DevicePublicKey {
   v: 1;
@@ -63,6 +66,11 @@ export interface DevicePublicKey {
   // Server-side only; the app never needs to inspect it. Present in responses
   // so a courier can refuse a tombstoned key if a race lets one slip through.
   tombstoned_at: string | null;
+}
+
+export interface GroupDeviceKeysResponse {
+  v: 1;
+  keys: DevicePublicKey[];
 }
 
 // ── Associated data (AEAD) ──────────────────────────────────────

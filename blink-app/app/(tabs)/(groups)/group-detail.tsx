@@ -44,6 +44,7 @@ import {
   BottomActions,
   GroupMiniFeed,
   GroupStatsCard,
+  KeyChangeNotice,
 } from '@/components/group-detail';
 import type { ProgressData } from '@/components/group-detail';
 
@@ -510,6 +511,16 @@ export default function GroupDetailScreen() {
           hasActiveChallenge={group.hasActiveChallenge}
           currentUserId={user.id}
         />
+
+        {!isSample && id && (
+          <KeyChangeNotice
+            groupId={id}
+            currentUserId={user.id}
+            memberNames={Object.fromEntries(
+              (groupQuery.data?.members ?? []).map((m) => [m.user_id, m.display_name ?? 'A member']),
+            )}
+          />
+        )}
 
         {!isSample && id && <GroupStatsCard groupId={id} />}
 

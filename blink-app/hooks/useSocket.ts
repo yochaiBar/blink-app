@@ -175,8 +175,10 @@ export function useSocket() {
       socket.on('group:keyshare_request', async (payload: KeyshareRequest) => {
         if (__DEV__) console.log('[Socket] group:keyshare_request', payload.group_id);
         try {
-          const delivered = await respondToKeyshareRequest(payload);
-          if (!delivered && __DEV__) console.warn('[Socket] keyshare_request: we don’t hold that key version');
+          const outcome = await respondToKeyshareRequest(payload);
+          if (__DEV__) console.log('[Socket] keyshare_request', outcome);
+          // Surface "<name>'s security key changed" in group detail.
+          if (outcome === 'key_changed') queryClient.invalidateQueries({ queryKey: ['deviceKeys', payload.group_id] });
         } catch (err) {
           if (__DEV__) console.warn('[Socket] keyshare_request failed', err);
         }

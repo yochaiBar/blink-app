@@ -11,6 +11,7 @@ import './setup';
 import * as SecureStore from 'expo-secure-store';
 
 import { acceptKeyshareEnvelope, mintGroupKey, respondToKeyshareRequest } from '../services/keyTransfer';
+import { acceptKeyChange } from '../services/keyPins';
 import {
   bytesToB64,
   getOrCreateDeviceKey,
@@ -91,7 +92,7 @@ async function aliceSendsBob(key: Uint8Array, version = 1): Promise<KeyshareEnve
   const request = await requestForBob(version);
   on(alicePhone);
   await storeGroupKey(GROUP_ID, key, version);
-  expect(await respondToKeyshareRequest(request)).toBe(true);
+  expect(await respondToKeyshareRequest(request)).toBe('delivered');
   on(bobPhone);
   return envelopeFrom(mockDeliverKeyshare.mock.calls[mockDeliverKeyshare.mock.calls.length - 1][0]);
 }
@@ -124,10 +125,29 @@ describe('keyTransfer — courier', () => {
   it('declines when it does not hold exactly the requested version', async () => {
     const asksForV2 = await requestForBob(2);
     on(alicePhone);
-    expect(await respondToKeyshareRequest(asksForV2)).toBe(false); // no key at all
+    expect(await respondToKeyshareRequest(asksForV2)).toBe('no_key'); // no key at all
     await storeGroupKey(GROUP_ID, newGroupKey(), 1);
-    expect(await respondToKeyshareRequest(asksForV2)).toBe(false); // stale key
+    expect(await respondToKeyshareRequest(asksForV2)).toBe('no_key'); // stale key
     expect(mockDeliverKeyshare).not.toHaveBeenCalled();
+  });
+});
+
+describe('keyTransfer — courier pins (TOFU)', () => {
+  it('pins the joiner’s key on first sight and refuses a changed one until accepted', async () => {
+    await storeGroupKey(GROUP_ID, newGroupKey(), 1);
+    const first = await requestForBob();
+    expect(await respondToKeyshareRequest(first)).toBe('delivered');
+
+    // Bob reinstalls (or the server swaps in another key): same user, new key.
+    on(bobPhone);
+    bobPhone.clear();
+    const swapped = await requestForBob();
+    expect(swapped.joiner_x25519_public_key_b64).not.toBe(first.joiner_x25519_public_key_b64);
+    expect(await respondToKeyshareRequest(swapped)).toBe('key_changed');
+    expect(mockDeliverKeyshare).toHaveBeenCalledTimes(1);
+
+    await acceptKeyChange(BOB_ID, swapped.joiner_x25519_public_key_b64);
+    expect(await respondToKeyshareRequest(swapped)).toBe('delivered');
   });
 });
 
