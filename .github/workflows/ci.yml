@@ -138,3 +138,12 @@ jobs:
       # contract change must update both copies in the same PR.
       - name: photoProtocol.ts copies are identical
         run: cmp blink-server/src/shared/photoProtocol.ts blink-app/shared/photoProtocol.ts
+
+      # Removed for good in recovery Stage 1: server-stored photos, the
+      # TESTING_MODE login bypass and the AI SDK must not come back.
+      - name: No forbidden patterns
+        run: |
+          if git grep -nE 'photo_url|TESTING_MODE|@anthropic-ai' -- blink-server ':!blink-server/package-lock.json'; then
+            echo 'Forbidden pattern found (photo_url, TESTING_MODE or @anthropic-ai).'
+            exit 1
+          fi
