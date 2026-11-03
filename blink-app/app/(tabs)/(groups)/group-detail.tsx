@@ -57,7 +57,6 @@ export default function GroupDetailScreen() {
   const { addReaction, user } = useApp();
 
   const tourStep = useOnboardingStore((s) => s.tourStep);
-  const advanceTour = useOnboardingStore((s) => s.advanceTour);
   const completeTour = useOnboardingStore((s) => s.completeTour);
 
   // ── Local state ──
@@ -407,9 +406,10 @@ export default function GroupDetailScreen() {
 
   const handleGroupDetailTourNext = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    advanceTour('fab');
+    // Last tour step: finish the tour and head back to the groups list.
+    completeTour();
     router.back();
-  }, [advanceTour, router]);
+  }, [completeTour, router]);
 
   // ── Loading / Error / Empty states ──
   if (groupQuery.isLoading) {
@@ -572,7 +572,7 @@ export default function GroupDetailScreen() {
         onDismiss={completeTour}
         nextLabel="Got it"
         step={2}
-        totalSteps={3}
+        totalSteps={2}
       />
 
       <GroupSettingsModal

@@ -345,7 +345,7 @@ export default function GroupsScreen() {
         onDismiss={completeTour}
         nextLabel="Let's go"
         step={1}
-        totalSteps={3}
+        totalSteps={2}
       />
     </View>
   );

@@ -20,7 +20,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Camera,
   Users,
-  Zap,
   Sparkles,
   Phone,
   Check,
@@ -39,15 +38,14 @@ import { Button } from '@/components/ui';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Sample lifestyle photos for the animated collage
-const COLLAGE_PHOTOS = [
-  'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1516302752625-fcc3c50ae61f?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1543807535-eceef0bc6599?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1506869640319-fe1a24fd76cb?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1522543558187-768b6df7c25c?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1523301343968-6a6ebf63c672?w=200&h=200&fit=crop',
-];
+// Welcome screen copy (decided with the user, 2026-11-03).
+const WELCOME_COPY = {
+  headline: 'Your friends. One snap challenge a day.',
+  subline: 'End-to-end encrypted — we never store your photos.',
+};
+
+// Emoji ring around the logo (no stock photos).
+const COLLAGE_EMOJIS = ['📸', '🔥', '😂', '🙌', '🌅', '🍕'];
 
 const COUNTRY_CODES = [
   { code: '+972', flag: 'IL', label: 'Israel (+972)' },
@@ -96,7 +94,7 @@ export default function OnboardingScreen() {
   const collageScale = useRef(new Animated.Value(0.9)).current;
   const collageSpin = useRef(new Animated.Value(0)).current;
   const featureAnims = useRef(
-    [0, 1, 2].map(() => ({
+    [0, 1].map(() => ({
       opacity: new Animated.Value(0),
       translateY: new Animated.Value(24),
     })),
@@ -361,7 +359,6 @@ export default function OnboardingScreen() {
   const features = [
     { icon: Camera, label: 'Snap Challenges', desc: 'Drop everything. Capture the chaos.', color: theme.coral },
     { icon: Users, label: 'Friend Groups', desc: 'Your inner circle, zero randoms.', color: theme.purple },
-    { icon: Zap, label: 'Daily Prompts', desc: 'Unhinged questions. Real answers.', color: theme.blue },
   ];
 
   const getButtonText = () => {
@@ -431,7 +428,7 @@ export default function OnboardingScreen() {
           <Animated.View style={[styles.stepContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
             {step === 'welcome' && (
               <View style={styles.centerContent}>
-                {/* Animated photo collage */}
+                {/* Animated emoji ring */}
                 <Animated.View
                   style={[
                     styles.collageContainer,
@@ -441,23 +438,24 @@ export default function OnboardingScreen() {
                     },
                   ]}
                 >
-                  {COLLAGE_PHOTOS.map((uri, i) => {
+                  {COLLAGE_EMOJIS.map((emoji, i) => {
                     const angle = i * 60 * (Math.PI / 180);
                     const radius = 52;
                     const offsetX = Math.cos(angle) * radius;
                     const offsetY = Math.sin(angle) * radius;
                     const rotation = `${i * 15 - 30}deg`;
                     return (
-                      <Animated.Image
-                        key={i}
-                        source={{ uri }}
+                      <View
+                        key={emoji}
                         style={[
                           styles.collagePhoto,
                           {
                             transform: [{ translateX: offsetX }, { translateY: offsetY }, { rotate: rotation }],
                           },
                         ]}
-                      />
+                      >
+                        <Text style={styles.collageEmoji}>{emoji}</Text>
+                      </View>
                     );
                   })}
                   <LinearGradient colors={[theme.coral, theme.pink]} style={styles.collageCenter}>
@@ -474,10 +472,10 @@ export default function OnboardingScreen() {
                     },
                   ]}
                 >
-                  Welcome to Blink
+                  {WELCOME_COPY.headline}
                 </Animated.Text>
                 <Animated.Text style={[styles.welcomeSubtitle, { opacity: subtitleOpacity }]}>
-                  Be real. Be random.{'\n'}Your friends are waiting.
+                  {WELCOME_COPY.subline}
                 </Animated.Text>
 
                 <View style={styles.featureList}>
@@ -799,6 +797,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#1a1a2e',
     backgroundColor: '#2a1a3e',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  collageEmoji: {
+    fontSize: 28,
   },
   collageCenter: {
     width: 52,

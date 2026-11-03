@@ -16,7 +16,7 @@
  * Privacy contract honored here
  * ─────────────────────────────
  * Plaintext only ever exists in three places on disk:
- *   1. expo-image-picker temp file (briefly, before we ingest)
+ *   1. the camera capture temp file (briefly, before we ingest)
  *   2. the SENDER's local plaintext cache (photoStore, 7-day TTL)
  *   3. each RECIPIENT's received cache (photoStore, LRU eviction)
  * Server NEVER holds plaintext. Ciphertext flows through the server in

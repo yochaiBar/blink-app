@@ -27,7 +27,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     associatedDomains: ['applinks:blink.app'],
     infoPlist: {
       NSCameraUsageDescription: 'Blink needs camera access to capture snap challenges with your friends.',
-      NSPhotoLibraryUsageDescription: 'Blink needs photo library access to set your profile picture.',
       ITSAppUsesNonExemptEncryption: false,
     },
     privacyManifests: {
@@ -111,12 +110,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-camera',
       {
         cameraPermission: 'Blink needs camera access to capture snap challenges with your friends.',
-      },
-    ],
-    [
-      'expo-image-picker',
-      {
-        photosPermission: 'Blink needs photo library access to set your profile picture.',
       },
     ],
     [
