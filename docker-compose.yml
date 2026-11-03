@@ -1,7 +1,11 @@
-version: '3.8'
+# Local Postgres for development and the server integration suite.
+#   docker compose up -d postgres
+#   DATABASE_URL=postgresql://blink:blink_dev_password@localhost:5432/blink_dev
+#   TEST_DATABASE_URL=postgresql://blink:blink_dev_password@localhost:5432/blink_test
+# (blink_test is created on demand by the integration suite's global setup.)
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16
     environment:
       POSTGRES_DB: blink_dev
       POSTGRES_USER: blink
@@ -15,36 +19,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  backend:
-    build:
-      context: .
-      dockerfile: blink-server/Dockerfile
-    ports:
-      - "3000:3000"
-    env_file: ./blink-server/.env
-    environment:
-      DATABASE_URL: postgresql://blink:blink_dev_password@postgres:5432/blink_dev
-      REDIS_URL: redis://redis:6379
-      NODE_ENV: development
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./blink-server/src:/app/src
-    command: npx nodemon --exec ts-node src/index.ts
 
 volumes:
   postgres_data:
