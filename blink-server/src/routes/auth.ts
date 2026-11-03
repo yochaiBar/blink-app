@@ -17,7 +17,7 @@ import { UserRow } from '../types/db';
 import { DEV_OTP, generateOtp, storeOtp, verifyOtp } from '../services/otp';
 import { createSession, revokeSession, rotateRefreshToken } from '../services/authSessions';
 import { disconnectUser } from '../socket';
-import { handleAdminLeave } from '../services/groupService';
+import { handleAdminLeave, releaseMembership } from '../services/groupService';
 
 const router = Router();
 
@@ -248,6 +248,7 @@ router.delete(
     // and refresh token stops working at once. Groups the user administers
     // are handed over first (or deleted, if the user was the last member).
     const deleted = await withTransaction(async (client) => {
+      await releaseMembership(client, req.userId as string);
       const adminOf = await client.query<{ group_id: string }>(
         `SELECT group_id FROM group_members WHERE user_id = $1 AND role = 'admin'`,
         [req.userId],

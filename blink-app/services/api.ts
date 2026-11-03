@@ -1,7 +1,15 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import type { NotificationItem } from '@/types';
-import type { RelayPhotoRequest, RelayPhotoResult } from '@/shared/photoProtocol';
+import type {
+  KeyshareConfirmResult,
+  KeyshareDeliverRequest,
+  KeyshareDeliverResult,
+  KeyshareRecoveryResult,
+  KeyshareResetResult,
+  RelayPhotoRequest,
+  RelayPhotoResult,
+} from '@/shared/photoProtocol';
 
 // ── Response types for API functions ──
 
@@ -191,66 +199,48 @@ export function removeReactionApi(responseId: string, emoji: string): Promise<vo
   });
 }
 
-// ── Keyshare deliver (E2E photo flow, Phase 4) ──
-export interface KeyshareDeliverBody {
-  v: 1;
-  pending_join_id: string;
-  group_id: string;
-  from_user_id: string;
-  from_device_id: string;
-  ephemeral_public_key_b64: string;
-  iv_b64: string;
-  auth_tag_b64: string;
-  ciphertext_b64: string;
-  group_key_version: number;
-}
+// ── Group-key courier handshake (protocol v2) ──
 
-export interface KeyshareDeliverResult {
-  v: 1;
-  delivered: boolean;
-}
-
-export function deliverKeyshare(body: KeyshareDeliverBody): Promise<KeyshareDeliverResult> {
+/** Courier: hand the encrypted key to the server for the joiner's device. */
+export function deliverKeyshare(body: KeyshareDeliverRequest): Promise<KeyshareDeliverResult> {
   return api<KeyshareDeliverResult>('/keyshare/deliver', {
     method: 'POST',
     body: JSON.stringify(body),
   });
 }
 
-// ── Keyshare recovery (missing/stale group key) ──
-export interface KeyshareRequestResult {
-  v: 1;
-  enqueued: boolean;
-  couriers_notified: number;
-}
-
 /**
- * Ask online group members to (re-)courier the group key to this device.
- * Used when a member belongs to a group but has no local key (stalled join
- * / pre-migration group) or holds a stale key after a rotation.
+ * Ask a holder of the current key to courier it to this device. Used when
+ * a member has no local key (stalled join, reinstall) or a stale one after
+ * a reset.
  */
-export function requestKeyshare(body: { group_id: string; device_id: string }): Promise<KeyshareRequestResult> {
-  return api<KeyshareRequestResult>('/keyshare/request', {
+export function requestKeyshare(body: { group_id: string; device_id: string }): Promise<KeyshareRecoveryResult> {
+  return api<KeyshareRecoveryResult>('/keyshare/request', {
     method: 'POST',
-    body: JSON.stringify({ v: 1, ...body }),
+    body: JSON.stringify({ v: 2, ...body }),
   });
 }
 
-// ── Keyshare reset / regeneration (admin) ──
-export interface KeyshareResetResult {
-  v: 1;
-  group_key_version: number;
+/**
+ * Tell the server this device holds the group key at `key_version`. Rejects
+ * (409) unless it's the group's current version. Makes us a courier.
+ */
+export function confirmGroupKey(body: { group_id: string; key_version: number }): Promise<KeyshareConfirmResult> {
+  return api<KeyshareConfirmResult>('/keyshare/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ v: 2, ...body }),
+  });
 }
 
 /**
- * Admin-only: bump the group's key version on the server (which never sees
- * the key). Caller then mints a fresh key locally at the returned version
- * and members pull it via requestKeyshare.
+ * Admin-only, step one of a reset: bump the group's key version on the
+ * server (which never sees the key). The caller then mints a fresh key at
+ * the returned version and confirms it; only then are members told.
  */
 export function resetGroupKey(body: { group_id: string }): Promise<KeyshareResetResult> {
   return api<KeyshareResetResult>('/keyshare/reset', {
     method: 'POST',
-    body: JSON.stringify({ v: 1, ...body }),
+    body: JSON.stringify({ v: 2, ...body }),
   });
 }
 

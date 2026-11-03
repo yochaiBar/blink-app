@@ -9,7 +9,7 @@ import { runMigrations } from './config/migrationRunner';
 import { createApp } from './app';
 import logger from './utils/logger';
 import { registerRelayHub, reapOldPickups } from './services/relayHub';
-import { registerKeyshareHub, expireStalePendingJoins } from './services/keyshareHub';
+import { registerKeyshareHub, reapOldPendingJoins } from './services/keyshareHub';
 import { OTP_RATE_LIMIT_PER_HOUR } from './utils/constants';
 import { initSocket } from './socket';
 import { startChallengeJobs } from './jobs/challengeJobs';
@@ -17,7 +17,7 @@ import { startDailyChallengeJob } from './jobs/dailyChallenge';
 
 const PORT = env.PORT;
 
-// Reap 7-day-old photo pickups and expire stale pending_joins every hour.
+// Reap 7-day-old photo pickups and pending joins every hour.
 // Both are single indexed statements; cheap enough to run frequently.
 const PENDING_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -32,9 +32,9 @@ function startPendingCleanup(): void {
           error: err instanceof Error ? err.message : String(err),
         });
       });
-    expireStalePendingJoins()
+    reapOldPendingJoins()
       .then((count) => {
-        if (count > 0) logger.info('expired stale pending joins', { count });
+        if (count > 0) logger.info('reaped old pending joins', { count });
       })
       .catch((err: unknown) => {
         logger.error('pending join cleanup failed', {

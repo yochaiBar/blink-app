@@ -2,19 +2,14 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Group } from '@/types';
-import { api, requestKeyshare } from '@/services/api';
+import { api, confirmGroupKey, requestKeyshare } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { apiGroupListToGroup } from '@/utils/adapters';
 import { ApiGroupListItem } from '@/types/api';
 import { demoSource } from '@/services/demoSource';
-import {
-  getOrCreateDeviceKey,
-  loadGroupKey,
-  loadGroupKeyVersion,
-  newGroupKey,
-  storeGroupKey,
-} from '@/services/groupCrypto';
+import { getOrCreateDeviceKey, loadGroupKey, loadGroupKeyVersion } from '@/services/groupCrypto';
+import { mintGroupKey } from '@/services/keyTransfer';
 import { queryKeys } from '@/utils/queryKeys';
 
 export function useGroups() {
@@ -41,14 +36,14 @@ export function useGroups() {
   // ── Group-key bootstrap + recovery (E2E photo flow) ─────────────
   // On launch we reconcile every group's local key against reality:
   //
-  //   • Solo group, no key → generate locally (no one to diverge from).
-  //   • Multi-member group, no key → REQUEST recovery. The original flow
-  //     only couriered a key at join time, so a stalled join or a
-  //     pre-migration group whose server key was dropped left the member
-  //     permanently stuck on "no group key; handshake required". This asks
-  //     online members to re-courier it.
+  //   • Solo group, no key → mint locally (no one to diverge from) and
+  //     confirm it.
+  //   • Multi-member group, no key → REQUEST recovery, so a holder of the
+  //     current key re-couriers it (stalled join, reinstall).
   //   • Key present but STALE (local version < server version) → an admin
-  //     regenerated the key; pull the new one via recovery too.
+  //     reset the key; pull the new one via recovery too.
+  //   • Key present at the server's version → (re-)confirm it, so the
+  //     server knows we can courier it. Idempotent.
   useEffect(() => {
     if (!querySettled) return;
     void (async () => {
@@ -67,9 +62,12 @@ export function useGroups() {
         if (!existing) {
           if (count <= 1) {
             // Solo — safe to mint locally at the server's version.
-            const key = newGroupKey();
-            await storeGroupKey(g.id, key, serverVersion);
-            if (__DEV__) console.log('[useGroups] auto-generated key for solo group', g.id);
+            try {
+              await mintGroupKey(g.id, serverVersion);
+              if (__DEV__) console.log('[useGroups] auto-generated key for solo group', g.id);
+            } catch (err) {
+              if (__DEV__) console.warn('[useGroups] solo key mint failed', g.id, err);
+            }
           } else {
             // Multi-member and we have nothing — ask for a re-courier.
             try {
@@ -85,7 +83,9 @@ export function useGroups() {
         // We hold a key — pull a newer one if the server's version moved
         // ahead of ours (admin reset).
         const localVersion = await loadGroupKeyVersion(g.id);
-        if (serverVersion > localVersion) {
+        if (serverVersion === localVersion) {
+          confirmGroupKey({ group_id: g.id, key_version: localVersion }).catch(() => undefined);
+        } else if (serverVersion > localVersion) {
           try {
             await requestKeyshare({ group_id: g.id, device_id: await ensureDeviceId() });
             if (__DEV__) {
@@ -109,23 +109,19 @@ export function useGroups() {
   // ── Create group ──
   const groupMutation = useMutation({
     mutationFn: async (group: Group) => {
-      const result = await api<{ id: string }>('/groups', {
+      const result = await api<{ id: string; group_key_version?: number }>('/groups', {
         method: 'POST',
         body: JSON.stringify({ name: group.name, icon: group.emoji }),
       });
       // Group creator becomes the source of truth for the group key. No
-      // handshake needed — we ARE the only member. Subsequent joiners
-      // receive the key via the courier flow from our device.
+      // handshake needed — we ARE the only member. Confirming it lets us
+      // courier it to later joiners.
       try {
-        const key = newGroupKey();
-        await storeGroupKey(result.id, key);
+        await mintGroupKey(result.id, result.group_key_version ?? 1);
       } catch (err) {
-        // Non-blocking: the group exists; if local key storage failed,
-        // photo sending will surface "no group key" until we successfully
-        // re-store on next app launch (the key would be regenerated though
-        // — Phase 5 wiring will need a retry-or-rotate UX). For v1 this
-        // path is extremely unlikely (Keychain failure).
-        if (__DEV__) console.warn('[useGroups] group key store failed', err);
+        // Non-blocking: the group exists. The launch-time reconcile above
+        // mints (solo) or re-confirms the key on the next pass.
+        if (__DEV__) console.warn('[useGroups] group key setup failed', err);
       }
       return result;
     },

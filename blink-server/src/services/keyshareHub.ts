@@ -1,65 +1,54 @@
 /**
- * Group-key courier handshake hub — orchestrates the Phase 4 flow.
+ * Group-key courier handshake hub (protocol v2).
  *
- * Flow (high level)
- * ─────────────────
- *   1. Joiner Bob joins group G via POST /api/groups/join.
- *   2. `enqueueKeyshare(G, Bob, BobDevice)` writes a `pending_joins` row.
- *      If any existing member is online, an immediate dispatch tries to
- *      hand the row to a courier; otherwise it waits.
- *   3. When ANY existing member of G connects, the socket connect
- *      listener fires `dispatchPendingKeysharesForUser(courierId)`. That
- *      function atomically claims pending rows whose group the courier
- *      belongs to (`pending → in_flight`), looks up the joiner's current
- *      device public key from `device_public_keys`, and emits
- *      `group:keyshare_request` to the courier's device-specific room.
- *   4. The courier's device performs X25519 ECDH + HKDF + AES-GCM
- *      against the joiner's static public key (already battle-tested in
- *      Phase 2's `courierEncryptGroupKey`) and POSTs the envelope to
- *      `/api/keyshare/deliver`.
- *   5. The deliver route calls `markKeyshareDelivered`, which flips the
- *      row to `delivered` and emits `group:keyshare_envelope` to the
- *      joiner's device room. The joiner decrypts and stores locally.
+ * Flow
+ * ────
+ *   1. A joiner (or a member who lost the key) gets a `pending_joins` row
+ *      for (group, user) naming the device that needs the key.
+ *   2. Whenever that device and a member holding the group's CURRENT key
+ *      version (confirmed via /confirm) are both online, the row is claimed
+ *      for that courier with a short lease and `group:keyshare_request` is
+ *      sent to it. An unanswered lease just expires; the next connect of
+ *      either party offers the row again.
+ *   3. The courier encrypts the key to the device client-side and POSTs it
+ *      to /deliver. Only the claiming courier, while both are still
+ *      members, at the current version, may deliver; the envelope goes only
+ *      to `user-device:<joiner>:<device>`.
+ *   4. The joiner's device confirms it holds the key (/confirm), which
+ *      deletes the row and makes it a courier too.
  *
- * The server never touches the group key in any state. The envelope is
- * opaque ciphertext on the wire.
+ * Reset is two steps: /reset bumps the version (and frees every claim);
+ * the admin's device mints a key at that version and confirms it, and only
+ * then does the group hear `group:key_rotated` — so members never ask for
+ * a key nobody holds yet.
  *
- * Race resolution
- * ───────────────
- * Two existing members of G could connect at the same instant when a
- * single pending row exists. Only ONE wins: the `UPDATE ... WHERE state =
- * 'pending' RETURNING *` is atomic at the row level — Postgres serializes
- * it. The losing connect listener simply finds zero rows and does nothing.
- * No `keyshare_cancelled` event needed.
- *
- * Multi-courier broadcast (an alternative we rejected): emit to all online
- * members and let only one win. That would require explicit cancel events,
- * client-side dedup, and a way to refund a stolen claim. The simpler
- * "first-to-claim-wins" model is good enough for the small-group case.
+ * The server never touches the group key; envelopes are opaque ciphertext.
  */
 
-import { query } from '../config/database';
-import { emitToUser, isUserOnline, onUserConnect } from '../socket';
+import { query, withTransaction } from '../config/database';
+import {
+  emitToGroup,
+  emitToUser,
+  emitToUserDevice,
+  isDeviceOnline,
+  isUserOnline,
+  onDeviceReady,
+  onUserConnect,
+} from '../socket';
+import { HttpError } from '../utils/httpError';
 import logger from '../utils/logger';
-import type { KeyshareRequest } from '../shared/photoProtocol';
+import type {
+  KeyRotatedEvent,
+  KeyshareDeliverRequest,
+  KeyshareEnvelope,
+  KeyshareRequest,
+} from '../shared/photoProtocol';
 
-const TTL_DAYS = 7;
+/** How long a claimed join waits for the courier's envelope before it's offered again. */
+export const KEYSHARE_LEASE_SECONDS = 120;
+const PENDING_JOIN_TTL_DAYS = 7;
 
-interface PendingJoinRow {
-  id: string;
-  group_id: string;
-  joiner_user_id: string;
-  joiner_device_id: string;
-}
-
-interface JoinerKeyRow {
-  device_id: string;
-  x25519_public_key: string;
-}
-
-// ─────────────────────────────────────────────────────────────────
-// enqueueKeyshare — called at join time
-// ─────────────────────────────────────────────────────────────────
+// ── Enqueue ───────────────────────────────────────────────────────
 
 export interface EnqueueKeyshareArgs {
   groupId: string;
@@ -68,235 +57,300 @@ export interface EnqueueKeyshareArgs {
 }
 
 /**
- * Idempotent insert of a `pending` row. ON CONFLICT (the UNIQUE on
- * (group_id, joiner_user_id, state)) does nothing if a pending row already
- * exists — re-joins don't double-enqueue. Returns the row id (existing or
- * new) for the caller to thread through any immediate-dispatch attempt.
+ * Upsert the (group, joiner) row for `joinerDeviceId`. A repeat request
+ * (another device, a retry) replaces the device and frees any claim.
  */
-export async function enqueueKeyshare(args: EnqueueKeyshareArgs): Promise<string | null> {
-  const result = await query<{ id: string }>(
-    `INSERT INTO pending_joins (group_id, joiner_user_id, joiner_device_id, state)
-     VALUES ($1, $2, $3, 'pending')
-     ON CONFLICT (group_id, joiner_user_id, state) DO UPDATE
+export async function enqueueKeyshare(args: EnqueueKeyshareArgs): Promise<void> {
+  await query(
+    `INSERT INTO pending_joins (group_id, joiner_user_id, joiner_device_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (group_id, joiner_user_id) DO UPDATE
        SET joiner_device_id = EXCLUDED.joiner_device_id,
-           state_changed_at = NOW()
-     RETURNING id`,
+           courier_user_id = NULL,
+           lease_expires_at = NULL,
+           created_at = NOW()`,
     [args.groupId, args.joinerUserId, args.joinerDeviceId],
   );
-  return result.rows[0]?.id ?? null;
-}
-
-// ─────────────────────────────────────────────────────────────────
-// requestKeyshareRecovery — client-initiated escape hatch
-// ─────────────────────────────────────────────────────────────────
-
-export interface RequestKeyshareRecoveryArgs {
-  groupId: string;
-  requesterUserId: string;
-  requesterDeviceId: string;
 }
 
 /**
- * A member who belongs to `groupId` but has no local group key asks for it
- * to be re-couriered to their device. This is the recovery counterpart to
- * the join-time `enqueueKeyshare`: the original flow only ever fired on a
- * NEW join, so a stalled/failed join — or a pre-migration group whose
- * server-side key was dropped — left the member permanently stuck on
- * "no group key; handshake required".
- *
- * We reuse the pending_joins machinery wholesale: enqueue a `pending` row
- * for the requester (idempotent), then nudge every ONLINE other member to
- * run `dispatchPendingKeysharesForUser`, which atomically claims the row
- * and couriers the key. If no other member is online (or none holds the
- * key), the row simply waits — the next member to connect picks it up via
- * the existing `onUserConnect` dispatch, and the TTL cron reaps it if
- * nothing ever happens.
- *
- * Caller (route) is responsible for verifying membership BEFORE calling.
+ * A member without the current key asks for it on `requesterDeviceId`. They
+ * no longer count as a holder, so they aren't asked to courier meanwhile.
+ * Caller (route) verifies membership first.
  */
-export async function requestKeyshareRecovery(
-  args: RequestKeyshareRecoveryArgs,
-): Promise<{ enqueued: boolean; couriersNotified: number }> {
-  const pendingId = await enqueueKeyshare({
+export async function requestKeyshareRecovery(args: {
+  groupId: string;
+  requesterUserId: string;
+  requesterDeviceId: string;
+}): Promise<{ enqueued: boolean; couriersNotified: number }> {
+  await query(`UPDATE group_members SET key_version = NULL WHERE group_id = $1 AND user_id = $2`, [
+    args.groupId,
+    args.requesterUserId,
+  ]);
+  await enqueueKeyshare({
     groupId: args.groupId,
     joinerUserId: args.requesterUserId,
     joinerDeviceId: args.requesterDeviceId,
   });
-
-  // Find the OTHER current members — any of them could hold the key and
-  // act as courier.
-  const others = await query<{ user_id: string }>(
-    `SELECT user_id FROM group_members WHERE group_id = $1 AND user_id <> $2`,
-    [args.groupId, args.requesterUserId],
-  );
-
-  let couriersNotified = 0;
-  for (const m of others.rows) {
-    if (await isUserOnline(m.user_id)) {
-      // Await so the emit has happened before we return (and so the count
-      // is accurate). Group sizes are tiny; sequential is fine.
-      await dispatchPendingKeysharesForUser(m.user_id);
-      couriersNotified++;
-    }
-  }
-
-  logger.info('keyshare recovery requested', {
-    enqueued: pendingId !== null,
-    couriers_notified: couriersNotified,
-  });
-
-  return { enqueued: pendingId !== null, couriersNotified };
+  const couriersNotified = await dispatchKeysharesFor(args.requesterUserId);
+  logger.info('keyshare recovery requested', { couriers_notified: couriersNotified });
+  return { enqueued: true, couriersNotified };
 }
 
-// ─────────────────────────────────────────────────────────────────
-// dispatchPendingKeysharesForUser — runs on socket connect
-// ─────────────────────────────────────────────────────────────────
+// ── Dispatch ──────────────────────────────────────────────────────
+
+interface CandidateRow {
+  id: string;
+  group_id: string;
+  joiner_user_id: string;
+  joiner_device_id: string;
+  group_key_version: number;
+}
+
+/** Holders of the group's current key version, `preferred` first, then by seniority. */
+async function onlineCourier(row: CandidateRow, preferred: string): Promise<string | null> {
+  const holders = await query<{ user_id: string }>(
+    `SELECT user_id FROM group_members
+      WHERE group_id = $1 AND key_version = $2 AND user_id <> $3
+      ORDER BY (user_id = $4) DESC, joined_at ASC`,
+    [row.group_id, row.group_key_version, row.joiner_user_id, preferred],
+  );
+  for (const { user_id } of holders.rows) {
+    if (await isUserOnline(user_id)) return user_id;
+  }
+  return null;
+}
 
 /**
- * For one online user, find every pending join in a group they're a
- * member of, atomically claim each, and emit `group:keyshare_request`.
- *
- * Joiner's public key is looked up live — handles the reinstall case
- * (their tombstoned old keypair won't surface, the latest active key
- * wins). If the joiner has NO active device key registered, the row is
- * left in `in_flight` (the row was claimed but no payload sent); the TTL
- * cron will reap it eventually. We could `UPDATE state = 'cancelled'` in
- * that case, but accepting the small wait is fine for v1.
+ * Offer every free (unclaimed or lapsed) pending join that `userId` takes
+ * part in — as the joiner, or as a holder of the current key — whose joiner
+ * device and some courier are online now. Returns how many requests went out.
  */
-export async function dispatchPendingKeysharesForUser(courierUserId: string): Promise<number> {
-  // Atomic claim: only flip rows where THIS user is a member of the join's
-  // group AND the row is still `pending`. EXISTS-against-group_members
-  // happens inside the SQL so we don't race a leave-then-courier scenario.
-  // RETURNING gives us everything we need to look up the joiner's pubkey.
-  const claimed = await query<PendingJoinRow>(
-    `UPDATE pending_joins pj
-        SET state = 'in_flight', state_changed_at = NOW()
-       FROM (
-         SELECT id FROM pending_joins
-          WHERE state = 'pending'
-            AND EXISTS (
-              SELECT 1 FROM group_members gm
-               WHERE gm.group_id = pending_joins.group_id
-                 AND gm.user_id = $1
-            )
-            AND joiner_user_id <> $1
-       ) AS eligible
-      WHERE pj.id = eligible.id
-   RETURNING pj.id, pj.group_id, pj.joiner_user_id, pj.joiner_device_id`,
-    [courierUserId],
+export async function dispatchKeysharesFor(userId: string): Promise<number> {
+  const candidates = await query<CandidateRow>(
+    `SELECT pj.id, pj.group_id, pj.joiner_user_id, pj.joiner_device_id, g.group_key_version
+       FROM pending_joins pj
+       JOIN groups g ON g.id = pj.group_id
+      WHERE (pj.lease_expires_at IS NULL OR pj.lease_expires_at < NOW())
+        AND (pj.joiner_user_id = $1
+             OR EXISTS (SELECT 1 FROM group_members gm
+                         WHERE gm.group_id = pj.group_id AND gm.user_id = $1
+                           AND gm.key_version = g.group_key_version))`,
+    [userId],
   );
 
-  if (claimed.rows.length === 0) return 0;
-
-  let emitted = 0;
-  for (const row of claimed.rows) {
-    // Look up the joiner's CURRENT active device public key. Most-recently-
-    // seen, non-tombstoned. If they've reinstalled the row may reference
-    // an old device_id that's been tombstoned — we encrypt to the new key
-    // in that case.
-    const keyLookup = await query<JoinerKeyRow>(
-      `SELECT device_id, x25519_public_key
-         FROM device_public_keys
-        WHERE user_id = $1 AND tombstoned_at IS NULL
-        ORDER BY last_seen DESC
-        LIMIT 1`,
-      [row.joiner_user_id],
+  let sent = 0;
+  for (const row of candidates.rows) {
+    if (!(await isDeviceOnline(row.joiner_user_id, row.joiner_device_id))) continue;
+    const key = await query<{ x25519_public_key: string }>(
+      `SELECT x25519_public_key FROM device_public_keys
+        WHERE user_id = $1 AND device_id = $2 AND tombstoned_at IS NULL`,
+      [row.joiner_user_id, row.joiner_device_id],
     );
-    const joinerKey = keyLookup.rows[0];
-    if (!joinerKey) {
-      // Joiner has no device key registered yet (race: they joined before
-      // their device key registration POST landed). Leave the row in
-      // `in_flight`; the next courier connect attempt will retry. If
-      // nothing ever happens, TTL reaps it.
-      continue;
-    }
+    if (key.rows.length === 0) continue; // device key not registered (yet)
+    const courier = await onlineCourier(row, userId);
+    if (!courier) continue;
 
-    const payload: KeyshareRequest = {
-      v: 1,
+    // Atomic claim: only one dispatcher wins a free (or lapsed) lease.
+    const claim = await query(
+      `UPDATE pending_joins
+          SET courier_user_id = $2, lease_expires_at = NOW() + make_interval(secs => $3)
+        WHERE id = $1 AND (lease_expires_at IS NULL OR lease_expires_at < NOW())
+        RETURNING id`,
+      [row.id, courier, KEYSHARE_LEASE_SECONDS],
+    );
+    if (claim.rows.length === 0) continue;
+
+    const request: KeyshareRequest = {
+      v: 2,
+      pending_join_id: row.id,
       group_id: row.group_id,
       joiner_user_id: row.joiner_user_id,
-      joiner_device_id: joinerKey.device_id,
-      joiner_x25519_public_key_b64: joinerKey.x25519_public_key,
-      pending_join_id: row.id,
+      joiner_device_id: row.joiner_device_id,
+      joiner_x25519_public_key_b64: key.rows[0].x25519_public_key,
+      key_version: row.group_key_version,
     };
-    // Emit to the courier's WHOLE user room (any of their devices can
-    // serve). The first device to respond completes the handshake; later
-    // POSTs by the same user against an already-`delivered` row are
-    // silently no-op by markKeyshareDelivered's WHERE clause.
-    emitToUser(courierUserId, 'group:keyshare_request', payload);
-    emitted++;
+    // Any of the courier's devices holding the key may answer.
+    emitToUser(courier, 'group:keyshare_request', request);
+    sent++;
   }
 
-  logger.info('keyshare requests dispatched', {
-    courier_count: 1,
-    request_count: emitted,
-  });
-
-  return emitted;
+  if (sent > 0) logger.info('keyshare requests dispatched', { request_count: sent });
+  return sent;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// markKeyshareDelivered — called from the deliver route
-// ─────────────────────────────────────────────────────────────────
+// ── Deliver ───────────────────────────────────────────────────────
 
-export interface DeliverKeyshareArgs {
-  pendingJoinId: string;
-  joinerUserId: string; // pulled from the row, used for the emit fan-out
-  envelope: unknown; // opaque to the server; we forward whole
+interface DeliverRow {
+  group_id: string;
+  joiner_user_id: string;
+  joiner_device_id: string;
+  courier_user_id: string | null;
+  group_key_version: number;
+  courier_key_version: number | null;
+  courier_is_member: boolean;
+  joiner_is_member: boolean;
 }
 
 /**
- * Flip pending → delivered (idempotent) and emit
- * `group:keyshare_envelope` to the joiner's device room. Returns whether
- * the row was actually flipped this call — false means another courier
- * already delivered, in which case the late courier's emit is suppressed
- * to avoid the joiner getting two envelopes.
+ * Forward a courier's envelope to the joiner's device. The row stays until
+ * the joiner confirms, so a missed envelope is simply offered again.
  */
-export async function markKeyshareDelivered(args: DeliverKeyshareArgs): Promise<{ deliveredThisCall: boolean }> {
-  const update = await query<{ joiner_device_id: string }>(
-    `UPDATE pending_joins
-        SET state = 'delivered', state_changed_at = NOW()
-      WHERE id = $1
-        AND joiner_user_id = $2
-        AND state IN ('pending', 'in_flight')
-   RETURNING joiner_device_id`,
-    [args.pendingJoinId, args.joinerUserId],
+export async function deliverKeyshare(callerUserId: string, body: KeyshareDeliverRequest): Promise<void> {
+  const result = await query<DeliverRow>(
+    `SELECT pj.group_id, pj.joiner_user_id, pj.joiner_device_id, pj.courier_user_id, g.group_key_version,
+            cm.key_version AS courier_key_version,
+            cm.user_id IS NOT NULL AS courier_is_member,
+            EXISTS (SELECT 1 FROM group_members jm
+                     WHERE jm.group_id = pj.group_id AND jm.user_id = pj.joiner_user_id) AS joiner_is_member
+       FROM pending_joins pj
+       JOIN groups g ON g.id = pj.group_id
+       LEFT JOIN group_members cm ON cm.group_id = pj.group_id AND cm.user_id = $2
+      WHERE pj.id = $1`,
+    [body.pending_join_id, callerUserId],
   );
-
-  if (update.rows.length === 0) {
-    return { deliveredThisCall: false };
+  const row = result.rows[0];
+  if (!row || !row.joiner_is_member) throw new HttpError(404, 'Pending join not found');
+  if (row.courier_user_id !== callerUserId || !row.courier_is_member) {
+    throw new HttpError(403, 'Not the courier for this join');
+  }
+  if (body.key_version !== row.group_key_version || row.courier_key_version !== row.group_key_version) {
+    throw new HttpError(409, 'Group key version mismatch');
   }
 
-  // Emit to the joiner's whole user room rather than just the recorded
-  // device_id — between join and delivery they may have registered a
-  // newer device. Joiner-side client validates the envelope decrypts
-  // before storing.
-  emitToUser(args.joinerUserId, 'group:keyshare_envelope', args.envelope);
-
-  logger.info('keyshare delivered', { pending_join_id_present: true });
-  return { deliveredThisCall: true };
+  const envelope: KeyshareEnvelope = {
+    v: 2,
+    pending_join_id: body.pending_join_id,
+    group_id: row.group_id,
+    from_user_id: callerUserId,
+    from_device_id: body.from_device_id,
+    key_version: body.key_version,
+    ephemeral_public_key_b64: body.ephemeral_public_key_b64,
+    iv_b64: body.iv_b64,
+    ciphertext_b64: body.ciphertext_b64,
+  };
+  emitToUserDevice(row.joiner_user_id, row.joiner_device_id, 'group:keyshare_envelope', envelope);
+  logger.info('keyshare delivered');
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Registration + cleanup
-// ─────────────────────────────────────────────────────────────────
+// ── Confirm / reset ───────────────────────────────────────────────
+
+interface ConfirmContext {
+  group_key_version: number;
+  key_minted_by: string | null;
+  caller_role: string | null;
+  caller_holds: boolean;
+  others_hold: boolean;
+  minter_is_admin: boolean;
+}
+
+/**
+ * The caller's device now holds the key at `keyVersion` (409 unless it's
+ * current). Ends their pending join and makes them a courier.
+ *
+ * Introducing a version — being its first holder — is reserved for an
+ * admin: after a reset, the admin who reset (while still an admin);
+ * otherwise any admin (e.g. the creator at v1). Anyone else could only hold
+ * a key they minted themselves, which couriers would then spread. Once an
+ * admin holds it, members who received it confirm freely. The first holder
+ * of a version after a reset fans out `group:key_rotated`.
+ */
+export async function confirmGroupKey(callerUserId: string, groupId: string, keyVersion: number): Promise<void> {
+  const rotated = await withTransaction(async (client) => {
+    // Lock the group row so a concurrent reset or confirm can't slip
+    // between these checks and the update.
+    const result = await client.query<ConfirmContext>(
+      `SELECT g.group_key_version, g.key_minted_by,
+              (SELECT role FROM group_members WHERE group_id = g.id AND user_id = $2) AS caller_role,
+              EXISTS (SELECT 1 FROM group_members
+                       WHERE group_id = g.id AND user_id = $2 AND key_version = $3) AS caller_holds,
+              EXISTS (SELECT 1 FROM group_members
+                       WHERE group_id = g.id AND user_id <> $2 AND key_version = $3) AS others_hold,
+              EXISTS (SELECT 1 FROM group_members
+                       WHERE group_id = g.id AND user_id = g.key_minted_by AND role = 'admin') AS minter_is_admin
+         FROM groups g
+        WHERE g.id = $1
+          FOR UPDATE OF g`,
+      [groupId, callerUserId, keyVersion],
+    );
+    const ctx = result.rows[0];
+    if (ctx?.group_key_version !== keyVersion) throw new HttpError(409, 'Group key version mismatch');
+    const introducing = !ctx.caller_holds && !ctx.others_hold;
+    if (introducing) {
+      const minterOnly = ctx.minter_is_admin && ctx.key_minted_by !== callerUserId;
+      if (ctx.caller_role !== 'admin' || minterOnly) {
+        throw new HttpError(403, 'Only the admin who reset the key can introduce it');
+      }
+    }
+    const changed = await client.query(
+      `UPDATE group_members SET key_version = $3
+        WHERE group_id = $1 AND user_id = $2 AND key_version IS DISTINCT FROM $3
+        RETURNING 1`,
+      [groupId, callerUserId, keyVersion],
+    );
+    await client.query(`DELETE FROM pending_joins WHERE group_id = $1 AND joiner_user_id = $2`, [
+      groupId,
+      callerUserId,
+    ]);
+    return keyVersion > 1 && changed.rows.length > 0 && introducing;
+  });
+
+  if (rotated) {
+    const event: KeyRotatedEvent = { v: 2, group_id: groupId, group_key_version: keyVersion };
+    emitToGroup(groupId, 'group:key_rotated', event);
+    logger.info('group key rotated', { group_key_version: keyVersion });
+  }
+  await dispatchKeysharesFor(callerUserId);
+}
+
+/**
+ * Reset, step one (admin only): bump the version and free every claim made
+ * under the old one. Nobody holds the new version until the admin confirms.
+ */
+export async function resetGroupKey(callerUserId: string, groupId: string): Promise<number> {
+  return withTransaction(async (client) => {
+    const role = await client.query<{ role: string }>(
+      `SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2`,
+      [groupId, callerUserId],
+    );
+    if (role.rows[0]?.role !== 'admin') throw new HttpError(403, 'Only a group admin can reset the secure key');
+    const bump = await client.query<{ group_key_version: number }>(
+      `UPDATE groups SET group_key_version = group_key_version + 1, key_minted_by = $2
+        WHERE id = $1
+        RETURNING group_key_version`,
+      [groupId, callerUserId],
+    );
+    await client.query(`UPDATE pending_joins SET courier_user_id = NULL, lease_expires_at = NULL WHERE group_id = $1`, [
+      groupId,
+    ]);
+    logger.info('group key reset', { group_key_version: bump.rows[0].group_key_version });
+    return bump.rows[0].group_key_version;
+  });
+}
+
+// ── Registration + cleanup ────────────────────────────────────────
 
 let registered = false;
 
+/**
+ * Wire dispatch-on-connect: a courier connecting, or the joiner's device
+ * identifying itself, may make pending joins deliverable. Idempotent.
+ */
 export function registerKeyshareHub(): void {
   if (registered) return;
   registered = true;
   onUserConnect(async (userId) => {
-    await dispatchPendingKeysharesForUser(userId);
+    await dispatchKeysharesFor(userId);
+  });
+  onDeviceReady(async (userId) => {
+    await dispatchKeysharesFor(userId);
   });
 }
 
-export async function expireStalePendingJoins(): Promise<number> {
-  const result = await query(
-    `UPDATE pending_joins
-        SET state = 'expired', state_changed_at = NOW()
-      WHERE state IN ('pending', 'in_flight')
-        AND created_at < NOW() - INTERVAL '${TTL_DAYS} days'`,
-  );
+/** Delete pending joins older than the TTL. */
+export async function reapOldPendingJoins(): Promise<number> {
+  const result = await query(`DELETE FROM pending_joins WHERE created_at < NOW() - make_interval(days => $1)`, [
+    PENDING_JOIN_TTL_DAYS,
+  ]);
   return result.rowCount ?? 0;
 }

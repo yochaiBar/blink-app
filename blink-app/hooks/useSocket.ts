@@ -2,21 +2,14 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
 import { connectSocket, disconnectSocket } from '@/services/socket';
-import { deliverKeyshare, requestKeyshare } from '@/services/api';
+import { requestKeyshare } from '@/services/api';
 import { playChallengeRing } from '@/utils/challengeSound';
-import {
-  bytesToB64,
-  b64ToBytes,
-  courierEncryptGroupKey,
-  joinerDecryptGroupKey,
-  loadGroupKey,
-  loadGroupKeyVersion,
-  storeGroupKey,
-  getOrCreateDeviceKey,
-} from '@/services/groupCrypto';
+import { getOrCreateDeviceKey, loadGroupKeyVersion } from '@/services/groupCrypto';
+import { acceptKeyshareEnvelope, respondToKeyshareRequest } from '@/services/keyTransfer';
 import { receivePhoto, respondToPickup } from '@/services/photoTransfer';
 import type {
   IncomingPhotoEnvelope,
+  KeyRotatedEvent,
   KeyshareEnvelope,
   KeyshareRequest,
   PhotoPickupRequest,
@@ -175,128 +168,38 @@ export function useSocket() {
         }
       });
 
-      // ── Group-key courier handshake (Phase 4) ───────────────
-      // Courier path: server asks us to share the group key with a joiner.
-      // Look up our local group key, encrypt to the joiner's public key,
-      // POST the opaque envelope to /api/keyshare/deliver. Server can't
-      // decrypt — it just routes to the joiner's device room.
+      // ── Group-key courier handshake (services/keyTransfer) ──
+      // Courier path: a holder of the current key is asked to wrap it for a
+      // joiner's device. The server routes the opaque envelope; it can't
+      // decrypt it.
       socket.on('group:keyshare_request', async (payload: KeyshareRequest) => {
-        if (__DEV__) console.log('[Socket] group:keyshare_request', payload);
+        if (__DEV__) console.log('[Socket] group:keyshare_request', payload.group_id);
         try {
-          const groupKey = await loadGroupKey(payload.group_id);
-          if (!groupKey) {
-            // We're a member but somehow have no group key — race with our
-            // own join? Best-effort: ignore. Another courier (or our own
-            // device on next launch) will pick this up.
-            if (__DEV__) {
-              console.warn('[Socket] keyshare_request but no local group key');
-            }
-            return;
-          }
-          // Send the key's ACTUAL version so the joiner can resolve rotations
-          // (higher version wins). Hardcoding 1 here would make every
-          // regenerated key look stale to a recipient holding version 1.
-          const storedVersion = await loadGroupKeyVersion(payload.group_id);
-          const groupKeyVersion = storedVersion > 0 ? storedVersion : 1;
-          const joinerPub = b64ToBytes(payload.joiner_x25519_public_key_b64);
-          const envelope = courierEncryptGroupKey(joinerPub, groupKey, {
-            groupId: payload.group_id,
-            joinerUserId: payload.joiner_user_id,
-            joinerDeviceId: payload.joiner_device_id,
-            keyVersion: groupKeyVersion,
-          });
-          const { device_id: fromDeviceId } = await getOrCreateDeviceKey();
-          await deliverKeyshare({
-            v: 1,
-            pending_join_id: payload.pending_join_id,
-            group_id: payload.group_id,
-            from_user_id: currentUserId() ?? '',
-            from_device_id: fromDeviceId,
-            ephemeral_public_key_b64: bytesToB64(envelope.ephemeralPublicKey),
-            iv_b64: bytesToB64(envelope.iv),
-            auth_tag_b64: bytesToB64(envelope.ciphertext.slice(envelope.ciphertext.length - 16)),
-            ciphertext_b64: bytesToB64(envelope.ciphertext),
-            group_key_version: groupKeyVersion,
-          });
+          const delivered = await respondToKeyshareRequest(payload);
+          if (!delivered && __DEV__) console.warn('[Socket] keyshare_request: we don’t hold that key version');
         } catch (err) {
           if (__DEV__) console.warn('[Socket] keyshare_request failed', err);
         }
       });
 
-      // Joiner path: server delivered the encrypted group-key envelope.
-      // ECDH + decrypt with our static device key, store the group key
-      // locally. Idempotent: if we already have the key, validate the new
-      // one matches; otherwise newest wins per the key_version field on
-      // the envelope (Phase 5+ will surface UX when these differ).
+      // Joiner path: the key wrapped for this device. Accepted only at a
+      // version not below ours that the server confirms is current.
       socket.on('group:keyshare_envelope', async (envelope: KeyshareEnvelope) => {
         if (__DEV__) console.log('[Socket] group:keyshare_envelope', envelope.group_id);
         const selfUserId = currentUserId();
         if (!selfUserId) return;
         try {
-          const device = await getOrCreateDeviceKey();
-          const ephemeral = b64ToBytes(envelope.ephemeral_public_key_b64);
-          const iv = b64ToBytes(envelope.iv_b64);
-          const ciphertext = b64ToBytes(envelope.ciphertext_b64);
-          const incomingVersion = envelope.group_key_version ?? 1;
-          // Our own view of the context: an envelope made for another group,
-          // device or version fails to decrypt.
-          const groupKey = joinerDecryptGroupKey(
-            device.privateScalar,
-            device.publicKey,
-            { ephemeralPublicKey: ephemeral, iv, ciphertext },
-            {
-              groupId: envelope.group_id,
-              joinerUserId: selfUserId,
-              joinerDeviceId: device.device_id,
-              keyVersion: incomingVersion,
-            },
-          );
-          const existing = await loadGroupKey(envelope.group_id);
-          if (existing) {
-            const same = existing.length === groupKey.length && existing.every((b, i) => b === groupKey[i]);
-            if (same) {
-              // Idempotent duplicate — just make sure we've recorded the
-              // (possibly newer) version number and move on.
-              await storeGroupKey(envelope.group_id, groupKey, incomingVersion);
-              return;
-            }
-            // Different key. This is a rotation (admin regenerated) iff the
-            // incoming version is strictly higher — then it MUST win or the
-            // group would split-brain. A same-or-lower version with
-            // different bytes is a conflict we refuse (would silently brick
-            // photos encrypted under our current key).
-            const existingVersion = await loadGroupKeyVersion(envelope.group_id);
-            if (incomingVersion <= existingVersion) {
-              if (__DEV__) {
-                console.warn('[Socket] keyshare_envelope conflicts with existing key at same/older version; ignored');
-              }
-              return;
-            }
-            if (__DEV__) {
-              console.log(
-                '[Socket] keyshare_envelope rotates group key',
-                envelope.group_id,
-                `v${existingVersion}→v${incomingVersion}`,
-              );
-            }
-          }
-          await storeGroupKey(envelope.group_id, groupKey, incomingVersion);
-          queryClient.invalidateQueries({ queryKey: ['groups'] });
+          const outcome = await acceptKeyshareEnvelope(envelope, selfUserId);
+          if (__DEV__) console.log('[Socket] keyshare_envelope', outcome);
+          if (outcome === 'stored') queryClient.invalidateQueries({ queryKey: ['groups'] });
         } catch (err) {
-          if (__DEV__) console.warn('[Socket] keyshare_envelope decrypt failed', err);
+          if (__DEV__) console.warn('[Socket] keyshare_envelope failed', err);
         }
       });
 
-      // Loser of the courier race — server picked someone else. No-op.
-      socket.on('group:keyshare_cancelled', () => {
-        if (__DEV__) console.log('[Socket] group:keyshare_cancelled (no-op)');
-      });
-
-      // An admin regenerated the group key. If ours is older (or missing),
-      // pull the new one via the recovery handshake. The admin's device
-      // (which just minted the key) will courier it back and our
-      // keyshare_envelope handler overwrites on higher version.
-      socket.on('group:key_rotated', async (payload: { group_id: string; group_key_version: number }) => {
+      // A reset's new key now has a holder (the admin who minted it). If
+      // ours is older (or missing), ask for it; a holder couriers it back.
+      socket.on('group:key_rotated', async (payload: KeyRotatedEvent) => {
         if (__DEV__) console.log('[Socket] group:key_rotated', payload);
         try {
           const localVersion = await loadGroupKeyVersion(payload.group_id);

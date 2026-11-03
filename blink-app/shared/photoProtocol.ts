@@ -15,9 +15,9 @@
  *
  * Versioning rule
  * ───────────────
- * Every payload carries `v` as the first field. Photo relay payloads are
- * v2 (recovery Stage 3); device keys and the keyshare handshake are still
- * v1. Treat unknown `v` as an error — never best-effort-parse.
+ * Every payload carries `v` as the first field. Photo relay and keyshare
+ * payloads are v2 (recovery Stage 3); device keys are still v1. Treat
+ * unknown `v` as an error — never best-effort-parse.
  */
 
 // ── Device public keys ──────────────────────────────────────────
@@ -195,48 +195,121 @@ export interface PhotoPickupRequest {
   pickup_id: string;
 }
 
-// ── Group-key handshake (Phase 4, Q2=a) ─────────────────────────
+// ── Group-key handshake (v2) ────────────────────────────────────
 
 /**
- * Server → courier (via Socket.io): "User X joined group G; please share the
- * group key. Here's X's verified device public key."
+ * Server → courier (Socket.io `group:keyshare_request`): "User X's device D
+ * is waiting for the group key at `key_version`; here is D's registered
+ * public key." Sent to one courier — a member holding the current version
+ * (it confirmed it) — while D is online; the server holds a short lease
+ * on the pending join and offers it again if no envelope arrives.
  *
- * The server has already verified the joiner's attestation (Plan H1). If two
- * existing members are online, the server picks one deterministically (lowest
- * user_id) and emits `keyshare:cancelled` to the others.
+ * The courier encrypts its key only if it holds exactly `key_version`, to
+ * keyshareAad(group_id, joiner_user_id, joiner_device_id, key_version).
  */
 export interface KeyshareRequest {
-  v: 1;
+  v: 2;
+  pending_join_id: string;
   group_id: string;
   joiner_user_id: string;
   joiner_device_id: string;
   joiner_x25519_public_key_b64: string;
-  pending_join_id: string;
+  key_version: number;
 }
 
 /**
- * Courier → server → joiner (via Socket.io): the group key encrypted to the
- * joiner's device public key.
+ * Courier → server (`POST /api/keyshare/deliver`). Accepted only from the
+ * courier the join is claimed for, while both are still members and
+ * `key_version` is the group's current version (409 otherwise).
+ */
+export interface KeyshareDeliverRequest {
+  v: 2;
+  pending_join_id: string;
+  from_device_id: string;
+  key_version: number;
+  // Ephemeral X25519 public key used for this handshake only.
+  ephemeral_public_key_b64: string;
+  iv_b64: string;
+  // The wrapped 32-byte group key with the 16-byte GCM tag appended.
+  ciphertext_b64: string;
+}
+
+export interface KeyshareDeliverResult {
+  v: 2;
+  delivered: boolean;
+}
+
+/**
+ * Server → joiner's device (Socket.io `group:keyshare_envelope`, sent only
+ * to `user-device:<joiner>:<device>`): the group key encrypted to that
+ * device. Opaque to the server: ECDH(ephemeral, device key) → HKDF →
+ * AES-256-GCM, bound by keyshareAad.
  *
- * The blob is opaque to the server: ECDH(courier_private, joiner_public)
- * yields a shared secret, run through HKDF to derive an AEAD key, then
- * AES-256-GCM encrypts the group key. Server cannot decrypt.
+ * The joiner accepts it only if `key_version` is not below what it holds
+ * and the server confirms it is the current version (POST
+ * /api/keyshare/confirm answers 409 otherwise).
  */
 export interface KeyshareEnvelope {
-  v: 1;
+  v: 2;
   pending_join_id: string;
   group_id: string;
   from_user_id: string;
   from_device_id: string;
-  // Ephemeral X25519 public key used for this handshake (the courier's static
-  // device key is already registered; ephemeral keys give forward-secrecy on
-  // the handshake itself even though we don't have full PFS on photo bytes).
+  key_version: number;
   ephemeral_public_key_b64: string;
   iv_b64: string;
-  auth_tag_b64: string;
   ciphertext_b64: string;
-  // The group key's version on the courier's side. The joiner stores it
-  // alongside the key; rejects shares older than what they already hold
-  // (handles reinstall race per the QA findings).
+}
+
+/**
+ * Member → server (`POST /api/keyshare/confirm`): "this device now holds
+ * the group key at `key_version`". 409 unless it's the current version.
+ * Makes the member a courier, ends its pending join, and — for the first
+ * holder of a version after a reset — fans out `group:key_rotated`.
+ */
+export interface KeyshareConfirmRequest {
+  v: 2;
+  group_id: string;
+  key_version: number;
+}
+
+export interface KeyshareConfirmResult {
+  v: 2;
+  key_version: number;
+}
+
+/** Member → server (`POST /api/keyshare/request`): send the key to this device. */
+export interface KeyshareRecoveryRequest {
+  v: 2;
+  group_id: string;
+  device_id: string;
+}
+
+export interface KeyshareRecoveryResult {
+  v: 2;
+  enqueued: boolean;
+  couriers_notified: number;
+}
+
+/**
+ * Admin → server (`POST /api/keyshare/reset`): step one of a key reset.
+ * The server bumps the version (it never sees a key); the admin's device
+ * then mints a key at that version and confirms it, and only then do
+ * members hear `group:key_rotated`.
+ */
+export interface KeyshareResetRequest {
+  v: 2;
+  group_id: string;
+}
+
+export interface KeyshareResetResult {
+  v: 2;
+  group_key_version: number;
+}
+
+/** Server → group room (`group:key_rotated`): a new key version has a holder. */
+export interface KeyRotatedEvent {
+  v: 2;
+  group_id: string;
   group_key_version: number;
 }
