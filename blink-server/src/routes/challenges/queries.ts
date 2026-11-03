@@ -6,8 +6,10 @@ import { uuidParams } from '../../middleware/params';
 import { requireMember } from '../../services/membership';
 import { validateQuery, parsedQuery } from '../../middleware/validate';
 import { paginationQuerySchema, PaginationQuery } from '../../utils/schemas';
-import { CHALLENGE_SELECT, CHALLENGE_SELECT_C, processSkipsForChallenge } from './shared';
+import { CHALLENGE_SELECT, CHALLENGE_SELECT_C } from './shared';
 import { ChallengeRow, ChallengeResponseRow, CountRow } from '../../types/db';
+import { listChallenges, loadResponses } from '../../services/challengeReads';
+import { HttpError } from '../../utils/httpError';
 
 /** Response row with user info from JOIN */
 interface ResponseWithUserRow {
@@ -45,26 +47,11 @@ router.get(
 
     await requireMember(req.userId!, { groupId });
 
-    // Auto-expire and process skips
-    const expired = await query<Pick<ChallengeRow, 'id'>>(
-      `SELECT id FROM challenges
-     WHERE group_id = $1 AND status = 'active' AND expires_at < NOW()`,
-      [groupId],
-    );
-    for (const e of expired.rows) {
-      await processSkipsForChallenge(e.id, groupId);
-    }
-    await query(
-      `UPDATE challenges SET status = 'expired'
-     WHERE group_id = $1 AND status = 'active' AND expires_at < NOW()`,
-      [groupId],
-    );
-
-    // Return active challenges OR completed/expired ones still within their countdown window
+    // Read-only: the expiry job finalizes challenges, never a GET. The
+    // latest challenge still inside its window, whatever its status.
     const result = await query(
       `SELECT ${CHALLENGE_SELECT} FROM challenges
-     WHERE group_id = $1
-       AND (status = 'active' OR (status IN ('completed', 'expired') AND expires_at > NOW()))
+     WHERE group_id = $1 AND expires_at > NOW()
      ORDER BY created_at DESC LIMIT 1`,
       [groupId],
     );
@@ -88,20 +75,26 @@ router.get(
   }),
 );
 
-// ── GET responses (can't peek until you play) ──
+// ── GET /api/challenges/:id — one challenge with its visible responses ──
+router.get(
+  '/:id',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const id = req.params.id as string;
+    await requireMember(req.userId!, { challengeId: id });
+
+    const [challenge] = await listChallenges('c.id = $3', [id], req.userId!, 1);
+    if (!challenge) throw new HttpError(404, 'Challenge not found');
+    const responses = await loadResponses([id], req.userId!);
+    res.json({ ...challenge, responses: responses.get(id) ?? [] });
+  }),
+);
+
+// ── GET responses (kept for the app until Stage 4; no reveal gate) ──
 router.get(
   '/:id/responses',
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
-
-    const userResponse = await query<Pick<ChallengeResponseRow, 'id'>>(
-      `SELECT id FROM challenge_responses WHERE challenge_id = $1 AND user_id = $2`,
-      [id, req.userId],
-    );
-    if (userResponse.rows.length === 0) {
-      res.status(403).json({ error: "Can't peek until you play! Respond first." });
-      return;
-    }
+    await requireMember(req.userId!, { challengeId: id });
 
     const responses = await query<ResponseWithUserRow>(
       `SELECT cr.*, u.display_name
@@ -171,16 +164,6 @@ router.get(
 
     // Verify user is a group member
     await requireMember(req.userId!, { groupId: c.group_id });
-
-    // Can't peek gate — user must have responded
-    const userResponse = await query<Pick<ChallengeResponseRow, 'id'>>(
-      `SELECT id FROM challenge_responses WHERE challenge_id = $1 AND user_id = $2`,
-      [id, req.userId],
-    );
-    if (userResponse.rows.length === 0) {
-      res.status(403).json({ error: "Can't peek until you play! Respond first." });
-      return;
-    }
 
     // Fetch all responses with user info (only from current group members)
     const responses = await query<ResponseWithUserRow>(

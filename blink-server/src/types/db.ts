@@ -15,6 +15,7 @@ export interface UserRow {
   display_name: string | null;
   bio: string | null;
   push_token: string | null;
+  push_enabled: boolean;
   created_at: Date;
   last_active_at: Date;
 }
@@ -31,6 +32,8 @@ export interface GroupRow {
   group_streak: number;
   longest_group_streak: number;
   group_key_version: number;
+  timezone: string;
+  next_auto_challenge_at: Date | null;
   created_at: Date;
 }
 
@@ -55,6 +58,7 @@ export interface ChallengeRow {
   expires_at: Date;
   status: string;
   is_auto_generated: boolean;
+  reminder_sent_at: Date | null;
 }
 
 export interface ChallengeResponseRow {

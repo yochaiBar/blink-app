@@ -85,7 +85,7 @@ describe('groups', () => {
     const carol = await createUser();
     const group = await createGroup({ createdBy: alice });
     await addMember(group.id, bob.id);
-    await query(`UPDATE group_members SET joined_at = NOW() - INTERVAL '1 day' WHERE user_id = $1`, [bob.id]);
+    await query(`UPDATE group_members SET joined_at = NOW() - INTERVAL '2 days' WHERE user_id = $1`, [bob.id]);
     await addMember(group.id, carol.id);
 
     const res = await server.api().post(`/api/groups/${group.id}/leave`).set(bearer(alice));

@@ -25,6 +25,7 @@ CREATE TABLE users (
   display_name VARCHAR(50),
   bio TEXT,
   push_token TEXT,
+  push_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT NOW(),
   last_active_at TIMESTAMP DEFAULT NOW()
 );
@@ -95,8 +96,13 @@ CREATE TABLE groups (
   -- Monotonic group-key version. The server never sees the key itself; the
   -- counter lets clients resolve rotations (POST /api/keyshare/reset).
   group_key_version INTEGER NOT NULL DEFAULT 1,
+  -- Daily auto-challenge: day hours are read in this IANA zone, and the
+  -- next run is claimed from next_auto_challenge_at (jobs/dailyChallenge.ts).
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  next_auto_challenge_at TIMESTAMPTZ,
   created_at TIMESTAMP DEFAULT NOW()
 );
+CREATE INDEX idx_groups_next_auto_challenge ON groups(next_auto_challenge_at);
 
 CREATE TABLE group_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -149,10 +155,14 @@ CREATE TABLE challenges (
   created_at TIMESTAMP DEFAULT NOW(),
   expires_at TIMESTAMP NOT NULL,
   status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'completed', 'expired')),
-  is_auto_generated BOOLEAN NOT NULL DEFAULT FALSE
+  is_auto_generated BOOLEAN NOT NULL DEFAULT FALSE,
+  reminder_sent_at TIMESTAMPTZ
 );
-CREATE INDEX idx_challenges_group ON challenges(group_id);
-CREATE INDEX idx_challenges_status ON challenges(status);
+CREATE INDEX idx_challenges_group ON challenges(group_id, created_at DESC);
+-- At most one active challenge per group; creating one finalizes the old.
+CREATE UNIQUE INDEX uniq_challenges_one_active_per_group ON challenges(group_id) WHERE status = 'active';
+-- The expiry/reminder job scans active challenges by deadline.
+CREATE INDEX idx_challenges_active_expiry ON challenges(expires_at) WHERE status = 'active';
 
 -- One row per member who responded; a member with no row skipped. The photo
 -- itself never reaches the server: it goes peer-to-peer via /api/photos/relay

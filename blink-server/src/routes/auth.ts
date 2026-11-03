@@ -147,7 +147,7 @@ router.get(
   authenticate,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const result = await query<UserRow>(
-      `SELECT id, phone_number, display_name, bio, created_at, last_active_at
+      `SELECT id, phone_number, display_name, bio, push_enabled, created_at, last_active_at
        FROM users WHERE id = $1`,
       [req.userId],
     );
@@ -186,7 +186,7 @@ router.patch(
   authenticate,
   validateBody(updateProfileSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { display_name, bio } = req.body;
+    const { display_name, bio, push_enabled } = req.body;
 
     const setClauses: string[] = [];
     const values: unknown[] = [];
@@ -200,13 +200,17 @@ router.patch(
       setClauses.push(`bio = $${paramIndex++}`);
       values.push(bio || null);
     }
+    if (push_enabled !== undefined) {
+      setClauses.push(`push_enabled = $${paramIndex++}`);
+      values.push(push_enabled);
+    }
 
     values.push(req.userId);
 
     const result = await query<UserRow>(
       `UPDATE users SET ${setClauses.join(', ')}
        WHERE id = $${paramIndex}
-       RETURNING id, phone_number, display_name, bio, created_at, last_active_at`,
+       RETURNING id, phone_number, display_name, bio, push_enabled, created_at, last_active_at`,
       values,
     );
 
