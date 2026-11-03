@@ -1,9 +1,9 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
-import jwt from 'jsonwebtoken';
 import logger from '../utils/logger';
 import { query } from '../config/database';
 import { env } from '../config/env';
+import { verifyAccessToken } from '../services/authSessions';
 
 let io: SocketServer | null = null;
 
@@ -31,19 +31,20 @@ export function initSocket(httpServer: HttpServer) {
     maxHttpBufferSize: 8 * 1024 * 1024,
   });
 
-  // Auth middleware - verify JWT
+  // Auth middleware: same check as HTTP authenticate (JWT + live session).
   io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) {
       return next(new Error('Authentication error: no token'));
     }
-    try {
-      const decoded = jwt.verify(token, env.JWT_SECRET) as { userId: string };
-      socket.data.userId = decoded.userId;
-      next();
-    } catch {
-      next(new Error('Authentication error: invalid token'));
-    }
+    verifyAccessToken(token)
+      .then((claims) => {
+        if (!claims) return next(new Error('Authentication error: invalid token'));
+        socket.data.userId = claims.userId;
+        socket.data.sid = claims.sid;
+        next();
+      })
+      .catch(() => next(new Error('Authentication error: invalid token')));
   });
 
   io.on('connection', (socket) => {
@@ -54,6 +55,9 @@ export function initSocket(httpServer: HttpServer) {
     // by user_id without an explicit subscribe step. (group rooms still
     // require `join-groups` because they're DB-verified.)
     socket.join(`user:${userId}`);
+    // Per-session room so revoking a session (logout, token reuse) can drop
+    // exactly that device's sockets.
+    socket.join(`session:${socket.data.sid as string}`);
 
     // Optional: client emits `register-device` after connect so we can
     // address a specific device for pickup_request (the one holding the
@@ -178,4 +182,14 @@ export async function emitToUserWithAck(
   );
 
   return { acked, nacked, failed };
+}
+
+/** Disconnect every socket opened under session `sid`. */
+export function disconnectSession(sid: string): void {
+  if (io) io.in(`session:${sid}`).disconnectSockets(true);
+}
+
+/** Disconnect every socket of `userId` (e.g. after account deletion). */
+export function disconnectUser(userId: string): void {
+  if (io) io.in(`user:${userId}`).disconnectSockets(true);
 }

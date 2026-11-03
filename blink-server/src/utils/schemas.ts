@@ -17,7 +17,7 @@ export const verifyOtpSchema = z.object({
 });
 
 export const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(1, 'refreshToken is required'),
+  refresh_token: z.string().min(1, 'refresh_token is required').max(200),
 });
 
 // ── Profile schemas ───────────────────────────────────────────

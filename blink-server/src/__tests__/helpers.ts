@@ -31,18 +31,17 @@ export function createTestApp(router: express.Router, prefix = '/api') {
 // ── JWT helpers ──────────────────────────────────────────────────
 
 const JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-for-unit-tests';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test-jwt-refresh-secret-for-unit-tests';
+
+// Same claim shape as services/authSessions ({ sub, sid }). The unit setup
+// mocks authenticate, so the session id is never looked up.
+const TEST_SESSION_ID = '0b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e';
 
 export function generateAccessToken(userId: string = TEST_USER_ID): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '15m' });
-}
-
-export function generateRefreshToken(userId: string = TEST_USER_ID): string {
-  return jwt.sign({ userId }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ sub: userId, sid: TEST_SESSION_ID }, JWT_SECRET, { expiresIn: '15m' });
 }
 
 export function generateExpiredToken(userId: string = TEST_USER_ID): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '0s' });
+  return jwt.sign({ sub: userId, sid: TEST_SESSION_ID }, JWT_SECRET, { expiresIn: '0s' });
 }
 
 export function generateMalformedToken(): string {

@@ -59,12 +59,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   verifyOtp: async (phone: string, code: string) => {
-    const data = await api<{ accessToken: string; refreshToken: string; user: User }>('/auth/verify-otp', {
+    const data = await api<{ access_token: string; refresh_token: string; user: User }>('/auth/verify-otp', {
       method: 'POST',
       body: JSON.stringify({ phone_number: phone, code }),
     });
 
-    await setTokens(data.accessToken, data.refreshToken);
+    await setTokens(data.access_token, data.refresh_token);
     set({ user: data.user, isAuthenticated: true });
 
     if (Platform.OS !== 'web') {
@@ -100,6 +100,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    // End this device's server session first (revokes its refresh token and
+    // drops its sockets); local logout still proceeds if the call fails.
+    await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
     await clearTokens();
     // E2E photo flow cleanup (Phase 6): nuke the device keypair AND every
     // cached photo. Old group keys in SecureStore become orphaned (we don't

@@ -3,7 +3,8 @@
 -- Squashes the old 001–016 migrations (2026-11-03, recovery plan Stage 1)
 -- into the end state, minus everything the recovery plan removed: AI,
 -- spotlight, skip penalties, streak shields/milestones, quiz/prompt
--- challenges, server-side photo URLs, avatars and the legacy OTP table.
+-- challenges, server-side photo URLs, avatars, the legacy OTP table and
+-- revoked_tokens (replaced by auth_sessions in Stage 2a).
 --
 -- Editable in place until the Stage 5 deploy; frozen after that, and later
 -- changes go in 002_*.sql and up. A database migrated by the old files
@@ -28,24 +29,32 @@ CREATE TABLE users (
   last_active_at TIMESTAMP DEFAULT NOW()
 );
 
+-- One live login code per phone, stored only as HMAC(OTP_PEPPER, phone:code).
 CREATE TABLE otp_codes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  phone VARCHAR(20) NOT NULL,
-  code VARCHAR(10) NOT NULL,
-  attempts INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
+  phone VARCHAR(20) PRIMARY KEY,
+  code_hash TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL
 );
-CREATE INDEX idx_otp_codes_phone ON otp_codes(phone);
+CREATE INDEX idx_otp_codes_expires ON otp_codes(expires_at);
 
--- Revocation must outlive the account it revokes, so no FK to users.
--- (Replaced by auth_sessions in Stage 2a.)
-CREATE TABLE revoked_tokens (
+-- One row per signed-in device. Access JWTs carry the session id and are
+-- re-checked against this table, so revoking a row signs that device out
+-- immediately. The refresh token is opaque (<id>.<secret>); only SHA-256 of
+-- the current and previous secret is kept (the previous one for the
+-- 30-second rotation grace window). Rows go with the user on deletion.
+CREATE TABLE auth_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  revoked_at TIMESTAMP DEFAULT NOW()
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  refresh_hash TEXT NOT NULL,
+  prev_refresh_hash TEXT,
+  rotated_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ
 );
-CREATE INDEX idx_revoked_tokens_user ON revoked_tokens(user_id);
+CREATE INDEX idx_auth_sessions_user ON auth_sessions(user_id);
 
 -- Device X25519 public keys for the E2E photo flow. The private key never
 -- leaves the device. `attestation` = HMAC-SHA256(JWT sub, public key) binds

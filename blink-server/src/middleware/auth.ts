@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { query } from '../config/database';
-import { env } from '../config/env';
+import { verifyAccessToken } from '../services/authSessions';
 
 export interface AuthRequest extends Request {
   userId?: string;
+  /** The auth_sessions row this request's access token belongs to. */
+  sessionId?: string;
 }
 
 export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
@@ -14,22 +14,17 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     return;
   }
 
-  const token = header.split(' ')[1];
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET) as { userId: string };
-
-    // Check if token has been revoked (e.g. account deletion)
-    const revoked = await query('SELECT 1 FROM revoked_tokens WHERE user_id = $1 LIMIT 1', [payload.userId]);
-    if (revoked.rows.length > 0) {
-      res.status(401).json({ error: 'Token revoked' });
+    // JWT signature/expiry plus a live (not revoked, not expired) session.
+    const claims = await verifyAccessToken(header.split(' ')[1]);
+    if (!claims) {
+      res.status(401).json({ error: 'Invalid token' });
       return;
     }
-
-    req.userId = payload.userId;
+    req.userId = claims.userId;
+    req.sessionId = claims.sid;
     next();
-  } catch {
-    // If it's already a response (from revoked check), don't overwrite
-    if (res.headersSent) return;
-    res.status(401).json({ error: 'Invalid token' });
+  } catch (err) {
+    next(err);
   }
 }

@@ -1,8 +1,5 @@
 import { Router, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 import { query, withTransaction } from '../config/database';
-import { JWT_ACCESS_EXPIRY, JWT_REFRESH_EXPIRY } from '../utils/constants';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
@@ -17,66 +14,25 @@ import logger from '../utils/logger';
 import { isSmsConfigured, sendSms } from '../config/sms';
 import { env } from '../config/env';
 import { UserRow } from '../types/db';
+import { DEV_OTP, generateOtp, storeOtp, verifyOtp } from '../services/otp';
+import { createSession, revokeSession, rotateRefreshToken } from '../services/authSessions';
+import { disconnectUser } from '../socket';
 
 const router = Router();
 
-const DEV_OTP = '123456';
-const ALLOW_DEV_OTP_FALLBACK = env.NODE_ENV !== 'production' && env.ALLOW_DEV_OTP_FALLBACK === 'true';
+// The fixed dev code is only ever possible outside production, and only
+// without Twilio (or when Twilio fails and the fallback is opted into).
+// In production the env schema refuses to boot without Twilio.
+const DEV_OTP_ALLOWED = env.NODE_ENV !== 'production';
+const ALLOW_DEV_OTP_FALLBACK = DEV_OTP_ALLOWED && env.ALLOW_DEV_OTP_FALLBACK === 'true';
 
 function maskPhone(phone: string): string {
   if (phone.length <= 4) return '****';
   return phone.slice(0, -4).replace(/\d/g, '*') + phone.slice(-4);
 }
 
-function generateOtp(): string {
-  return crypto.randomInt(100000, 999999).toString();
-}
-
-// ── OTP persistence (PostgreSQL + write-through in-process cache) ─
-// The in-process Map acts as a write-through cache so that OTPs are
-// available even when the database is mocked (tests) or momentarily
-// unreachable.  The database is the durable source of truth; the cache
-// is a convenience for the common single-instance deployment.
-const otpCache = new Map<string, { code: string; expiresAt: number; attempts: number }>();
-
-async function storeOtp(phone: string, code: string): Promise<void> {
-  const expiresAt = Date.now() + 5 * 60 * 1000;
-  // Clean up expired OTPs and any existing OTP for this phone
-  await query('DELETE FROM otp_codes WHERE phone = $1 OR expires_at < NOW()', [phone]);
-  await query("INSERT INTO otp_codes (phone, code, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')", [
-    phone,
-    code,
-  ]);
-  otpCache.set(phone, { code, expiresAt, attempts: 0 });
-}
-
-async function getOtp(phone: string): Promise<{ code: string; attempts: number } | null> {
-  // Check in-process cache first (fast path, always populated by storeOtp)
-  const cached = otpCache.get(phone);
-  if (cached && Date.now() <= cached.expiresAt) {
-    return { code: cached.code, attempts: cached.attempts };
-  }
-  if (cached) otpCache.delete(phone);
-
-  // Fall back to database (handles multi-instance or post-restart scenarios)
-  const result = await query<{ code: string; attempts: number }>(
-    'SELECT code, attempts FROM otp_codes WHERE phone = $1 AND expires_at > NOW() LIMIT 1',
-    [phone],
-  );
-  const row = result.rows[0];
-  if (row && typeof row.code === 'string') return row;
-  return null;
-}
-
-async function incrementOtpAttempts(phone: string): Promise<void> {
-  await query('UPDATE otp_codes SET attempts = attempts + 1 WHERE phone = $1 AND expires_at > NOW()', [phone]);
-  const cached = otpCache.get(phone);
-  if (cached) cached.attempts++;
-}
-
-async function deleteOtp(phone: string): Promise<void> {
-  await query('DELETE FROM otp_codes WHERE phone = $1', [phone]);
-  otpCache.delete(phone);
+function isAppReviewPhone(phone: string): boolean {
+  return !!env.APP_REVIEW_PHONE && !!env.APP_REVIEW_OTP && phone === env.APP_REVIEW_PHONE;
 }
 
 // ── POST /api/auth/request-otp ───────────────────────────────────
@@ -86,20 +42,26 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { phone_number } = req.body;
 
-    if (!isSmsConfigured) {
-      // Dev / closed-testing mode: predictable OTP, no SMS sent.
-      await storeOtp(phone_number, DEV_OTP);
-      logger.info('OTP requested (dev mode)', { phone: maskPhone(phone_number) });
-      res.json({
-        message: 'OTP sent',
-        ...(env.NODE_ENV !== 'production' && {
-          dev_hint: 'Use 123456',
-        }),
-      });
+    if (isAppReviewPhone(phone_number)) {
+      // App Store review account: fixed code from env, no SMS.
+      await storeOtp(phone_number, env.APP_REVIEW_OTP as string);
+      logger.info('OTP requested (app review phone)', { phone: maskPhone(phone_number) });
+      res.json({ message: 'OTP sent' });
       return;
     }
 
-    // Production: generate real OTP, store it, send via Twilio
+    if (!isSmsConfigured) {
+      if (!DEV_OTP_ALLOWED) {
+        // Unreachable when the env schema is enforced; never fall back silently.
+        throw new Error('SMS is not configured');
+      }
+      // Dev / test: predictable OTP, no SMS sent.
+      await storeOtp(phone_number, DEV_OTP);
+      logger.info('OTP requested (dev mode)', { phone: maskPhone(phone_number) });
+      res.json({ message: 'OTP sent', dev_hint: `Use ${DEV_OTP}` });
+      return;
+    }
+
     const code = generateOtp();
     await storeOtp(phone_number, code);
 
@@ -107,15 +69,12 @@ router.post(
       await sendSms(phone_number, `Your Blinks verification code is: ${code}`);
       logger.info('OTP sent via Twilio', { phone: maskPhone(phone_number) });
     } catch (err) {
-      if (ALLOW_DEV_OTP_FALLBACK) {
-        logger.warn('Twilio SMS failed, falling back to dev OTP', {
-          phone: maskPhone(phone_number),
-          error: (err as Error).message,
-        });
-        await storeOtp(phone_number, DEV_OTP);
-      } else {
-        throw err;
-      }
+      if (!ALLOW_DEV_OTP_FALLBACK) throw err;
+      logger.warn('Twilio SMS failed, falling back to dev OTP', {
+        phone: maskPhone(phone_number),
+        error: (err as Error).message,
+      });
+      await storeOtp(phone_number, DEV_OTP);
     }
 
     res.json({ message: 'OTP sent' });
@@ -129,33 +88,18 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { phone_number, code } = req.body;
 
-    const pending = await getOtp(phone_number);
-    if (!pending) {
-      res.status(401).json({ error: 'Invalid or expired OTP' });
-      return;
-    }
-
-    // Per-phone attempt lockout
-    if (pending.attempts >= 5) {
-      deleteOtp(phone_number).catch(() => {});
+    const check = await verifyOtp(phone_number, code);
+    if (check === 'locked') {
       res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
       return;
     }
-
-    // Timing-safe comparison to prevent timing attacks
-    const codeBuffer = Buffer.from(code.padEnd(6), 'utf8');
-    const pendingBuffer = Buffer.from(pending.code.padEnd(6), 'utf8');
-    const codesMatch = crypto.timingSafeEqual(codeBuffer, pendingBuffer);
-
-    if (!codesMatch) {
-      incrementOtpAttempts(phone_number).catch(() => {});
+    if (check !== 'ok') {
       res.status(401).json({ error: 'Invalid or expired OTP' });
       return;
     }
 
     logger.info('OTP verified', { phone: maskPhone(phone_number) });
 
-    // ── Upsert user ──────────────────────────────────────────────
     const result = await query<Pick<UserRow, 'id' | 'phone_number' | 'display_name' | 'bio'>>(
       `INSERT INTO users (phone_number) VALUES ($1)
        ON CONFLICT (phone_number) DO UPDATE SET last_active_at = NOW()
@@ -163,37 +107,38 @@ router.post(
       [phone_number],
     );
     const user = result.rows[0];
-
-    // Clean up consumed OTP after successful authentication
-    deleteOtp(phone_number).catch(() => {});
-
-    // ── Issue JWT tokens ─────────────────────────────────────────
-    const accessToken = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: JWT_ACCESS_EXPIRY });
-    const refreshToken = jwt.sign({ userId: user.id }, env.JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRY });
+    const tokens = await createSession(user.id);
 
     logger.info('User authenticated', { userId: user.id });
-    res.json({ user, accessToken, refreshToken });
+    res.json({ user, ...tokens });
   }),
 );
 
 // ── POST /api/auth/refresh ───────────────────────────────────────
-router.post('/refresh', validateBody(refreshTokenSchema), (req: Request, res: Response) => {
-  const { refreshToken } = req.body;
+router.post(
+  '/refresh',
+  validateBody(refreshTokenSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const outcome = await rotateRefreshToken(req.body.refresh_token);
+    if (!outcome.ok) {
+      res.status(401).json({ error: 'Invalid refresh token' });
+      return;
+    }
+    res.json(outcome.tokens);
+  }),
+);
 
-  try {
-    const payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as { userId: string };
-
-    const newAccessToken = jwt.sign({ userId: payload.userId }, env.JWT_SECRET, { expiresIn: JWT_ACCESS_EXPIRY });
-    const newRefreshToken = jwt.sign({ userId: payload.userId }, env.JWT_REFRESH_SECRET, {
-      expiresIn: JWT_REFRESH_EXPIRY,
-    });
-
-    logger.info('Token refreshed', { userId: payload.userId });
-    res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
-  } catch {
-    res.status(401).json({ error: 'Invalid refresh token' });
-  }
-});
+// ── POST /api/auth/logout ────────────────────────────────────────
+// Ends this device's session: its refresh token stops working and its
+// sockets are disconnected. Other devices stay signed in.
+router.post(
+  '/logout',
+  authenticate,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    await revokeSession(req.sessionId as string, 'logout');
+    res.json({ message: 'Logged out' });
+  }),
+);
 
 // ── GET /api/auth/me ─────────────────────────────────────────────
 router.get(
@@ -294,22 +239,19 @@ router.delete(
   '/delete-account',
   authenticate,
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    // Sessions go with the user (ON DELETE CASCADE), so every access token
+    // and refresh token stops working at once.
     const deleted = await withTransaction(async (client) => {
-      // Revoke all tokens for this user before deletion
-      await client.query('INSERT INTO revoked_tokens (user_id) VALUES ($1)', [req.userId]);
-
       await client.query(`DELETE FROM group_members WHERE user_id = $1`, [req.userId]);
-
       const result = await client.query(`DELETE FROM users WHERE id = $1 RETURNING id`, [req.userId]);
-
       return result.rows.length > 0;
     });
-
     if (!deleted) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
+    disconnectUser(req.userId as string);
     logger.info('Account deleted', { userId: req.userId });
     res.json({ message: 'Account deleted successfully' });
   }),

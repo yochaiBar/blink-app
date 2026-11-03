@@ -214,7 +214,9 @@ describe('api()', () => {
     // First request: 401
     mockFetch.mockResolvedValueOnce(mockResponse(401, { error: 'Token expired' }, false));
     // Refresh request: success
-    mockFetch.mockResolvedValueOnce(mockResponse(200, { accessToken: 'new-access-token' }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(200, { access_token: 'new-access-token', refresh_token: 'rotated-refresh-token' }),
+    );
     // Retry original request: success
     mockFetch.mockResolvedValueOnce(mockResponse(200, { data: 'success' }));
 
@@ -229,9 +231,11 @@ describe('api()', () => {
       expect.stringContaining('/auth/refresh'),
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ refreshToken: 'valid-refresh-token' }),
+        body: JSON.stringify({ refresh_token: 'valid-refresh-token' }),
       }),
     );
+    // The rotated refresh token replaces the old one.
+    expect(localStorage.getItem('refreshToken')).toBe('rotated-refresh-token');
   });
 
   it('should throw error when refresh also fails', async () => {
