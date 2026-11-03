@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { registerPushToken } from '@/services/api';
 import { wasRecentChallengeRing } from '@/utils/challengeSound';
+import type { Href } from 'expo-router';
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
@@ -118,9 +119,7 @@ export async function sendPushTokenToServer(): Promise<void> {
  * Challenge notifications route directly to the camera instead of the group
  * detail page — this is the "camera-first" flow.
  */
-export function getNotificationRoute(
-  data: Record<string, string | undefined> | undefined,
-): { pathname: string; params?: Record<string, string> } | null {
+export function getNotificationRoute(data: Record<string, string | undefined> | undefined): Href | null {
   if (!data || !data.type) return null;
 
   switch (data.type) {

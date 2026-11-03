@@ -728,7 +728,7 @@ export default function ChallengeRevealScreen() {
               <View style={styles.actionButtons}>
                 <TouchableOpacity
                   style={styles.shareBtn}
-                  onPress={() => router.replace('/create-group' as never)}
+                  onPress={() => router.replace('/create-group')}
                   activeOpacity={0.85}
                 >
                   <Users size={18} color={theme.white} />
@@ -737,7 +737,7 @@ export default function ChallengeRevealScreen() {
 
                 <TouchableOpacity
                   style={styles.feedBtn}
-                  onPress={() => router.replace('/join-group' as never)}
+                  onPress={() => router.replace('/join-group')}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.feedBtnText}>Join a group</Text>

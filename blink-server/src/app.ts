@@ -19,6 +19,9 @@ import deviceKeysRoutes from './routes/deviceKeys';
 import photoRelayRoutes from './routes/photos/relay';
 import keyshareRoutes from './routes/keyshare';
 import feedRoutes from './routes/feed';
+import wellKnownRoutes from './routes/wellKnown';
+import joinPageRoutes from './routes/joinPage';
+import { escapeHtml } from './utils/html';
 import logger from './utils/logger';
 import { RATE_LIMITS } from './utils/constants';
 
@@ -54,6 +57,13 @@ function buildLegalCsp(styleHash: string | null): string {
 
 const privacyCsp = buildLegalCsp(extractStyleHash(path.join(legalDir, 'privacy-policy.html')));
 const termsCsp = buildLegalCsp(extractStyleHash(path.join(legalDir, 'terms-of-service.html')));
+
+// The pages name one contact address, env SUPPORT_EMAIL (required in
+// production); dev and tests get a reserved, undeliverable placeholder.
+function renderLegalPage(file: string): string {
+  const contact = escapeHtml(env.SUPPORT_EMAIL ?? 'support@example.invalid');
+  return fs.readFileSync(path.join(legalDir, file), 'utf-8').replace(/\{\{SUPPORT_EMAIL\}\}/g, contact);
+}
 
 /**
  * Build the Express app: middleware, rate limits, routes and error handler.
@@ -159,14 +169,17 @@ export function createApp(): express.Express {
   app.use('/api/keyshare', keyshareRoutes);
   app.use('/api/feed', feedRoutes);
 
+  app.use('/.well-known', wellKnownRoutes);
+  app.use('/join', joinPageRoutes);
+
   app.get('/privacy', (_req, res) => {
     res.setHeader('Content-Security-Policy', privacyCsp);
-    res.sendFile(path.join(legalDir, 'privacy-policy.html'));
+    res.type('html').send(renderLegalPage('privacy-policy.html'));
   });
 
   app.get('/terms', (_req, res) => {
     res.setHeader('Content-Security-Policy', termsCsp);
-    res.sendFile(path.join(legalDir, 'terms-of-service.html'));
+    res.type('html').send(renderLegalPage('terms-of-service.html'));
   });
 
   // Health check

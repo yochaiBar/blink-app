@@ -70,7 +70,7 @@ export default function DemoChallengeAlert({ visible, onDismiss }: Props) {
     }
     onDismiss();
     router.push({
-      pathname: '/snap-challenge' as never,
+      pathname: '/snap-challenge',
       params: {
         groupId: demoSource.groupId,
         challengeId: demoSource.challengeId,

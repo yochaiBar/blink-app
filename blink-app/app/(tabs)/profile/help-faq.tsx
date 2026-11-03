@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
+import { SUPPORT_EMAIL } from '@/services/links';
 
 interface FAQItem {
   question: string;
@@ -95,16 +96,18 @@ export default function HelpFAQScreen() {
           })}
         </View>
 
-        <View style={styles.contactSection}>
-          <Text style={styles.contactTitle}>Still need help?</Text>
-          <Text style={styles.contactText}>
-            Reach out to us at{' '}
-            <Text style={styles.emailLink} onPress={() => Linking.openURL('mailto:support@blink.app')}>
-              support@blink.app
-            </Text>{' '}
-            and we&apos;ll get back to you within 24 hours.
-          </Text>
-        </View>
+        {SUPPORT_EMAIL ? (
+          <View style={styles.contactSection}>
+            <Text style={styles.contactTitle}>Still need help?</Text>
+            <Text style={styles.contactText}>
+              Reach out to us at{' '}
+              <Text style={styles.emailLink} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}>
+                {SUPPORT_EMAIL}
+              </Text>{' '}
+              and we&apos;ll get back to you within 24 hours.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={{ height: 40 }} />
       </ScrollView>

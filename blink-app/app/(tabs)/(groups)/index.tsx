@@ -185,20 +185,20 @@ export default function GroupsScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    router.push('/create-group' as never);
+    router.push('/create-group');
   }, [router]);
 
   const handleJoinGroup = useCallback(() => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.push('/join-group' as never);
+    router.push('/join-group');
   }, [router]);
 
   const handleGroupPress = useCallback(
     (groupId: string) => {
       router.push({
-        pathname: '/group-detail' as never,
+        pathname: '/group-detail',
         params: { id: groupId },
       });
     },
@@ -209,7 +209,7 @@ export default function GroupsScreen() {
     advanceTour('group_detail');
     if (demoGroupId) {
       router.push({
-        pathname: '/group-detail' as never,
+        pathname: '/group-detail',
         params: { id: demoGroupId },
       });
     }

@@ -9,6 +9,7 @@ import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button } from '@/components/ui';
+import { inviteLinkFor } from '@/services/links';
 
 export default function InviteMembersScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -20,7 +21,7 @@ export default function InviteMembersScreen() {
 
   const group = groups.find((g) => g.id === groupId);
   const inviteCode = group?.inviteCode || '------';
-  const inviteLink = `https://blink.app/join/${inviteCode}`;
+  const inviteLink = inviteLinkFor(inviteCode);
 
   const handleCopyCode = useCallback(async () => {
     try {

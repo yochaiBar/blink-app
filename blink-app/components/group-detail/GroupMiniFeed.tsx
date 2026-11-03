@@ -61,7 +61,7 @@ export default function GroupMiniFeed({ groupId, groupName, groupEmoji }: Props)
   const handleItemPress = (item: FeedItemData) => {
     if (item.challengeId) {
       router.push({
-        pathname: '/challenge-reveal' as never,
+        pathname: '/challenge-reveal',
         params: { challengeId: item.challengeId, groupId },
       });
     }

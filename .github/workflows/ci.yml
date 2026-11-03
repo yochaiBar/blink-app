@@ -137,9 +137,10 @@ jobs:
 
       # Removed for good in recovery Stage 1 (server and app): server-stored
       # photos, the TESTING_MODE login bypass and the AI SDK must not come back.
+      # blink.app is a third party's domain: links and emails must never use it.
       - name: No forbidden patterns
         run: |
-          if git grep -nE 'photo_url|TESTING_MODE|@anthropic-ai' -- blink-server blink-app ':!*/package-lock.json'; then
-            echo 'Forbidden pattern found (photo_url, TESTING_MODE or @anthropic-ai).'
+          if git grep -nE 'photo_url|TESTING_MODE|@anthropic-ai|blink\.app' -- blink-server blink-app legal ':!*/package-lock.json'; then
+            echo 'Forbidden pattern found (photo_url, TESTING_MODE, @anthropic-ai or blink.app).'
             exit 1
           fi

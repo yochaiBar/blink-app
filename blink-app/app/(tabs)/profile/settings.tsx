@@ -9,6 +9,7 @@ import { useApp } from '@/providers/AppProvider';
 import { useAuthStore } from '@/stores/authStore';
 import { API_URL, getBlockedUsers, unblockUser } from '@/services/api';
 import { AvatarRing, Button } from '@/components/ui';
+import { SUPPORT_EMAIL } from '@/services/links';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -63,7 +64,7 @@ export default function SettingsScreen() {
       try {
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         await logout();
-        router.replace('/onboarding' as never);
+        router.replace('/onboarding');
       } catch {
         Alert.alert('Error', 'Could not log out. Please try again.');
       } finally {
@@ -87,7 +88,7 @@ export default function SettingsScreen() {
       try {
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         await deleteAccount();
-        router.replace('/onboarding' as never);
+        router.replace('/onboarding');
       } catch (err) {
         // Nothing was deleted: say so, and stay signed in.
         Alert.alert('Could not delete account', err instanceof Error ? err.message : 'Please try again.');
@@ -136,18 +137,20 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Support</Text>
-          <View style={styles.card}>
-            <TouchableOpacity style={styles.settingRow} onPress={() => Linking.openURL('mailto:support@blink.app')}>
-              <View style={[styles.iconBg, { backgroundColor: theme.coralMuted }]}>
-                <Mail size={18} color={theme.coral} />
-              </View>
-              <Text style={styles.settingLabel}>Contact Support</Text>
-              <ChevronRight size={16} color={theme.textMuted} />
-            </TouchableOpacity>
+        {SUPPORT_EMAIL ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Support</Text>
+            <View style={styles.card}>
+              <TouchableOpacity style={styles.settingRow} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}>
+                <View style={[styles.iconBg, { backgroundColor: theme.coralMuted }]}>
+                  <Mail size={18} color={theme.coral} />
+                </View>
+                <Text style={styles.settingLabel}>Contact Support</Text>
+                <ChevronRight size={16} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Blocked Users</Text>

@@ -1,40 +1,49 @@
-# Invite link deep-linking (`https://blink.app/join/CODE`)
+# Invite links (`https://<link domain>/join/CODE`)
 
-The app is already configured to catch invite links:
-- iOS: `associatedDomains: ['applinks:blink.app']` (`app.config.ts`)
-- Android: `intentFilters` for host `blink.app`, path prefix `/join`, `autoVerify: true`
-- Router: `app/_layout.tsx` parses `join/CODE` and pushes `/join-group` with the code
+A member shares `https://<link domain>/join/CODE`. With the app installed, the
+OS opens it in Blinks; without it, the link shows a landing page with an
+**Open in Blinks** button (`blink://join/CODE`) and, if configured, a
+get-the-app link.
 
-For the **tappable link to open the app**, `blink.app` must serve two association
-files. Until then, invites still work via the **code** (share sheet includes it,
-and the Join screen now accepts a pasted link *or* code).
+The **link domain defaults to the API's own host** (the host of
+`EXPO_PUBLIC_API_URL`), because that server serves everything the link needs.
+Set `EXPO_PUBLIC_LINK_DOMAIN` only to move links to another domain you
+control, and serve the same routes there.
 
-## What to host on blink.app
+## App (`blink-app`)
 
-Both files must be reachable over **HTTPS**, with **no redirect**, `Content-Type: application/json`:
+| Setting                     | Where                    | Effect                                                    |
+| --------------------------- | ------------------------ | --------------------------------------------------------- |
+| `EXPO_PUBLIC_API_URL`       | `eas.json` build profile | API URL; its host is the default link domain              |
+| `EXPO_PUBLIC_LINK_DOMAIN`   | `eas.json` (optional)    | Overrides the link domain                                 |
+| `EXPO_PUBLIC_SUPPORT_EMAIL` | `eas.json` (optional)    | "Contact Support" in Settings and Help; hidden when unset |
 
-| File | URL it must be served at |
-|------|--------------------------|
-| `apple-app-site-association` | `https://blink.app/.well-known/apple-app-site-association` |
-| `assetlinks.json`            | `https://blink.app/.well-known/assetlinks.json` |
+`app.config.ts` derives from the link domain:
 
-> The Apple file has **no extension** and must NOT be served as `...aasa.json`.
+- iOS `associatedDomains: ['applinks:<domain>']`;
+- the Android `intentFilters` (host, `/join`, `autoVerify`);
+- the expo-router origin, and `extra.linkDomain` (`services/links.ts` builds the shared links).
 
-## Fill in the placeholders first
+Links are handled **only** in `app/+native-intent.tsx`:
 
-1. **`REPLACE_WITH_APPLE_TEAM_ID`** — your 10-char Apple Team ID.
-   - `eas credentials` → iOS, or Apple Developer portal → Membership.
-   - Final appID looks like `A1B2C3D4E5.com.yochaibar.blinks`.
-2. **`REPLACE_WITH_ANDROID_SIGNING_SHA256`** — SHA-256 of the signing cert.
-   - `eas credentials` → Android → shows the fingerprint, **or**
-   - Play Console → your app → Test and release → App integrity → App signing → SHA-256.
-   - Format: colon-separated hex, e.g. `AB:CD:EF:...`.
+- it accepts `blink://join/CODE` and `https://<link domain>/join/CODE`, nothing else;
+- the code becomes a pending invite;
+- `hooks/useInviteReplay.ts` opens the join screen once the user is signed in and past onboarding, so a link tapped before login still works.
 
-## Verify after hosting
-- iOS: `curl -v https://blink.app/.well-known/apple-app-site-association` (200, JSON, no redirect).
-- Android: `https://developers.google.com/digital-asset-links/tools/generator`.
-- Apple CDN caches AASA — allow time / bump build after first publish.
+## Server (`blink-server`)
 
-## Note on Expo Go
-Universal / App Links **do not work in Expo Go** — only in a Dev Client,
-TestFlight, or a production build. Test the tappable link there, not in Expo Go.
+| Route                                         | Env                                                                      | Notes                                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `GET /.well-known/apple-app-site-association` | `APPLE_TEAM_ID` (`RW54G9U2AP`), `IOS_BUNDLE_ID` (`com.yochaibar.blinks`) | appID `TEAM.BUNDLE`, path `/join/*`; 404 until both are set                      |
+| `GET /.well-known/assetlinks.json`            | `ANDROID_PACKAGE`, `ANDROID_CERT_SHA256` (comma-separated)               | 404 until set                                                                    |
+| `GET /join/:code`                             | `APP_DOWNLOAD_URL` (optional)                                            | Landing page for people without the app; codes are validated, all output escaped |
+
+Both `.well-known` files are JSON over HTTPS with no redirect, as iOS and
+Android require. The Android signing fingerprint comes from
+`eas credentials` → Android, or from Play Console → App integrity → App signing.
+
+## Verify
+
+- iOS: `curl -v https://<link domain>/.well-known/apple-app-site-association` should return 200 JSON. Apple's CDN caches it, so give it time after the first deploy.
+- Android: use Google's Digital Asset Links tool against `https://<link domain>/.well-known/assetlinks.json`.
+- Universal links and App Links **don't work in Expo Go**. Test in a dev client, TestFlight or a production build.

@@ -161,14 +161,14 @@ export default function BlinksScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.push('/notifications' as never);
+    router.push('/notifications');
   }, [router]);
 
   const handleFeedItemPress = useCallback(
     (item: FeedItemData) => {
       if (item.groupId) {
         router.push({
-          pathname: '/group-detail' as never,
+          pathname: '/group-detail',
           params: { id: item.groupId },
         });
       }
@@ -187,7 +187,7 @@ export default function BlinksScreen() {
       }
 
       router.push({
-        pathname: '/snap-challenge' as never,
+        pathname: '/snap-challenge',
         params: { groupId: group.id },
       });
     },
@@ -256,7 +256,7 @@ export default function BlinksScreen() {
             if (Platform.OS !== 'web') {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }
-            router.push('/(tabs)/(groups)' as never);
+            router.push('/(tabs)/(groups)');
           }}
         >
           <LinearGradient
@@ -306,7 +306,7 @@ export default function BlinksScreen() {
               if (Platform.OS !== 'web') {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }
-              router.push('/(tabs)/profile' as never);
+              router.push('/(tabs)/profile');
             }}
           >
             <AvatarRing name={user.name} size={34} ringColor={theme.coral} showStatus hasResponded />
