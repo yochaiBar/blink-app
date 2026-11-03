@@ -17,7 +17,6 @@ import { GroupCardSkeleton } from '@/components/ui';
 import StreakIcon from '@/components/StreakIcon';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
 import { useOnboardingStore, tourMessages } from '@/stores/onboardingStore';
-import { isDemoGroup } from '@/constants/demoData';
 
 // ── Simplified Group Card ──
 
@@ -153,7 +152,7 @@ const GroupListCard = React.memo(function GroupListCard({
 export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { groups, refreshGroups, isRefreshing, isLoading, shouldShowDemoGroup } = useApp();
+  const { groups, refreshGroups, isRefreshing, isLoading, shouldShowDemoGroup, demoGroupId } = useApp();
 
   // Onboarding tour
   const tourStep = useOnboardingStore((s) => s.tourStep);
@@ -209,14 +208,13 @@ export default function GroupsScreen() {
 
   const handleHomeTourNext = useCallback(() => {
     advanceTour('group_detail');
-    const demoGroup = groups.find((g) => isDemoGroup(g.id));
-    if (demoGroup) {
+    if (demoGroupId) {
       router.push({
         pathname: '/group-detail' as never,
-        params: { id: demoGroup.id },
+        params: { id: demoGroupId },
       });
     }
-  }, [advanceTour, groups, router]);
+  }, [advanceTour, demoGroupId, router]);
 
   // Sort: active challenge groups first, then by last active
   const sortedGroups = useMemo(() => {
@@ -228,15 +226,13 @@ export default function GroupsScreen() {
   }, [groups]);
 
   const renderGroup = useCallback(
-    ({ item, index }: { item: Group; index: number }) => {
-      const isDemo = isDemoGroup(item.id);
-      return (
-        <View ref={isDemo ? demoCardRef : undefined} collapsable={false}>
-          <GroupListCard group={item} onPress={() => handleGroupPress(item.id)} index={index} />
-        </View>
-      );
-    },
-    [handleGroupPress],
+    ({ item, index }: { item: Group; index: number }) => (
+      // The tour's first tooltip points at the demo group's card.
+      <View ref={item.id === demoGroupId ? demoCardRef : undefined} collapsable={false}>
+        <GroupListCard group={item} onPress={() => handleGroupPress(item.id)} index={index} />
+      </View>
+    ),
+    [handleGroupPress, demoGroupId],
   );
 
   const keyExtractor = useCallback((item: Group) => item.id, []);

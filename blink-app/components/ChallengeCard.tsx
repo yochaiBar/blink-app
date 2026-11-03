@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
 import { Image } from 'expo-image';
-import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { ChevronRight, Camera } from 'lucide-react-native';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { FeedItemData } from '@/components/FeedItem';
-import { getLocalPhotoUri } from '@/services/photoStore';
+import { usePhotoUri } from '@/hooks/usePhotoUri';
 
 const MAX_THUMBS = 4;
 
@@ -64,13 +63,7 @@ function LivePill({ expiresAt }: { expiresAt?: string }) {
 // ── Response thumbnail (E2E local photo first, S3 fallback) ──
 
 function ResponseThumb({ responseId, photoUrl, overlay }: { responseId: string; photoUrl?: string; overlay?: string }) {
-  const localPhoto = useQuery({
-    queryKey: ['localPhoto', responseId],
-    queryFn: () => getLocalPhotoUri(responseId),
-    enabled: !!responseId,
-    staleTime: 30_000,
-  });
-  const uri = localPhoto.data ?? photoUrl;
+  const uri = usePhotoUri(responseId) ?? photoUrl;
 
   return (
     <View style={styles.thumb}>

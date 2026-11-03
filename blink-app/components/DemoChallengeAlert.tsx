@@ -8,8 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { DEMO_GROUP_ID, DEMO_CHALLENGE } from '@/constants/demoData';
-import { useOnboardingStore } from '@/stores/onboardingStore';
+import { demoSource } from '@/services/demoSource';
 
 interface Props {
   visible: boolean;
@@ -23,7 +22,7 @@ export default function DemoChallengeAlert({ visible, onDismiss }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const [shown, setShown] = useState(false);
 
-  const promptText = DEMO_CHALLENGE.prompt ?? 'Show us your view right now!';
+  const promptText = demoSource.activeChallenge().prompt ?? 'Show us your view right now!';
 
   useEffect(() => {
     if (!visible) {
@@ -73,8 +72,8 @@ export default function DemoChallengeAlert({ visible, onDismiss }: Props) {
     router.push({
       pathname: '/snap-challenge' as never,
       params: {
-        groupId: DEMO_GROUP_ID,
-        challengeId: 'demo_challenge_1',
+        groupId: demoSource.groupId,
+        challengeId: demoSource.challengeId,
       },
     });
   };

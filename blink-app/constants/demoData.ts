@@ -1,8 +1,21 @@
+/**
+ * Static content for the onboarding demo group ("Welcome Crew").
+ *
+ * Raw data only. Screens and hooks never import this file: they go through
+ * services/demoSource.ts, which serves it in the same shapes the API returns.
+ */
 import { Group, GroupMember } from '@/types';
 import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse } from '@/types/api';
 import { theme } from '@/constants/colors';
 
 export const DEMO_GROUP_ID = 'demo_welcome_crew';
+export const DEMO_CHALLENGE_ID = 'demo_challenge_1';
+/** Every demo id starts with this, so a response/challenge id alone identifies demo content. */
+export const DEMO_ID_PREFIX = 'demo_';
+/** The current user's own response in the demo reveal. */
+export const DEMO_OWN_RESPONSE_ID = 'demo_response_user';
+/** How far in the future the demo challenge always ends. */
+export const DEMO_CHALLENGE_WINDOW_MS = 30 * 60 * 1000;
 
 // --- Photo pools ---
 
@@ -155,7 +168,6 @@ export const DEMO_GROUP: Group = {
   members: DEMO_MEMBERS,
   lastActive: new Date().toISOString(),
   hasActiveChallenge: true,
-  challengeEndTime: Date.now() + 30 * 60 * 1000,
   color: theme.coral,
   inviteCode: 'DEMO00',
   createdAt: new Date().toISOString(),
@@ -174,41 +186,37 @@ export const DEMO_GROUP_DETAIL: ApiGroupDetail = {
 // --- Snap challenge (daily-rotating prompt) ---
 
 export const DEMO_CHALLENGE: ApiChallenge = {
-  id: 'demo_challenge_1',
+  id: DEMO_CHALLENGE_ID,
   group_id: DEMO_GROUP_ID,
   prompt: getDailyPrompt(),
   created_by: 'demo_user_1',
   created_at: new Date().toISOString(),
-  expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+  expires_at: new Date(Date.now() + DEMO_CHALLENGE_WINDOW_MS).toISOString(),
   status: 'active',
 };
 
 // --- Snap responses (3-4 randomly picked from the photo pool) ---
+// Like real responses they only say has_photo; the image comes from
+// DEMO_PHOTO_URIS the way real photos come from the local photo store.
 
-function buildDemoSnapResponses(): ApiChallengeResponse[] {
-  const daySeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-  // Pick 3 or 4 respondents
-  const respondentCount = 3 + (daySeed % 2); // alternates between 3 and 4
-  const respondents = seededPick(DEMO_MEMBERS, respondentCount, daySeed);
-  const photos = seededPick(DEMO_SNAP_PHOTOS, respondentCount, daySeed + 7);
+const daySeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+const respondentCount = 3 + (daySeed % 2); // alternates between 3 and 4
+const respondents = seededPick(DEMO_MEMBERS, respondentCount, daySeed);
+const respondentPhotos = seededPick(DEMO_SNAP_PHOTOS, respondentCount, daySeed + 7);
 
-  return respondents.map((member, i) => ({
-    id: `demo_response_${i + 1}`,
-    challenge_id: 'demo_challenge_1',
-    user_id: member.id,
-    display_name: member.name,
-    avatar_url: member.avatar,
-    photo_url: photos[i],
-    response_time_ms: 2000 + i * 1500,
-    responded_at: new Date(Date.now() - (respondentCount - i) * 5 * 60 * 1000).toISOString(),
-    created_at: new Date(Date.now() - (respondentCount - i) * 5 * 60 * 1000).toISOString(),
-  }));
-}
+export const DEMO_RESPONSES: ApiChallengeResponse[] = respondents.map((member, i) => ({
+  id: `demo_response_${i + 1}`,
+  challenge_id: DEMO_CHALLENGE_ID,
+  user_id: member.id,
+  display_name: member.name,
+  avatar_url: member.avatar,
+  photo_url: null,
+  has_photo: true,
+  response_time_ms: 2000 + i * 1500,
+  responded_at: new Date(Date.now() - (respondentCount - i) * 5 * 60 * 1000).toISOString(),
+  created_at: new Date(Date.now() - (respondentCount - i) * 5 * 60 * 1000).toISOString(),
+}));
 
-export const DEMO_RESPONSES: ApiChallengeResponse[] = buildDemoSnapResponses();
-
-// --- Helper ---
-
-export function isDemoGroup(id: string | undefined): boolean {
-  return id === DEMO_GROUP_ID;
-}
+export const DEMO_PHOTO_URIS: Record<string, string> = Object.fromEntries(
+  DEMO_RESPONSES.map((r, i) => [r.id, respondentPhotos[i]]),
+);

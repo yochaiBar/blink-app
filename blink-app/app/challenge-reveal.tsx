@@ -14,21 +14,19 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Check, Share2, ArrowLeft } from 'lucide-react-native';
 
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { api, addReactionApi, removeReactionApi } from '@/services/api';
 import { useApp } from '@/providers/AppProvider';
 import AvatarRing from '@/components/ui/AvatarRing';
 import GlassCard from '@/components/ui/GlassCard';
 import EncryptedImage from '@/components/EncryptedImage';
-import { ApiChallengeResponse, ApiChallenge, ApiGroupDetail, ApiReaction } from '@/types/api';
-import { isDemoGroup, DEMO_RESPONSES, DEMO_GROUP_DETAIL, DEMO_CHALLENGE } from '@/constants/demoData';
-import { useOnboardingStore } from '@/stores/onboardingStore';
-import { Users, UserPlus } from 'lucide-react-native';
+import { ApiChallengeResponse } from '@/types/api';
+import { useChallengeReveal } from '@/hooks/useChallenge';
+import { Users } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PHOTO_ASPECT = 4 / 5;
@@ -85,12 +83,6 @@ function useConfetti(count: number) {
   return { particles: particles.current, fire };
 }
 
-// ─── Types ───────────────────────────────────────────────────────────
-interface RevealData {
-  responses: ApiChallengeResponse[];
-  challenge: ApiChallenge | null;
-}
-
 // ─── Animated Reaction Button ────────────────────────────────────────
 interface AnimatedReactionBtnProps {
   emoji: string;
@@ -139,13 +131,11 @@ function AnimatedReactionBtn({ emoji, isSelected, count, onPress }: AnimatedReac
 
 // ─── Main Screen ─────────────────────────────────────────────────────
 export default function ChallengeRevealScreen() {
-  const { challengeId, groupId, isDemo, localPhotoUri } = useLocalSearchParams<{
+  const { challengeId, groupId, localPhotoUri } = useLocalSearchParams<{
     challengeId: string;
     groupId: string;
-    isDemo?: string;
     localPhotoUri?: string;
   }>();
-  const isDemoMode = isDemo === '1';
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -184,75 +174,13 @@ export default function ChallengeRevealScreen() {
   // ScrollView ref
   const scrollRef = useRef<ScrollView>(null);
 
-  // Track when the screen was mounted to stop refetching after 10s
-  const mountedAt = useRef(Date.now()).current;
-
   // ── Selected reactions (local state for visual feedback) ───────
   const [selectedReactions, setSelectedReactions] = useState<Record<string, Set<string>>>({});
 
-  // ── Data Fetching ────────────────────────────────────────────────
-  const { data: revealData, isLoading } = useQuery<RevealData>({
-    queryKey: ['challenge-reveal', challengeId, isDemoMode ? 'demo' : 'real'],
-    queryFn: async (): Promise<RevealData> => {
-      if (isDemoMode) {
-        const demoPhotoUri = useOnboardingStore.getState().demoPhotoUri;
-        const userResponse: ApiChallengeResponse = {
-          id: 'demo_response_user',
-          challenge_id: 'demo_challenge_1',
-          user_id: user.id,
-          display_name: user.name ?? 'You',
-          avatar_url: user.avatar ?? null,
-          photo_url: demoPhotoUri,
-          response_time_ms: 3200,
-          responded_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        };
-        return {
-          responses: [userResponse, ...DEMO_RESPONSES],
-          challenge: DEMO_CHALLENGE,
-        };
-      }
-
-      // Try reveal endpoint first
-      try {
-        const res = await api<{
-          responses?: ApiChallengeResponse[];
-          challenge?: ApiChallenge | null;
-        }>(`/challenges/${challengeId}/reveal`);
-        return {
-          responses: res.responses ?? [],
-          challenge: res.challenge ?? null,
-        };
-      } catch {
-        // Reveal endpoint may not exist yet -- fall back to responses endpoint
-        const responses: ApiChallengeResponse[] = await api(`/challenges/${challengeId}/responses`);
-        return { responses: Array.isArray(responses) ? responses : [], challenge: null };
-      }
-    },
-    enabled: !!challengeId,
-    staleTime: 60_000,
-    // Refetch every 3s for the first 10s to pick up photos still uploading to S3
-    refetchInterval: isDemoMode
-      ? false
-      : (query) => {
-          const elapsed = Date.now() - mountedAt;
-          if (elapsed > 10_000) return false;
-          // Keep refetching if any response is missing a photo_url
-          const responses = query.state.data?.responses ?? [];
-          const hasMissingPhoto = responses.some((r: ApiChallengeResponse) => !r.photo_url);
-          return hasMissingPhoto ? 3000 : false;
-        },
-  });
-
-  const { data: groupData } = useQuery<ApiGroupDetail>({
-    queryKey: ['group-detail-reveal', groupId],
-    queryFn: () => {
-      if (isDemoMode) return DEMO_GROUP_DETAIL;
-      return api(`/groups/${groupId}`);
-    },
-    enabled: !!groupId,
-    staleTime: 60_000,
-  });
+  // ── Data Fetching (the demo group is served by demoSource behind this hook) ──
+  const { isSample, revealQuery, groupQuery, markSeen } = useChallengeReveal(challengeId, groupId, user);
+  const { data: revealData, isLoading } = revealQuery;
+  const { data: groupData } = groupQuery;
 
   // Sort responses: user's own first, then by responded_at
   const sortedResponses = useMemo(() => {
@@ -404,10 +332,7 @@ export default function ChallengeRevealScreen() {
       Animated.timing(summarySlide, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start();
 
-    if (isDemoMode) {
-      useOnboardingStore.getState().completeDemoChallenge();
-      useOnboardingStore.getState().completeTour();
-    }
+    markSeen();
 
     if (isLastResponder) {
       bigConfetti.fire();
@@ -415,7 +340,7 @@ export default function ChallengeRevealScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       }
     }
-  }, [phase, isLastResponder, isDemoMode]);
+  }, [phase, isLastResponder, markSeen]);
 
   // ── Scroll handler ──────────────────────────────────────────────
   const handleScroll = useCallback(() => {
@@ -485,20 +410,14 @@ export default function ChallengeRevealScreen() {
         return next;
       });
 
-      if (isDemoMode) return;
       await addReaction(responseId, emoji);
       queryClient.invalidateQueries({ queryKey: ['challenge-reveal', challengeId] });
     },
-    [addReaction, challengeId, queryClient, isDemoMode],
+    [addReaction, challengeId, queryClient],
   );
 
   // ── Navigation ──────────────────────────────────────────────────
   const handleShare = useCallback(() => {
-    if (isDemoMode) {
-      Alert.alert('Coming Soon', 'Share will be available with your real groups!');
-      return;
-    }
-
     // Find the user's own response to share
     const ownResponse = sortedResponses.find((r) => r.user_id === user.id);
     const responseToShare = ownResponse ?? sortedResponses[0];
@@ -525,7 +444,7 @@ export default function ChallengeRevealScreen() {
         ...(responseTimeSec != null ? { responseTimeSec } : {}),
       },
     });
-  }, [sortedResponses, user.id, challengePrompt, groupData, router, isDemoMode]);
+  }, [sortedResponses, user.id, challengePrompt, groupData, router]);
 
   const handleBackToFeed = useCallback(() => {
     router.dismiss();
@@ -794,8 +713,8 @@ export default function ChallengeRevealScreen() {
               </View>
             )}
 
-            {/* Action buttons */}
-            {isDemoMode ? (
+            {/* Action buttons: the demo reveal ends the tour with a nudge to a real group */}
+            {isSample ? (
               <View style={styles.actionButtons}>
                 <TouchableOpacity
                   style={styles.shareBtn}

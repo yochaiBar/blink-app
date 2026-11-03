@@ -15,7 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
@@ -24,9 +24,13 @@ import ReportModal from '@/components/ReportModal';
 import { api, blockUser, resetGroupKey } from '@/services/api';
 import { newGroupKey, storeGroupKey } from '@/services/groupCrypto';
 import { Skeleton, SnapCardSkeleton } from '@/components/ui';
-import { ApiGroupDetail, ApiChallenge, ApiChallengeResponse } from '@/types/api';
 import { apiGroupDetailToGroup, apiResponseToSnap, apiMembersToLeaderboard } from '@/utils/adapters';
-import { isDemoGroup, DEMO_GROUP_DETAIL, DEMO_CHALLENGE, DEMO_RESPONSES } from '@/constants/demoData';
+import {
+  useGroupDetail,
+  fetchChallengeProgress,
+  fetchChallengePreview,
+  type ChallengePreview,
+} from '@/hooks/useGroupDetail';
 import { useOnboardingStore, tourMessages } from '@/stores/onboardingStore';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
 import StreakCelebration from '@/components/StreakCelebration';
@@ -52,7 +56,6 @@ export default function GroupDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { addReaction, user } = useApp();
-  const isDemo = isDemoGroup(id);
 
   const tourStep = useOnboardingStore((s) => s.tourStep);
   const advanceTour = useOnboardingStore((s) => s.advanceTour);
@@ -71,13 +74,7 @@ export default function GroupDetailScreen() {
   const challengeBarRef = useRef<View>(null);
   const [streakCelebration, setStreakCelebration] = useState<{ userName: string; streakDays: number } | null>(null);
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
-  const [previewData, setPreviewData] = useState<{
-    respondedCount: number;
-    totalMembers: number;
-    totalReactions: number;
-    topReactionEmoji?: string;
-    respondedUsers: Array<{ displayName: string; avatarUrl?: string }>;
-  } | null>(null);
+  const [previewData, setPreviewData] = useState<ChallengePreview | null>(null);
   const [challengeJustTriggered, setChallengeJustTriggered] = useState(false);
 
   // ── Animations ──
@@ -97,57 +94,15 @@ export default function GroupDetailScreen() {
     return () => animation.stop();
   }, [pulseAnim]);
 
-  // ── Data queries ──
-  const groupQuery = useQuery({
-    queryKey: ['group', id],
-    queryFn: async () => {
-      if (isDemo) return DEMO_GROUP_DETAIL;
-      return (await api(`/groups/${id}`)) as ApiGroupDetail;
-    },
-    enabled: !!id,
-    staleTime: isDemo ? Infinity : 15_000,
-  });
-
-  const challengeQuery = useQuery({
-    queryKey: ['challenge', id],
-    queryFn: async () => {
-      if (isDemo) return { ...DEMO_CHALLENGE, expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString() };
-      return (await api(`/challenges/groups/${id}/challenges/active`)) as ApiChallenge;
-    },
-    enabled: !!id,
-    retry: false,
-    staleTime: isDemo ? Infinity : undefined,
-  });
-
-  const activeChallenge = challengeQuery.data ?? null;
-
-  const responsesQuery = useQuery({
-    queryKey: ['responses', isDemo ? 'demo' : activeChallenge?.id],
-    queryFn: async () => {
-      if (isDemo) return DEMO_RESPONSES;
-      if (!activeChallenge?.id) return [];
-      return (await api(`/challenges/${activeChallenge.id}/responses`)) as ApiChallengeResponse[];
-    },
-    enabled: isDemo ? !!id : !!activeChallenge?.id,
-    staleTime: isDemo ? Infinity : undefined,
-  });
-
-  const photosQuery = useQuery({
-    queryKey: ['group-photos', id],
-    queryFn: async () => ((await api(`/challenges/groups/${id}/photos?limit=30`)) ?? []) as { id: string }[],
-    enabled: !!id && !isDemo,
-    staleTime: 60_000,
-    retry: false,
-  });
+  // ── Data queries (the demo group is served by demoSource behind this hook) ──
+  const { isSample, groupQuery, challengeQuery, activeChallenge, responsesQuery, photosQuery } = useGroupDetail(id);
 
   // ── Derived data ──
   const group = groupQuery.data ? apiGroupDetailToGroup(groupQuery.data, activeChallenge) : null;
   const leaderboard = groupQuery.data?.members ? apiMembersToLeaderboard(groupQuery.data.members) : [];
   const groupPhotosCount = photosQuery.data?.length ?? 0;
   const snaps = (responsesQuery.data ?? []).map((r) => ({ ...apiResponseToSnap(r), groupId: id ?? '' }));
-  const hasSubmittedToday = isDemo
-    ? false
-    : snaps.some((s) => s.userId === user.id) || (responsesQuery.data ?? []).some((r) => r.user_id === user.id);
+  const hasSubmittedToday = (responsesQuery.data ?? []).some((r) => r.user_id === user.id);
   const challengeStarterName = React.useMemo(() => {
     if (!activeChallenge?.created_by) return null;
     const member = groupQuery.data?.members?.find((m) => m.user_id === activeChallenge.created_by);
@@ -172,39 +127,26 @@ export default function GroupDetailScreen() {
 
   // ── Side effects: fetch progress, preview, socket listeners ──
   useEffect(() => {
-    if (!activeChallenge?.id || isDemo) return;
+    if (!activeChallenge?.id) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const data = await api<{
-          responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>;
-          totalMembers?: number;
-        }>(`/challenges/${activeChallenge.id}/progress`);
+    fetchChallengeProgress(activeChallenge.id)
+      .then((data) => {
         if (!cancelled && data) {
-          setProgressData({ responded: data.responded ?? [], totalMembers: data.totalMembers ?? 0 });
+          setProgressData({ responded: data.respondedUsers ?? [], totalMembers: data.totalMembers ?? 0 });
           setChallengeJustTriggered(false);
         }
-      } catch {
-        /* endpoint may not exist */
-      }
-    })();
+      })
+      .catch(() => {}); // Non-critical: progress is supplementary
     return () => {
       cancelled = true;
     };
-  }, [activeChallenge?.id, isDemo]);
+  }, [activeChallenge?.id]);
 
   useEffect(() => {
-    if (!activeChallenge?.id || isDemo) return;
+    if (!activeChallenge?.id) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const data = await api<{
-          respondedCount?: number;
-          totalMembers?: number;
-          totalReactions?: number;
-          topReactionEmoji?: string;
-          respondedUsers?: Array<{ userId: string; displayName: string; avatarUrl?: string }>;
-        }>(`/challenges/${activeChallenge.id}/preview`);
+    fetchChallengePreview(activeChallenge.id)
+      .then((data) => {
         if (!cancelled && data)
           setPreviewData({
             respondedCount: data.respondedCount ?? 0,
@@ -213,35 +155,31 @@ export default function GroupDetailScreen() {
             topReactionEmoji: data.topReactionEmoji,
             respondedUsers: data.respondedUsers ?? [],
           });
-      } catch {
-        /* endpoint may not exist */
-      }
-    })();
+      })
+      .catch(() => {}); // Non-critical: the teaser is supplementary
     return () => {
       cancelled = true;
     };
-  }, [activeChallenge?.id, isDemo]);
+  }, [activeChallenge?.id]);
 
   useEffect(() => {
     const socket = getSocket();
-    if (!socket || isDemo) return;
+    if (!socket) return;
     const handleProgress = (data: {
-      responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>;
+      respondedUsers?: { userId: string; displayName: string }[];
       totalMembers?: number;
     }) => {
-      if (data.responded && data.totalMembers) {
-        setProgressData({ responded: data.responded, totalMembers: data.totalMembers });
+      if (data.respondedUsers && data.totalMembers) {
+        setProgressData({ responded: data.respondedUsers, totalMembers: data.totalMembers });
         setChallengeJustTriggered(false);
       }
     };
     const handleResponse = () => {
       if (activeChallenge?.id) {
         responsesQuery.refetch();
-        api<{ responded?: Array<{ userId: string; displayName: string; avatarUrl?: string }>; totalMembers?: number }>(
-          `/challenges/${activeChallenge.id}/progress`,
-        )
+        fetchChallengeProgress(activeChallenge.id)
           .then((data) => {
-            if (data) setProgressData({ responded: data.responded ?? [], totalMembers: data.totalMembers ?? 0 });
+            if (data) setProgressData({ responded: data.respondedUsers ?? [], totalMembers: data.totalMembers ?? 0 });
           })
           .catch(() => {}); // Non-critical: progress refresh is best-effort
       }
@@ -260,7 +198,7 @@ export default function GroupDetailScreen() {
       socket.off('challenge:response', handleResponse);
       socket.off('streak:milestone', handleStreak);
     };
-  }, [isDemo, activeChallenge?.id, responsesQuery]);
+  }, [activeChallenge?.id, responsesQuery]);
 
   // ── Mutations ──
   const ringMutation = useMutation({
@@ -437,11 +375,10 @@ export default function GroupDetailScreen() {
   }, [group?.name, group?.inviteCode]);
 
   const onRefresh = useCallback(() => {
-    if (isDemo) return;
     groupQuery.refetch();
     challengeQuery.refetch();
     if (activeChallenge?.id) responsesQuery.refetch();
-  }, [groupQuery, challengeQuery, responsesQuery, activeChallenge, isDemo]);
+  }, [groupQuery, challengeQuery, responsesQuery, activeChallenge]);
 
   // ── Countdown timer ──
   useEffect(() => {
@@ -459,7 +396,7 @@ export default function GroupDetailScreen() {
 
   // ── Tour tooltip measurement ──
   useEffect(() => {
-    if (isDemo && tourStep === 'group_detail' && challengeBarRef.current) {
+    if (isSample && tourStep === 'group_detail' && challengeBarRef.current) {
       const timer = setTimeout(() => {
         challengeBarRef.current?.measureInWindow((x, y, width, height) => {
           if (width > 0) setChallengeBarLayout({ x, y, width, height });
@@ -467,7 +404,7 @@ export default function GroupDetailScreen() {
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [isDemo, tourStep, group]);
+  }, [isSample, tourStep, group]);
 
   const handleGroupDetailTourNext = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -538,22 +475,15 @@ export default function GroupDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn} testID="back-btn">
           <ArrowLeft size={22} color={theme.text} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={s.headerCenter}
-          activeOpacity={0.7}
-          onPress={() => {
-            if (!isDemo) {
-              /* navigate to group settings */
-            }
-          }}
-        >
+        <View style={s.headerCenter}>
           <Text style={s.headerEmoji}>{group.emoji}</Text>
           <Text style={s.headerTitle} numberOfLines={1}>
             {group.name}
           </Text>
-        </TouchableOpacity>
+        </View>
         <View style={s.headerRight}>
-          {!isDemo && (
+          {/* A sample group has no settings: nothing to invite to, leave or delete. */}
+          {!isSample && (
             <TouchableOpacity style={s.menuBtn} onPress={() => setShowGroupMenu(true)}>
               <MoreHorizontal size={20} color={theme.text} />
             </TouchableOpacity>
@@ -568,11 +498,7 @@ export default function GroupDetailScreen() {
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
         scrollEventThrottle={16}
         refreshControl={
-          <RefreshControl
-            refreshing={!isDemo && groupQuery.isRefetching}
-            onRefresh={onRefresh}
-            tintColor={theme.coral}
-          />
+          <RefreshControl refreshing={groupQuery.isRefetching} onRefresh={onRefresh} tintColor={theme.coral} />
         }
       >
         <MemberAvatarRow
@@ -586,7 +512,7 @@ export default function GroupDetailScreen() {
           currentUserId={user.id}
         />
 
-        {!isDemo && id && <GroupStatsCard groupId={id} />}
+        {!isSample && id && <GroupStatsCard groupId={id} />}
 
         {activeChallenge && (
           <ChallengeSection
@@ -605,7 +531,7 @@ export default function GroupDetailScreen() {
 
         <ChallengeResponsesList
           activeChallenge={activeChallenge}
-          isDemo={isDemo}
+          showTeaser={!isSample}
           responsesLoading={responsesQuery.isLoading}
           responsesError={responsesQuery.isError}
           onRetryResponses={() => responsesQuery.refetch()}
@@ -623,24 +549,26 @@ export default function GroupDetailScreen() {
           onBlock={handleBlockUser}
         />
 
-        {!isDemo && <GroupMiniFeed groupId={id ?? ''} groupName={group.name} groupEmoji={group.emoji} />}
+        {/* A sample group has no history: no recent activity, streaks, leaderboard or new challenges. */}
+        {!isSample && <GroupMiniFeed groupId={id ?? ''} groupName={group.name} groupEmoji={group.emoji} />}
 
-        <BottomActions
-          isDemo={isDemo}
-          hasActiveChallenge={!!activeChallenge}
-          groupStreak={groupStreak}
-          longestGroupStreak={longestGroupStreak}
-          leaderboardCount={leaderboard.length}
-          isStartingChallenge={ringMutation.isPending}
-          onChallengeNow={handleChallengeNow}
-          onViewLeaderboard={() => router.push({ pathname: '/group-leaderboard' as never, params: { groupId: id } })}
-        />
+        {!isSample && (
+          <BottomActions
+            hasActiveChallenge={!!activeChallenge}
+            groupStreak={groupStreak}
+            longestGroupStreak={longestGroupStreak}
+            leaderboardCount={leaderboard.length}
+            isStartingChallenge={ringMutation.isPending}
+            onChallengeNow={handleChallengeNow}
+            onViewLeaderboard={() => router.push({ pathname: '/group-leaderboard' as never, params: { groupId: id } })}
+          />
+        )}
 
         <View style={{ height: 100 }} />
       </Animated.ScrollView>
 
       <Tooltip
-        visible={isDemo && tourStep === 'group_detail'}
+        visible={isSample && tourStep === 'group_detail'}
         message={tourMessages.group_detail}
         targetLayout={challengeBarLayout}
         position="below"

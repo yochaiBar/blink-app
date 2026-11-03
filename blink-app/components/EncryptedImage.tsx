@@ -1,9 +1,8 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Image, ImageProps } from 'expo-image';
-import { useQuery } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
-import { getLocalPhotoUri } from '@/services/photoStore';
+import { usePhotoUri } from '@/hooks/usePhotoUri';
 
 export interface EncryptedImageProps extends Omit<ImageProps, 'source'> {
   /** v1 photo_url (S3) — fallback while v1 rows still exist. Null for v2 responses. */
@@ -28,13 +27,8 @@ export interface EncryptedImageProps extends Omit<ImageProps, 'source'> {
  *      on successful receive; this query re-runs and the Image swaps in.
  */
 export default function EncryptedImage({ uri, responseId, style, ...imageProps }: EncryptedImageProps) {
-  const localPhotoQuery = useQuery({
-    queryKey: ['localPhoto', responseId],
-    queryFn: () => (responseId ? getLocalPhotoUri(responseId) : null),
-    enabled: !!responseId,
-    staleTime: 30_000,
-  });
-  const effectiveUri = localPhotoQuery.data ?? uri;
+  const localPhotoUri = usePhotoUri(responseId);
+  const effectiveUri = localPhotoUri ?? uri;
 
   if (!effectiveUri) {
     return <View style={[styles.skeleton, style]} />;

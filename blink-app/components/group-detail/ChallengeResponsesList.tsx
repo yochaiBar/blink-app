@@ -18,7 +18,8 @@ interface SnapItem {
 
 export interface ChallengeResponsesListProps {
   activeChallenge: ApiChallenge | null;
-  isDemo: boolean;
+  /** Show the blurred "respond to see" teaser when the user hasn't answered. */
+  showTeaser: boolean;
   responsesLoading: boolean;
   responsesError: boolean;
   onRetryResponses: () => void;
@@ -44,7 +45,7 @@ export interface ChallengeResponsesListProps {
 
 export default function ChallengeResponsesList({
   activeChallenge,
-  isDemo,
+  showTeaser,
   responsesLoading,
   responsesError,
   onRetryResponses,
@@ -64,7 +65,7 @@ export default function ChallengeResponsesList({
   return (
     <>
       {/* Blurred preview if user hasn't responded */}
-      {!hasSubmittedToday && activeChallenge && !isDemo && (previewData || snaps.length > 0) && (
+      {showTeaser && !hasSubmittedToday && activeChallenge && (previewData || snaps.length > 0) && (
         <BlurredPreviewCard
           respondedCount={previewData?.respondedCount ?? snaps.length}
           totalMembers={previewData?.totalMembers ?? groupMemberCount}

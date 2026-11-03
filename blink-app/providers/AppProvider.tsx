@@ -16,7 +16,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
   // ── Domain hooks ──
   const {
     groups,
+    serverGroups,
     shouldShowDemoGroup,
+    demoGroupId,
     isLoadingGroups,
     isDataLoaded,
     isRefreshing,
@@ -51,7 +53,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   return {
     groups,
+    serverGroups,
     shouldShowDemoGroup,
+    demoGroupId,
     user,
     notifications,
     unreadNotificationCount,

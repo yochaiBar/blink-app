@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { readAsStringAsync, EncodingType } from 'expo-file-system/legacy';
 import { api, requestKeyshare } from '@/services/api';
-import { isDemoGroup } from '@/constants/demoData';
+import { demoSource, isDemoGroup } from '@/services/demoSource';
 import { ApiChallenge } from '@/types/api';
 import { queryKeys } from '@/utils/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
@@ -28,8 +28,11 @@ export function useSubmitSnap() {
 
   const snapMutation = useMutation({
     mutationFn: async ({ groupId, imageUri }: { groupId: string; imageUri?: string }) => {
-      // Skip API calls for demo group
-      if (isDemoGroup(groupId)) return;
+      // The demo group never reaches the server: keep the photo for its reveal.
+      if (isDemoGroup(groupId)) {
+        demoSource.recordSnap(imageUri);
+        return;
+      }
 
       // Find active challenge for this group
       let challengeId: string | null = null;

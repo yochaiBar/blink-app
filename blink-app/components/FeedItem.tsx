@@ -2,13 +2,12 @@ import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useQuery } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import AvatarRing from '@/components/ui/AvatarRing';
 import PhotoCommentsPreview from '@/components/PhotoCommentsPreview';
-import { getLocalPhotoUri } from '@/services/photoStore';
+import { usePhotoUri } from '@/hooks/usePhotoUri';
 
 // ── Types ──
 
@@ -59,13 +58,7 @@ function PhotoFeedItem({ item }: { item: FeedItemData }) {
   // item itself carries no S3 URL. v1 responses fall back to item.photoUrl
   // (S3). useSocket invalidates ['localPhoto', response_id] when a photo
   // lands; this query re-runs and the Image swaps the source.
-  const localPhotoQuery = useQuery({
-    queryKey: ['localPhoto', responseId],
-    queryFn: () => (responseId ? getLocalPhotoUri(responseId) : null),
-    enabled: !!responseId,
-    staleTime: 30_000,
-  });
-  const effectivePhotoUri = localPhotoQuery.data ?? item.photoUrl;
+  const effectivePhotoUri = usePhotoUri(responseId) ?? item.photoUrl;
 
   const { onReact, onPress } = item;
   const handleReact = useCallback(

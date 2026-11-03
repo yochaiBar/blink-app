@@ -7,7 +7,6 @@ import { spacing, borderRadius } from '@/constants/spacing';
 import GroupStreakBanner from '@/components/GroupStreakBanner';
 
 export interface BottomActionsProps {
-  isDemo: boolean;
   hasActiveChallenge: boolean;
   groupStreak: number;
   longestGroupStreak: number;
@@ -18,7 +17,6 @@ export interface BottomActionsProps {
 }
 
 export default function BottomActions({
-  isDemo,
   hasActiveChallenge,
   groupStreak,
   longestGroupStreak,
@@ -29,11 +27,9 @@ export default function BottomActions({
 }: BottomActionsProps) {
   return (
     <View style={styles.bottomActions}>
-      {!isDemo && groupStreak > 0 && (
-        <GroupStreakBanner groupStreak={groupStreak} longestGroupStreak={longestGroupStreak} />
-      )}
+      {groupStreak > 0 && <GroupStreakBanner groupStreak={groupStreak} longestGroupStreak={longestGroupStreak} />}
 
-      {!isDemo && !hasActiveChallenge && (
+      {!hasActiveChallenge && (
         <TouchableOpacity
           style={[styles.challengeNowBtn, isStartingChallenge && styles.challengeNowBtnBusy]}
           onPress={onChallengeNow}
@@ -45,7 +41,7 @@ export default function BottomActions({
         </TouchableOpacity>
       )}
 
-      {!isDemo && leaderboardCount > 0 && (
+      {leaderboardCount > 0 && (
         <TouchableOpacity style={styles.leaderboardLink} onPress={onViewLeaderboard} activeOpacity={0.7}>
           <Trophy size={16} color={theme.yellow} />
           <Text style={styles.leaderboardLinkText}>View Leaderboard</Text>

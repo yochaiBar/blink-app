@@ -30,7 +30,6 @@ import { FeedItemData } from '@/components/FeedItem';
 import ChallengeCard from '@/components/ChallengeCard';
 import DemoChallengeAlert from '@/components/DemoChallengeAlert';
 import { useOnboardingStore } from '@/stores/onboardingStore';
-import { isDemoGroup } from '@/constants/demoData';
 
 // ── Types ──
 
@@ -119,6 +118,7 @@ export default function BlinksScreen() {
   const queryClient = useQueryClient();
   const {
     groups,
+    serverGroups,
     user,
     shouldShowDemoGroup,
     unreadNotificationCount,
@@ -135,12 +135,15 @@ export default function BlinksScreen() {
   const flatListRef = useRef<FlatList>(null);
   useScrollToTop(flatListRef);
 
+  // Feed queries only call the API for server groups (the demo group has its own alert).
+  const serverGroupKey = [...serverGroups.map((g) => g.id)].sort().join(',');
+
   // ── Fetch active challenges across all groups ──
   const activeChallengesQuery = useQuery({
-    queryKey: ['feed-active-challenges', [...groups.map((g) => g.id)].sort().join(',')],
+    queryKey: ['feed-active-challenges', serverGroupKey],
     queryFn: async (): Promise<PendingChallenge[]> => {
       const results: PendingChallenge[] = [];
-      const groupsWithChallenge = groups.filter((g) => g.hasActiveChallenge && !isDemoGroup(g.id));
+      const groupsWithChallenge = serverGroups.filter((g) => g.hasActiveChallenge);
       const fetches = groupsWithChallenge.map(async (group) => {
         try {
           const challenge: ApiChallenge = await api(`/challenges/groups/${group.id}/challenges/active`);
@@ -177,15 +180,12 @@ export default function BlinksScreen() {
 
   // ── Answered challenges: history + the photo responses for each ──
   const feedQuery = useQuery({
-    queryKey: ['blinks-feed-v2', [...groups.map((g) => g.id)].sort().join(',')],
+    queryKey: ['blinks-feed-v2', serverGroupKey],
     queryFn: async (): Promise<AnsweredChallenge[]> => {
-      if (groups.length === 0) return [];
-
       const answered: AnsweredChallenge[] = [];
 
-      // Fetch history + responses for each group in parallel (skip demo groups)
-      const realGroups = groups.filter((g) => !isDemoGroup(g.id));
-      const fetches = realGroups.map(async (group) => {
+      // Fetch history + responses for each group in parallel
+      const fetches = serverGroups.map(async (group) => {
         try {
           const history: ChallengeHistoryItem[] = await api(
             `/challenges/groups/${group.id}/challenges/history?limit=5`,
