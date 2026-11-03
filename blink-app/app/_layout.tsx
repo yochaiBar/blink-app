@@ -25,6 +25,8 @@ import {
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import * as Linking from 'expo-linking';
 import { useSocket } from '@/hooks/useSocket';
+import { useGroupKeySync } from '@/hooks/useGroupKeySync';
+import { useForegroundMaintenance } from '@/hooks/useForegroundMaintenance';
 import { useDeviceKeyRegistration } from '@/hooks/useDeviceKeyRegistration';
 
 // Startup self-test: confirm the polyfill is wired and the RNG returns
@@ -73,6 +75,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   // Manage Socket.io connection (connects when authenticated, disconnects on logout)
   useSocket();
+  // Keep every group's key in step with the server (once, app-wide).
+  useGroupKeySync();
+  // On foreground: sweep old sender photo copies, retry failed relays.
+  useForegroundMaintenance();
   // Register (or rotate) this device's X25519 public key once per session
   // after auth — needed by the E2E photo flow once it ships behind a flag.
   // Idempotent on the server; failures retry on next launch.

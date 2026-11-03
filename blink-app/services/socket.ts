@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { API_URL, getAccessToken } from '@/services/api';
+import { API_URL, getAccessToken, refreshSession } from '@/services/api';
 import { getOrCreateDeviceKey } from '@/services/groupCrypto';
 
 // Derive the base server URL by stripping the /api suffix
@@ -15,6 +15,10 @@ let socket: Socket | null = null;
  * pickup requests to the device holding a photo. It's rebuilt on every
  * (re)connect, with the latest access token. The server puts the socket in
  * its group rooms itself.
+ *
+ * If the server rejects the token (it expired while we were away), we
+ * refresh the session once and reconnect; a refresh the server refuses
+ * logs the user out (services/api).
  */
 export function connectSocket(): Socket | null {
   const token = getAccessToken();
@@ -48,15 +52,29 @@ export function connectSocket(): Socket | null {
     reconnectionDelayMax: 10000,
   });
 
-  socket.on('connect', () => {
-    if (__DEV__) console.log('[Socket] Connected', socket?.id);
+  const current = socket;
+  // One refresh per failed handshake streak, so a session that keeps being
+  // refused can't loop.
+  let refreshedForAuth = false;
+
+  current.on('connect', () => {
+    refreshedForAuth = false;
+    if (__DEV__) console.log('[Socket] Connected', current.id);
   });
 
-  socket.on('connect_error', (err) => {
+  current.on('connect_error', (err) => {
     if (__DEV__) console.warn('[Socket] Connection error:', err.message);
+    // The auth middleware refused us; Socket.io won't retry that by itself.
+    if (!err.message.startsWith('Authentication error') || refreshedForAuth) return;
+    refreshedForAuth = true;
+    refreshSession()
+      .then((ok) => {
+        if (ok && socket === current) current.connect();
+      })
+      .catch(() => undefined);
   });
 
-  socket.on('disconnect', (reason) => {
+  current.on('disconnect', (reason) => {
     if (__DEV__) console.log('[Socket] Disconnected:', reason);
   });
 

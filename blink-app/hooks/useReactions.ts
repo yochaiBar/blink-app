@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { addReactionApi, removeReactionApi } from '@/services/api';
+import { ApiError, addReactionApi, removeReactionApi } from '@/services/api';
 import { isDemoResponse } from '@/services/demoSource';
 
 export function useReactions() {
@@ -12,13 +12,12 @@ export function useReactions() {
       if (isDemoResponse(responseId)) return;
       try {
         await addReactionApi(responseId, emoji);
-      } catch {
-        // If 409 conflict (already reacted), try removing instead (toggle behavior)
-        try {
-          await removeReactionApi(responseId, emoji);
-        } catch {
-          // Non-critical: reaction toggle is best-effort, UI updates optimistically
+      } catch (err) {
+        // 409: already reacted with this emoji — tapping again removes it.
+        if (err instanceof ApiError && err.status === 409) {
+          await removeReactionApi(responseId, emoji).catch(() => undefined);
         }
+        // Anything else: best-effort, the next refetch shows the truth.
       }
       queryClient.invalidateQueries({ queryKey: ['responses'] });
     },

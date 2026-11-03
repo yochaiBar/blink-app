@@ -251,6 +251,43 @@ describe('logout', () => {
   });
 });
 
+describe('deleteAccount', () => {
+  async function signedIn() {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(200, {
+        user: { id: 'u1', phone_number: '+1', display_name: 'T', bio: null },
+        access_token: 'at',
+        refresh_token: 'rt',
+      }),
+    );
+    await useAuthStore.getState().verifyOtp('+15551234567', '123456');
+  }
+
+  it('stays signed in, with its tokens, when the server refuses', async () => {
+    await signedIn();
+    mockFetch.mockResolvedValueOnce(mockResponse(500, { error: 'Internal server error' }, false));
+
+    await expect(useAuthStore.getState().deleteAccount()).rejects.toThrow('Internal server error');
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    expect(localStorage.getItem('refreshToken')).toBe('rt');
+  });
+
+  it('signs out and clears the tokens once the account is gone', async () => {
+    await signedIn();
+    mockFetch.mockResolvedValueOnce(mockResponse(200, { message: 'Account deleted successfully' }));
+
+    await useAuthStore.getState().deleteAccount();
+
+    expect(useAuthStore.getState()).toMatchObject({ user: null, isAuthenticated: false });
+    expect(localStorage.getItem('accessToken')).toBeNull();
+    expect(localStorage.getItem('refreshToken')).toBeNull();
+    const calls = mockFetch.mock.calls.map(([url]) => String(url));
+    expect(calls.some((u) => u.endsWith('/auth/delete-account'))).toBe(true);
+    expect(calls.some((u) => u.endsWith('/auth/logout'))).toBe(false);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────
 // updateName and updateBio
 // ─────────────────────────────────────────────────────────────────

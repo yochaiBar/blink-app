@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
-import { api, setTokens, clearTokens, loadToken } from '@/services/api';
+import { api, setTokens, clearTokens, loadToken, onSessionExpired } from '@/services/api';
 import { sendPushTokenToServer } from '@/utils/notifications';
 import { useOnboardingStore } from '@/stores/onboardingStore';
-import { clearDeviceKey } from '@/services/groupCrypto';
-// photoStore is lazy-required inside logout() — it imports
-// expo-file-system/legacy which needs the native module at runtime and
-// would otherwise force every consumer of authStore to mock the FS.
+import { clearDeviceKey, wipeAllGroupKeys } from '@/services/groupCrypto';
+import { wipeAllPins } from '@/services/keyPins';
+// photoStore and relayRetry are lazy-required in wipeLocalData() — they
+// import expo-file-system/legacy, which needs the native module at runtime
+// and would otherwise force every consumer of authStore to mock the FS.
 
 interface User {
   id: string;
@@ -23,8 +24,25 @@ interface AuthState {
   verifyOtp: (phone: string, code: string) => Promise<void>;
   restoreSession: () => Promise<void>;
   logout: () => Promise<void>;
+  /** Delete the account on the server, then wipe this device. Throws (and stays signed in) if the server refuses. */
+  deleteAccount: () => Promise<void>;
   updateName: (name: string) => void;
   updateBio: (bio: string) => void;
+}
+
+/**
+ * Forget everything this account left on the device: the device keypair,
+ * every group key, key pins, queued relays and every cached photo. Each
+ * step is best-effort, so one failure can't keep the rest.
+ */
+async function wipeLocalData(): Promise<void> {
+  await Promise.allSettled([
+    clearDeviceKey(),
+    wipeAllGroupKeys(),
+    wipeAllPins(),
+    import('@/services/relayRetry').then((m) => m.clearRelayRetries()),
+    import('@/services/photoStore').then((m) => m.wipeAllPhotos()),
+  ]);
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -73,20 +91,18 @@ export const useAuthStore = create<AuthState>((set) => ({
     // drops its sockets); local logout still proceeds if the call fails.
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
     await clearTokens();
-    // E2E photo flow cleanup (Phase 6): nuke the device keypair AND every
-    // cached photo. Old group keys in SecureStore become orphaned (we don't
-    // index group IDs), but they're unreadable on next launch — a fresh
-    // device keypair + fresh server-side handshake produces new keys.
-    // Acceptable bounded leak for v1; can add a key index later if needed.
-    try {
-      // Lazy require so the module-level import doesn't drag
-      // expo-file-system into every test that touches authStore.
-      const { wipeAllPhotos } = await import('@/services/photoStore');
-      await Promise.all([clearDeviceKey(), wipeAllPhotos()]);
-    } catch {
-      // Non-blocking — logout should always succeed locally even if
-      // SecureStore / file deletion partially fails.
-    }
+    await wipeLocalData();
+    await useOnboardingStore.getState().reset();
+    set({ user: null, isAuthenticated: false });
+  },
+
+  deleteAccount: async () => {
+    // Throws on failure: the caller shows the error and the user stays
+    // signed in, rather than looking deleted while the account survives.
+    await api('/auth/delete-account', { method: 'DELETE' });
+    // The server dropped every session with the account; no /logout call.
+    await clearTokens();
+    await wipeLocalData();
     await useOnboardingStore.getState().reset();
     set({ user: null, isAuthenticated: false });
   },
@@ -103,3 +119,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     }));
   },
 }));
+
+// The server refused our refresh token (revoked, expired or reused): the
+// session is over on every screen, so sign out and wipe like a logout.
+onSessionExpired(() => {
+  if (useAuthStore.getState().isAuthenticated) void useAuthStore.getState().logout();
+});

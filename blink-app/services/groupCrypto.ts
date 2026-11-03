@@ -44,6 +44,9 @@ const DEVICE_SEED_KEY = 'blink.e2e.deviceSeed.v1';
 const DEVICE_ID_KEY = 'blink.e2e.deviceId.v1';
 const GROUP_KEY_PREFIX = 'blink.e2e.groupKey.v1.'; // suffixed with groupId
 const GROUP_KEY_VERSION_PREFIX = 'blink.e2e.groupKeyVer.v1.'; // suffixed with groupId
+// JSON array of the group ids we hold keys for — SecureStore can't list its
+// keys, and logout must wipe them all.
+const GROUP_KEY_INDEX_KEY = 'blink.e2e.groupKeyIndex.v1';
 
 export const KEY_BYTES = 32; // both X25519 keys and AES-256 keys
 export const GCM_IV_BYTES = 12;
@@ -80,15 +83,28 @@ export interface DeviceKeyMaterial {
   privateScalar: Uint8Array; // 32 bytes (the X25519 seed)
 }
 
+let deviceKeyInFlight: Promise<DeviceKeyMaterial> | null = null;
+
 /**
  * Loads the device keypair from secure storage, generating a new one on the
  * first call. The 32-byte seed IS the X25519 private key (clamped on use).
+ *
+ * Single-flight: callers racing on a fresh install (socket handshake, key
+ * registration, a snap) share one load, so they can't mint two keypairs
+ * and leave the device registered under the wrong one.
  *
  * Why store the seed and not the keypair object: smaller (32 vs 64+ bytes),
  * fits comfortably within `expo-secure-store`'s Android keystore size limits,
  * and the public key is cheap to re-derive on demand.
  */
-export async function getOrCreateDeviceKey(): Promise<DeviceKeyMaterial> {
+export function getOrCreateDeviceKey(): Promise<DeviceKeyMaterial> {
+  deviceKeyInFlight ??= loadOrCreateDeviceKey().finally(() => {
+    deviceKeyInFlight = null;
+  });
+  return deviceKeyInFlight;
+}
+
+async function loadOrCreateDeviceKey(): Promise<DeviceKeyMaterial> {
   const [seedB64, deviceId] = await Promise.all([
     SecureStore.getItemAsync(DEVICE_SEED_KEY),
     SecureStore.getItemAsync(DEVICE_ID_KEY),
@@ -154,7 +170,31 @@ export async function storeGroupKey(groupId: string, key: Uint8Array, version = 
   await Promise.all([
     SecureStore.setItemAsync(GROUP_KEY_PREFIX + groupId, bytesToB64(key)),
     SecureStore.setItemAsync(GROUP_KEY_VERSION_PREFIX + groupId, String(version)),
+    updateGroupKeyIndex((ids) => ids.add(groupId)),
   ]);
+}
+
+// Index updates are read-modify-write; run them one at a time.
+let indexQueue: Promise<unknown> = Promise.resolve();
+
+async function readGroupKeyIndex(): Promise<Set<string>> {
+  try {
+    const raw = await SecureStore.getItemAsync(GROUP_KEY_INDEX_KEY);
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function updateGroupKeyIndex(change: (ids: Set<string>) => void): Promise<void> {
+  const next = indexQueue.then(async () => {
+    const ids = await readGroupKeyIndex();
+    change(ids);
+    await SecureStore.setItemAsync(GROUP_KEY_INDEX_KEY, JSON.stringify([...ids]));
+  });
+  indexQueue = next.catch(() => undefined);
+  return next;
 }
 
 export async function loadGroupKey(groupId: string): Promise<Uint8Array | null> {
@@ -184,7 +224,21 @@ export async function deleteGroupKey(groupId: string): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(GROUP_KEY_PREFIX + groupId),
     SecureStore.deleteItemAsync(GROUP_KEY_VERSION_PREFIX + groupId),
+    updateGroupKeyIndex((ids) => ids.delete(groupId)),
   ]);
+}
+
+/** Logout / account deletion: forget every group key this device holds. */
+export async function wipeAllGroupKeys(): Promise<void> {
+  await indexQueue;
+  const ids = await readGroupKeyIndex();
+  await Promise.all(
+    [...ids].flatMap((groupId) => [
+      SecureStore.deleteItemAsync(GROUP_KEY_PREFIX + groupId),
+      SecureStore.deleteItemAsync(GROUP_KEY_VERSION_PREFIX + groupId),
+    ]),
+  );
+  await SecureStore.deleteItemAsync(GROUP_KEY_INDEX_KEY);
 }
 
 // ── Symmetric encrypt/decrypt for photo bytes ─────────────────────

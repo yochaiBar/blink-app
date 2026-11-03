@@ -6,7 +6,15 @@
 import './setup';
 
 import * as SecureStore from 'expo-secure-store';
-import { storeGroupKey, loadGroupKey, loadGroupKeyVersion, deleteGroupKey, newGroupKey } from '../services/groupCrypto';
+import {
+  storeGroupKey,
+  loadGroupKey,
+  loadGroupKeyVersion,
+  deleteGroupKey,
+  newGroupKey,
+  getOrCreateDeviceKey,
+  wipeAllGroupKeys,
+} from '../services/groupCrypto';
 
 const GROUP_ID = 'group-abc';
 
@@ -57,5 +65,27 @@ describe('groupCrypto — group key versioning', () => {
     await storeGroupKey(GROUP_ID, newGroupKey(), 1);
     await storeGroupKey(GROUP_ID, newGroupKey(), 2);
     expect(await loadGroupKeyVersion(GROUP_ID)).toBe(2);
+  });
+});
+
+describe('groupCrypto — wiping and the device key', () => {
+  it('wipes every group key it stored, even ones stored concurrently', async () => {
+    await Promise.all(['g1', 'g2', 'g3'].map((id, i) => storeGroupKey(id, newGroupKey(), i + 1)));
+    await deleteGroupKey('g2');
+
+    await wipeAllGroupKeys();
+
+    expect([...store.keys()]).toEqual([]);
+    expect(await loadGroupKey('g1')).toBeNull();
+  });
+
+  it('racing first calls share one device keypair', async () => {
+    const [a, b] = await Promise.all([getOrCreateDeviceKey(), getOrCreateDeviceKey()]);
+
+    expect(a.device_id).toBe(b.device_id);
+    expect(
+      (SecureStore.setItemAsync as jest.Mock).mock.calls.filter(([k]) => k === 'blink.e2e.deviceId.v1'),
+    ).toHaveLength(1);
+    expect((await getOrCreateDeviceKey()).device_id).toBe(a.device_id);
   });
 });

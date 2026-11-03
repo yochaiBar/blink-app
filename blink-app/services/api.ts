@@ -46,21 +46,32 @@ interface PushTokenResponse {
   success: boolean;
 }
 
-// API_URL resolution order:
-// 1. expo-constants extra.apiUrl (set via app.config.ts from EAS env vars)
-// 2. Dev fallback: localhost (web) or LAN IP (native)
-// 3. Production fallback: production API domain
-const configApiUrl = Constants.expoConfig?.extra?.apiUrl as string | undefined;
-
+// API_URL resolution:
+// 1. extra.apiUrl — EXPO_PUBLIC_API_URL from the EAS build profile, via
+//    app.config.ts (which refuses a release build without it).
+// 2. Dev only: the dev machine — localhost on web, otherwise the host Metro
+//    is served from (`hostUri`), port 3000. Dev never talks to production.
 function resolveApiUrl(): string {
-  if (configApiUrl) return configApiUrl;
-  if (__DEV__) {
-    return Platform.OS === 'web' ? 'http://localhost:3000/api' : 'https://blink-api-production.up.railway.app/api'; // was 192.168.68.120:3000
-  }
-  return 'https://blink-api-production.up.railway.app/api';
+  const configured = Constants.expoConfig?.extra?.apiUrl as string | undefined;
+  if (configured) return configured;
+  if (!__DEV__) throw new Error('No API URL configured for this build (EXPO_PUBLIC_API_URL)');
+  if (Platform.OS === 'web') return 'http://localhost:3000/api';
+  const devHost = Constants.expoConfig?.hostUri?.split(':')[0];
+  return `http://${devHost || 'localhost'}:3000/api`;
 }
 
 export const API_URL = resolveApiUrl();
+
+/** A non-2xx API response; `status` lets callers branch on e.g. 409. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 let accessToken: string | null = null;
 
@@ -111,24 +122,55 @@ export async function clearTokens() {
   await storage.remove('refreshToken');
 }
 
-async function refreshAccessToken(): Promise<boolean> {
+// Called once when the server rejects our refresh token (the session is
+// over: revoked, expired or reused). authStore registers its logout here;
+// a callback keeps api.ts free of a circular import.
+let sessionExpiredHandler: (() => void) | null = null;
+
+export function onSessionExpired(handler: () => void): void {
+  sessionExpiredHandler = handler;
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function doRefresh(): Promise<boolean> {
   const refreshToken = await storage.get('refreshToken');
   if (!refreshToken) return false;
 
+  let res: Response;
   try {
-    const res = await fetch(`${API_URL}/auth/refresh`, {
+    res = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
-    if (!res.ok) return false;
-    // The server rotates the refresh token on every refresh; keep both.
-    const data = (await res.json()) as { access_token: string; refresh_token: string };
-    await setTokens(data.access_token, data.refresh_token);
-    return true;
   } catch {
+    return false; // offline: keep the session and try again later
+  }
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      // Clear first, so the logout this triggers doesn't 401 its way back here.
+      await clearTokens();
+      sessionExpiredHandler?.();
+    }
     return false;
   }
+  // The server rotates the refresh token on every refresh; keep both.
+  const data = (await res.json()) as { access_token: string; refresh_token: string };
+  await setTokens(data.access_token, data.refresh_token);
+  return true;
+}
+
+/**
+ * Exchange the refresh token for a new pair. Single-flight: concurrent
+ * callers (parallel 401s, a socket reconnect) share one request, since the
+ * server rotates the refresh token and a second use would end the session.
+ */
+export function refreshSession(): Promise<boolean> {
+  refreshInFlight ??= doRefresh().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 export async function api<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
@@ -137,16 +179,18 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
     ...(options.headers as Record<string, string>),
   };
 
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
+  const sentToken = accessToken;
+  if (sentToken) {
+    headers['Authorization'] = `Bearer ${sentToken}`;
   }
 
   let res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
-  // Auto-refresh on 401
-  if (res.status === 401 && accessToken) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
+  // Auto-refresh on 401 — unless another request already did, in which
+  // case just retry with the newer token.
+  if (res.status === 401 && sentToken) {
+    const refreshed = accessToken !== sentToken || (await refreshSession());
+    if (refreshed && accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
       res = await fetch(`${API_URL}${path}`, { ...options, headers });
     }
@@ -154,7 +198,7 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    throw new ApiError(body.error || `Request failed: ${res.status}`, res.status);
   }
 
   // Handle 204 No Content and empty responses

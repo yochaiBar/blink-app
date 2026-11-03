@@ -29,7 +29,8 @@ import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
-import { api } from '@/services/api';
+import { useAuthStore } from '@/stores/authStore';
+
 import { Skeleton, GlassCard, AvatarRing } from '@/components/ui';
 
 // Animated stat card with staggered slide-up entrance
@@ -73,6 +74,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, refreshGroups, isLoading, logout } = useApp();
+  const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -99,11 +101,10 @@ export default function ProfileScreen() {
     const doDelete = async () => {
       try {
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        await api('/auth/delete-account', { method: 'DELETE' });
-        await logout();
-      } catch {
-        // Server-side delete failed -- still log out locally to unblock the user
-        await logout();
+        await deleteAccount();
+      } catch (err) {
+        // Nothing was deleted: say so, and stay signed in.
+        Alert.alert('Could not delete account', err instanceof Error ? err.message : 'Please try again.');
       }
     };
 
@@ -115,7 +116,7 @@ export default function ProfileScreen() {
         onPress: doDelete,
       },
     ]);
-  }, [logout]);
+  }, [deleteAccount]);
 
   const menuItems = [
     { icon: Edit3, label: 'Edit Profile', color: theme.coral, route: '/edit-profile' },
