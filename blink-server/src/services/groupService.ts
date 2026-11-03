@@ -57,6 +57,31 @@ export async function getGroupWithMembers(groupId: string): Promise<{
 }
 
 /**
+ * Clear what a member leaving `groupId` (or every group, when omitted — on
+ * account deletion) leaves in flight: their pending key requests, the joins
+ * they were claimed to courier (freed for another holder), and photo
+ * pickups to or from them. Runs on the caller's transaction, before the
+ * membership row goes.
+ */
+export async function releaseMembership(client: PoolClient, userId: string, groupId?: string): Promise<void> {
+  const params = [userId, groupId ?? null];
+  await client.query(
+    `DELETE FROM pending_joins WHERE joiner_user_id = $1 AND ($2::uuid IS NULL OR group_id = $2)`,
+    params,
+  );
+  await client.query(
+    `UPDATE pending_joins SET courier_user_id = NULL, lease_expires_at = NULL
+      WHERE courier_user_id = $1 AND ($2::uuid IS NULL OR group_id = $2)`,
+    params,
+  );
+  await client.query(
+    `DELETE FROM pending_photo_pickups
+      WHERE (recipient_user_id = $1 OR sender_user_id = $1) AND ($2::uuid IS NULL OR group_id = $2)`,
+    params,
+  );
+}
+
+/**
  * Hand the group over when an admin leaves (or deletes their account): if
  * nobody else is in it, delete the group; if no other admin remains,
  * promote the longest-standing member. Runs on the caller's transaction.

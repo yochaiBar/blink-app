@@ -94,7 +94,8 @@ CREATE TABLE groups (
   group_streak INT DEFAULT 0,
   longest_group_streak INT DEFAULT 0,
   -- Monotonic group-key version. The server never sees the key itself; the
-  -- counter lets clients resolve rotations (POST /api/keyshare/reset).
+  -- counter lets clients resolve rotations (POST /api/keyshare/reset), and
+  -- photos and keyshares must be made under it.
   group_key_version INTEGER NOT NULL DEFAULT 1,
   -- Daily auto-challenge: day hours are read in this IANA zone, and the
   -- next run is claimed from next_auto_challenge_at (jobs/dailyChallenge.ts).
@@ -113,36 +114,35 @@ CREATE TABLE group_members (
   current_streak INT DEFAULT 0,
   total_responses INT DEFAULT 0,
   total_challenges INT DEFAULT 0,
+  -- The group-key version this member's device says it holds (POST
+  -- /api/keyshare/confirm); NULL until then. Only holders of the group's
+  -- current version are asked to courier the key.
+  key_version INTEGER,
   UNIQUE (group_id, user_id)
 );
 CREATE INDEX idx_group_members_user ON group_members(user_id);
 CREATE INDEX idx_group_members_group ON group_members(group_id);
 
--- Group-key courier handshake at join. The first online existing member
--- claims a `pending` row (pending → in_flight), encrypts the group key for
--- the joiner's device key client-side, and delivers the opaque envelope via
--- /api/keyshare/deliver. 7-day TTL, then `expired`. At most one active row
--- per (group, joiner); terminal rows stay as an audit trail.
+-- Group-key courier handshake: one row per (group, joiner) still waiting
+-- for the key on `joiner_device_id`. While the joiner's device and a holder
+-- of the current key version are online, the row is claimed for that
+-- courier with a short lease; the courier encrypts the key to the device
+-- client-side and delivers the opaque envelope via /api/keyshare/deliver.
+-- The row is deleted when the joiner confirms it holds the key, when the
+-- joiner leaves, or after 7 days.
 CREATE TABLE pending_joins (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   joiner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   joiner_device_id UUID NOT NULL,
-  state VARCHAR(16) NOT NULL DEFAULT 'pending'
-    CHECK (state IN ('pending', 'in_flight', 'delivered', 'expired', 'cancelled')),
-  state_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  courier_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  lease_expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (group_id, joiner_user_id, state)
+  UNIQUE (group_id, joiner_user_id)
 );
-CREATE INDEX idx_pending_joins_active
-  ON pending_joins(group_id, created_at DESC)
-  WHERE state IN ('pending', 'in_flight');
-CREATE INDEX idx_pending_joins_active_age
-  ON pending_joins(created_at)
-  WHERE state IN ('pending', 'in_flight');
-CREATE INDEX idx_pending_joins_joiner
-  ON pending_joins(joiner_user_id)
-  WHERE state IN ('pending', 'in_flight');
+CREATE INDEX idx_pending_joins_joiner ON pending_joins(joiner_user_id);
+CREATE INDEX idx_pending_joins_courier ON pending_joins(courier_user_id) WHERE courier_user_id IS NOT NULL;
+CREATE INDEX idx_pending_joins_created ON pending_joins(created_at);
 
 -- ── Challenges ───────────────────────────────────────────────────
 

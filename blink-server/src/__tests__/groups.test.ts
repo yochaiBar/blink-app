@@ -337,6 +337,9 @@ describe('POST /api/groups/:id/leave', () => {
   it('should leave group as regular member', async () => {
     mockQuery
       .mockResolvedValueOnce(queryResult([makeMembership({ role: 'member' })]))
+      .mockResolvedValueOnce(queryResult([])) // release pending joins
+      .mockResolvedValueOnce(queryResult([])) // release courier claims
+      .mockResolvedValueOnce(queryResult([])) // drop photo pickups
       .mockResolvedValueOnce(queryResult([])); // DELETE
 
     const res = await request(app).post(`/api/groups/${TEST_GROUP_ID}/leave`).set('Authorization', `Bearer ${token}`);
@@ -348,6 +351,9 @@ describe('POST /api/groups/:id/leave', () => {
   it('should delete group when last member (admin) leaves', async () => {
     mockQuery
       .mockResolvedValueOnce(queryResult([makeMembership({ role: 'admin' })])) // membership
+      .mockResolvedValueOnce(queryResult([])) // release pending joins
+      .mockResolvedValueOnce(queryResult([])) // release courier claims
+      .mockResolvedValueOnce(queryResult([])) // drop photo pickups
       .mockResolvedValueOnce(queryResult([])) // other members (none)
       .mockResolvedValueOnce(queryResult([])); // DELETE group
 
@@ -365,6 +371,9 @@ describe('POST /api/groups/:id/leave', () => {
 
     mockQuery
       .mockResolvedValueOnce(queryResult([makeMembership({ role: 'admin' })])) // current membership
+      .mockResolvedValueOnce(queryResult([])) // release pending joins
+      .mockResolvedValueOnce(queryResult([])) // release courier claims
+      .mockResolvedValueOnce(queryResult([])) // drop photo pickups
       .mockResolvedValueOnce(queryResult(otherMembers)) // other members
       .mockResolvedValueOnce(queryResult([{ user_id: TEST_USER_ID_2 }])) // next admin
       .mockResolvedValueOnce(queryResult([])) // UPDATE role
@@ -384,6 +393,9 @@ describe('POST /api/groups/:id/leave', () => {
 
     mockQuery
       .mockResolvedValueOnce(queryResult([makeMembership({ role: 'admin' })]))
+      .mockResolvedValueOnce(queryResult([])) // release pending joins
+      .mockResolvedValueOnce(queryResult([])) // release courier claims
+      .mockResolvedValueOnce(queryResult([])) // drop photo pickups
       .mockResolvedValueOnce(queryResult(otherMembers))
       .mockResolvedValueOnce(queryResult([])); // DELETE member only, no transfer
 

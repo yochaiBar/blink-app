@@ -22,7 +22,7 @@ import { spacing } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
 import ReportModal from '@/components/ReportModal';
 import { api, blockUser, resetGroupKey } from '@/services/api';
-import { newGroupKey, storeGroupKey } from '@/services/groupCrypto';
+import { mintGroupKey } from '@/services/keyTransfer';
 import { Skeleton, SnapCardSkeleton, EmptyState, ErrorState } from '@/components/ui';
 import { apiGroupDetailToGroup, apiResponseToSnap, apiMembersToLeaderboard } from '@/utils/adapters';
 import {
@@ -338,11 +338,12 @@ export default function GroupDetailScreen() {
     const doReset = async () => {
       if (!id) return;
       try {
-        // Server bumps the version (it never sees the key); we mint a fresh
-        // key locally at that version. Members pull it via recovery, driven
-        // by the `group:key_rotated` fan-out the server emits.
+        // Two steps: the server bumps the version (it never sees the key),
+        // then we mint a fresh key at that version and confirm it. Only
+        // then does the server tell members (`group:key_rotated`); they
+        // pull the new key from us.
         const { group_key_version } = await resetGroupKey({ group_id: id });
-        await storeGroupKey(id, newGroupKey(), group_key_version);
+        await mintGroupKey(id, group_key_version);
         queryClient.invalidateQueries({ queryKey: ['groups'] });
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert(

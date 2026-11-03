@@ -112,12 +112,6 @@ const base64_12bytes = z
   .length(16, 'Must be base64-encoded 12 bytes (16 chars)')
   .regex(/^[A-Za-z0-9+/]{16}$/, 'Must be valid base64');
 
-// GCM auth tag is 16 bytes → base64 = 24 chars.
-const base64_16bytes = z
-  .string()
-  .length(24, 'Must be base64-encoded 16 bytes (24 chars)')
-  .regex(/^[A-Za-z0-9+/]{22}==$/, 'Must be valid base64');
-
 // Generic base64 string for the ciphertext blob — bounded so we reject a
 // 50 MB body before the JSON parser melts. 12 MB base64 ≈ 9 MB binary, well
 // over a typical phone photo and matches the Socket.io maxHttpBufferSize.
@@ -148,31 +142,36 @@ const base64_48bytes = z
   .length(64, 'Must be base64-encoded 48 bytes (64 chars)')
   .regex(/^[A-Za-z0-9+/]{64}$/, 'Must be valid base64');
 
+const keyVersion = z.number().int().min(1);
+
 export const keyshareDeliverSchema = z.object({
-  v: z.literal(1),
+  v: z.literal(2),
   pending_join_id: z.string().uuid(),
-  group_id: z.string().uuid(),
-  from_user_id: z.string().uuid(),
   from_device_id: z.string().uuid(),
+  key_version: keyVersion,
   ephemeral_public_key_b64: base64_32bytes,
   iv_b64: base64_12bytes,
-  auth_tag_b64: base64_16bytes,
   ciphertext_b64: base64_48bytes,
-  group_key_version: z.number().int().nonnegative(),
 });
 
-// Recovery: a member missing a group's key asks online members to re-courier
-// it to their device. Reuses the pending_joins machinery.
+// Recovery: a member without the current key asks for it on this device.
 export const keyshareRequestSchema = z.object({
-  v: z.literal(1),
+  v: z.literal(2),
   group_id: z.string().uuid(),
   device_id: z.string().uuid(),
 });
 
-// Regeneration: an admin bumps the group key version (server tracks version
-// only, never the key). Members then pull the new key via recovery.
+// A member's device now holds the group key at key_version.
+export const keyshareConfirmSchema = z.object({
+  v: z.literal(2),
+  group_id: z.string().uuid(),
+  key_version: keyVersion,
+});
+
+// Reset, step one: an admin bumps the group key version (server tracks
+// version only, never the key). Step two is the admin's confirm.
 export const keyshareResetSchema = z.object({
-  v: z.literal(1),
+  v: z.literal(2),
   group_id: z.string().uuid(),
 });
 

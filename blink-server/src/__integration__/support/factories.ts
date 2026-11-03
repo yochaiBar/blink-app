@@ -133,6 +133,28 @@ export async function countRows(sql: string, params: unknown[] = []): Promise<nu
   return parseInt(result.rows[0].count, 10);
 }
 
+/** Register a device public key for `user` (random bytes; the server never uses it). */
+export async function registerDeviceKey(
+  user: { id: string },
+  deviceId: string = crypto.randomUUID(),
+): Promise<{ deviceId: string; publicKeyB64: string }> {
+  const publicKeyB64 = crypto.randomBytes(32).toString('base64');
+  await query(
+    `INSERT INTO device_public_keys (user_id, device_id, x25519_public_key, attestation) VALUES ($1, $2, $3, $4)`,
+    [user.id, deviceId, publicKeyB64, crypto.randomBytes(32).toString('base64')],
+  );
+  return { deviceId, publicKeyB64 };
+}
+
+/** Record that `user`'s device holds the group key at `version` (as /keyshare/confirm would). */
+export async function holdKey(groupId: string, user: { id: string }, version = 1): Promise<void> {
+  await query(`UPDATE group_members SET key_version = $3 WHERE group_id = $1 AND user_id = $2`, [
+    groupId,
+    user.id,
+    version,
+  ]);
+}
+
 export async function block(blocker: { id: string }, blocked: { id: string }): Promise<void> {
   await query(`INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, [blocker.id, blocked.id]);
 }

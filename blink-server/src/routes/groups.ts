@@ -7,12 +7,12 @@ import { createGroupSchema, joinGroupSchema } from '../utils/schemas';
 import logger from '../utils/logger';
 import crypto from 'crypto';
 import { createNotification } from '../utils/notifications';
-import { emitToGroup, isUserOnline, joinGroupRoom, leaveGroupRoom, closeGroupRoom } from '../socket';
-import { enqueueKeyshare, dispatchPendingKeysharesForUser } from '../services/keyshareHub';
+import { emitToGroup, joinGroupRoom, leaveGroupRoom, closeGroupRoom } from '../socket';
+import { enqueueKeyshare, dispatchKeysharesFor } from '../services/keyshareHub';
 import { sendPushToUser } from '../services/pushNotifications';
 import { uuidParams } from '../middleware/params';
 import { GroupRow, CountRow, UserDisplayNameRow } from '../types/db';
-import { getGroupWithMembers, handleAdminLeave } from '../services/groupService';
+import { getGroupWithMembers, handleAdminLeave, releaseMembership } from '../services/groupService';
 import { requireMember } from '../services/membership';
 import { audienceOf } from '../services/audience';
 import { HttpError } from '../utils/httpError';
@@ -220,12 +220,10 @@ router.post(
       }).catch(() => {});
     }
 
-    // ── Enqueue the group-key courier handshake (Phase 4 of the E2E flow) ──
-    // Only relevant when v2 client sends device_id AND the joiner isn't the
-    // only member (a 1-member group has no one to courier from). The first
-    // online existing member is invited to courier via dispatchPendingKeyshares
-    // synchronously; if no one is online, the row waits in `pending` until
-    // someone connects and the socket onUserConnect listener fires.
+    // ── Ask for the group key on the joiner's device ──
+    // Only when the client names its device and someone else could hold the
+    // key. If a holder and the device are online the request goes out now;
+    // otherwise the row waits for the next connect of either.
     if (joinerDeviceId && existingMembers.rows.length > 0) {
       try {
         await enqueueKeyshare({
@@ -233,18 +231,10 @@ router.post(
           joinerUserId: req.userId!,
           joinerDeviceId,
         });
-        // Try every online existing member — atomic claim inside dispatch
-        // means only one will actually emit. Sequential await is fine; the
-        // typical group size is tiny.
-        for (const m of existingMembers.rows) {
-          if (await isUserOnline(m.user_id)) {
-            dispatchPendingKeysharesForUser(m.user_id).catch(() => undefined);
-          }
-        }
+        dispatchKeysharesFor(req.userId!).catch(() => undefined);
       } catch (err) {
-        // Non-blocking — joiner still gets their group_members row. If the
-        // enqueue failed, the joiner won't receive an envelope and Phase 5
-        // UX will show "Waiting for a member to share access."
+        // Non-blocking — joiner still gets their group_members row and the
+        // app asks again via /api/keyshare/request.
         logger.error('keyshare enqueue failed', {
           groupId: g.id,
           error: err instanceof Error ? err.message : String(err),
@@ -268,8 +258,10 @@ router.post(
       throw new HttpError(404, 'Not a member of this group');
     });
 
-    // Admin hand-over and the membership delete commit together.
+    // Admin hand-over, handshake / pickup clean-up and the membership delete
+    // commit together.
     const result = await withTransaction(async (client) => {
+      await releaseMembership(client, req.userId!, id);
       if (membership.role === 'admin') {
         const handover = await handleAdminLeave(client, id, req.userId!);
         if (handover === 'deleted') return 'group_deleted' as const;
