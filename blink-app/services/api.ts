@@ -29,7 +29,6 @@ interface BlockResponse {
 interface BlockedUserItem {
   blocked_id: string;
   display_name: string | null;
-  avatar_url: string | null;
   blocked_at: string;
 }
 
@@ -155,9 +154,8 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   return JSON.parse(text) as T;
 }
 
-// (Legacy v1 upload helpers removed in Phase 6. The v2 photo flow uses
-// relayPhoto() below + photoTransfer. Avatars are no longer uploaded
-// at all — users get generated initials via AvatarRing's fallback.)
+// Photos never go through the API: the E2E flow uses relayPhoto() below +
+// photoTransfer. There are no avatars; members show initials (AvatarRing).
 
 // ── User Stats ──
 export async function getUserStats(): Promise<UserStatsResponse> {
@@ -314,7 +312,6 @@ export interface CommentItem {
   created_at: string;
   updated_at: string;
   display_name: string | null;
-  avatar_url: string | null;
 }
 
 export function fetchComments(responseId: string): Promise<CommentItem[]> {

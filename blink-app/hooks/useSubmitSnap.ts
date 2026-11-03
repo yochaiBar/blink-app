@@ -14,13 +14,10 @@ import { putReceivedPhoto } from '@/services/photoStore';
 /**
  * Submit a snap response to the active challenge in `groupId`.
  *
- * v2-only as of Phase 6: bytes are encrypted on-device with the group
- * key, POST /respond with { has_photo: true } records the response row,
- * then sendPhoto fans the ciphertext via /api/photos/relay to other
- * members. Server never sees plaintext or key material.
- *
- * The v1 S3 upload path was removed in Phase 6; old v1 clients hitting
- * /upload/* get HTTP 426 and a forced-upgrade modal.
+ * Bytes are encrypted on-device with the group key, POST /respond with
+ * { has_photo: true } records the response row, then sendPhoto fans the
+ * ciphertext via /api/photos/relay to other members. Server never sees
+ * plaintext or key material.
  */
 export function useSubmitSnap() {
   const queryClient = useQueryClient();

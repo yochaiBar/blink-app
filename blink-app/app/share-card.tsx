@@ -15,11 +15,10 @@ export default function ShareCardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const { photoUri, prompt, userName, userAvatar, groupName, groupEmoji, responseTimeSec } = useLocalSearchParams<{
+  const { photoUri, prompt, userName, groupName, groupEmoji, responseTimeSec } = useLocalSearchParams<{
     photoUri: string;
     prompt: string;
     userName: string;
-    userAvatar: string;
     groupName: string;
     groupEmoji?: string;
     responseTimeSec?: string;
@@ -115,7 +114,6 @@ export default function ShareCardScreen() {
               photoUri={photoUri}
               prompt={prompt}
               userName={userName}
-              userAvatar={userAvatar ?? ''}
               groupName={groupName}
               groupEmoji={groupEmoji}
               responseTimeSec={responseTimeNum}

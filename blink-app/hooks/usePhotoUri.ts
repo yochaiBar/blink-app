@@ -13,13 +13,16 @@ import { demoSource, isDemoResponse } from '@/services/demoSource';
 export function usePhotoUri(responseId: string | null | undefined): string | null {
   const query = useQuery({
     queryKey: ['localPhoto', responseId],
-    queryFn: async (): Promise<string | null> => {
-      if (!responseId) return null;
-      if (isDemoResponse(responseId)) return demoSource.photoUri(responseId);
-      return getLocalPhotoUri(responseId);
-    },
+    queryFn: () => resolvePhotoUri(responseId),
     enabled: !!responseId,
     staleTime: 30_000,
   });
   return query.data ?? null;
+}
+
+/** One-off lookup of a response's local photo (same sources as usePhotoUri). */
+export async function resolvePhotoUri(responseId: string | null | undefined): Promise<string | null> {
+  if (!responseId) return null;
+  if (isDemoResponse(responseId)) return demoSource.photoUri(responseId);
+  return getLocalPhotoUri(responseId);
 }

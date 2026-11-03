@@ -17,16 +17,7 @@ export const DEMO_OWN_RESPONSE_ID = 'demo_response_user';
 /** How far in the future the demo challenge always ends. */
 export const DEMO_CHALLENGE_WINDOW_MS = 30 * 60 * 1000;
 
-// --- Photo pools ---
-
-const DEMO_AVATAR_PHOTOS = {
-  alex: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop',
-  jordan: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
-  sam: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop',
-  riley: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop',
-  maya: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop',
-  leo: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&h=200&fit=crop',
-};
+// --- Photo pool (stand-ins for the crew's snaps; members show initials like real users) ---
 
 const DEMO_SNAP_PHOTOS = [
   // Coffee shop
@@ -90,7 +81,6 @@ const DEMO_MEMBERS: GroupMember[] = [
   {
     id: 'demo_user_1',
     name: 'Alex',
-    avatar: DEMO_AVATAR_PHOTOS.alex,
     streak: 5,
     isOnline: true,
     totalSnaps: 12,
@@ -99,7 +89,6 @@ const DEMO_MEMBERS: GroupMember[] = [
   {
     id: 'demo_user_2',
     name: 'Jordan',
-    avatar: DEMO_AVATAR_PHOTOS.jordan,
     streak: 3,
     isOnline: true,
     totalSnaps: 9,
@@ -108,7 +97,6 @@ const DEMO_MEMBERS: GroupMember[] = [
   {
     id: 'demo_user_3',
     name: 'Sam',
-    avatar: DEMO_AVATAR_PHOTOS.sam,
     streak: 7,
     isOnline: false,
     totalSnaps: 15,
@@ -117,7 +105,6 @@ const DEMO_MEMBERS: GroupMember[] = [
   {
     id: 'demo_user_4',
     name: 'Riley',
-    avatar: DEMO_AVATAR_PHOTOS.riley,
     streak: 2,
     isOnline: false,
     totalSnaps: 6,
@@ -126,7 +113,6 @@ const DEMO_MEMBERS: GroupMember[] = [
   {
     id: 'demo_user_5',
     name: 'Maya',
-    avatar: DEMO_AVATAR_PHOTOS.maya,
     streak: 4,
     isOnline: true,
     totalSnaps: 10,
@@ -135,7 +121,6 @@ const DEMO_MEMBERS: GroupMember[] = [
   {
     id: 'demo_user_6',
     name: 'Leo',
-    avatar: DEMO_AVATAR_PHOTOS.leo,
     streak: 6,
     isOnline: false,
     totalSnaps: 13,
@@ -150,7 +135,6 @@ function makeApiMembers() {
   return DEMO_MEMBERS.map((m) => ({
     user_id: m.id,
     display_name: m.name,
-    avatar_url: m.avatar,
     role: roles[m.id] || 'member',
     streak: m.streak,
     participation_rate: parseFloat((0.6 + Math.random() * 0.35).toFixed(2)),
@@ -209,8 +193,6 @@ export const DEMO_RESPONSES: ApiChallengeResponse[] = respondents.map((member, i
   challenge_id: DEMO_CHALLENGE_ID,
   user_id: member.id,
   display_name: member.name,
-  avatar_url: member.avatar,
-  photo_url: null,
   has_photo: true,
   response_time_ms: 2000 + i * 1500,
   responded_at: new Date(Date.now() - (respondentCount - i) * 5 * 60 * 1000).toISOString(),

@@ -7,17 +7,10 @@ import { useAuthStore } from '@/stores/authStore';
 import { apiUserToProfile } from '@/utils/adapters';
 import { queryKeys } from '@/utils/queryKeys';
 
-// Empty avatar; AvatarRing falls back to initials. Avatar uploads removed
-// in Phase 6 alongside the rest of the AWS surface.
-const DEFAULT_AVATAR = '';
-
 export function useProfile(groupCount: number) {
   const authUser = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const queryClient = useQueryClient();
-  // Avatar uploads removed in Phase 6 — kept for API compat with callers
-  // that still destructure `isUploading` from this hook. Always false.
-  const isUploading = false;
 
   const statsQuery = useQuery({
     queryKey: queryKeys.user.stats,
@@ -39,22 +32,18 @@ export function useProfile(groupCount: number) {
     return {
       id: '',
       name: '',
-      username: '',
-      avatar: DEFAULT_AVATAR,
       bio: '',
       totalSnaps: 0,
       longestStreak: 0,
       groupCount: 0,
       joinDate: new Date().toISOString(),
-      notificationsEnabled: true,
-      privacyMode: 'everyone' as const,
     };
   }, [authUser, groupCount, statsQuery.data]);
 
   const displayName = userProfile.name?.split(' ')[0] || 'You';
 
   const updateProfile = useCallback(
-    async (updates: Partial<UserProfile>) => {
+    async (updates: Partial<Pick<UserProfile, 'name' | 'bio'>>) => {
       const authStore = useAuthStore.getState();
 
       try {
@@ -62,17 +51,10 @@ export function useProfile(groupCount: number) {
         if (updates.name !== undefined) payload.display_name = updates.name;
         if (updates.bio !== undefined) payload.bio = updates.bio;
 
-        // Phase 6: avatar uploads removed. The Edit Profile screen no longer
-        // exposes an avatar picker; AvatarRing falls back to generated
-        // initials. If a caller still passes `updates.avatar` (legacy path),
-        // we silently ignore it rather than upload to a now-deleted endpoint.
-
         if (Object.keys(payload).length > 0) {
           const updatedUser = await api<{
             id: string;
-            phone_number: string;
             display_name: string | null;
-            avatar_url: string | null;
             bio: string | null;
           }>('/auth/profile', {
             method: 'PATCH',
@@ -84,9 +66,6 @@ export function useProfile(groupCount: number) {
             if (updatedUser.display_name !== undefined) {
               authStore.updateName(updatedUser.display_name ?? '');
             }
-            if (updatedUser.avatar_url !== undefined) {
-              authStore.updateAvatar(updatedUser.avatar_url ?? '');
-            }
             if (updatedUser.bio !== undefined) {
               authStore.updateBio(updatedUser.bio ?? '');
             }
@@ -96,7 +75,7 @@ export function useProfile(groupCount: number) {
           authStore.updateName(updates.name);
         }
 
-        // Invalidate queries so avatar updates propagate everywhere
+        // Invalidate queries so the new name shows everywhere
         queryClient.invalidateQueries({ queryKey: queryKeys.user.stats });
         queryClient.invalidateQueries({ queryKey: queryKeys.groups.all });
       } catch (err: unknown) {
@@ -112,6 +91,5 @@ export function useProfile(groupCount: number) {
     userProfile,
     displayName,
     updateProfile,
-    isUploading,
   };
 }

@@ -37,7 +37,7 @@ export interface ChallengeProgress {
 /** What the reveal screen renders: the responses plus the challenge they answer. */
 export interface RevealData {
   responses: ApiChallengeResponse[];
-  challenge: ApiChallenge | null;
+  challenge: { id: string; prompt: string | null } | null;
 }
 
 const isDemoId = (id: string | null | undefined): boolean => !!id && id.startsWith(DEMO_ID_PREFIX);
@@ -91,15 +91,13 @@ export const demoSource = {
   },
 
   /** The reveal: the user's own snap first, then the demo crew's. */
-  reveal(self: { id: string; name: string; avatar?: string }): RevealData {
+  reveal(self: { id: string; name: string }): RevealData {
     const now = new Date().toISOString();
     const own: ApiChallengeResponse = {
       id: DEMO_OWN_RESPONSE_ID,
       challenge_id: DEMO_CHALLENGE_ID,
       user_id: self.id,
       display_name: self.name || 'You',
-      avatar_url: self.avatar ?? null,
-      photo_url: null,
       has_photo: true,
       response_time_ms: 3200,
       responded_at: now,

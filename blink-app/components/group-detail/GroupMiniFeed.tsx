@@ -48,17 +48,16 @@ export default function GroupMiniFeed({ groupId, groupName, groupEmoji }: Props)
           if (!Array.isArray(responses) || responses.length === 0) return;
 
           for (const resp of responses) {
-            if (resp.photo_url) {
+            if (resp.has_photo) {
               items.push({
                 id: `mini_photo_${resp.id}`,
                 type: 'photo',
+                responseId: resp.id,
                 userName: resp.display_name || 'User',
-                userAvatar: resp.avatar_url || undefined,
                 groupName,
                 groupEmoji,
                 groupId,
                 challengeId: challenge.id,
-                photoUrl: resp.photo_url,
                 challengePrompt: challenge.prompt || undefined,
                 timeAgo: getRelativeTime(resp.responded_at || resp.created_at),
                 timestamp: resp.responded_at || resp.created_at,

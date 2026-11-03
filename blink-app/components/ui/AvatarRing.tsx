@@ -1,10 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
 
+/** A member's initial in a coloured circle, optionally inside a status ring. */
 interface AvatarRingProps {
-  uri?: string | null;
   name?: string;
   size?: number;
   ringColor?: string;
@@ -17,7 +16,6 @@ const RING_WIDTH = 2.5;
 const RING_GAP = 2;
 
 export default React.memo(function AvatarRing({
-  uri,
   name,
   size = 44,
   ringColor = theme.coral,
@@ -54,20 +52,7 @@ export default React.memo(function AvatarRing({
   const outerSize = size + totalPadding;
   const initial = name ? name.charAt(0).toUpperCase() : '?';
 
-  const avatarContent = uri ? (
-    <Image
-      source={{ uri }}
-      style={[
-        styles.avatar,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-        },
-      ]}
-      contentFit="cover"
-    />
-  ) : (
+  const avatarContent = (
     <View
       style={[
         styles.fallback,
@@ -120,9 +105,6 @@ const styles = StyleSheet.create({
   ringOuter: {
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  avatar: {
-    backgroundColor: theme.surface,
   },
   fallback: {
     justifyContent: 'center',

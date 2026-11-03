@@ -9,9 +9,7 @@ interface SnapItem {
   id: string;
   userId: string;
   userName: string;
-  userAvatar: string;
   groupId: string;
-  imageUrl: string;
   timestamp: string;
   reactions: { emoji: string; count: number; userIds: string[] }[];
 }
@@ -71,9 +69,7 @@ export default function ChallengeResponsesList({
           totalMembers={previewData?.totalMembers ?? groupMemberCount}
           totalReactions={previewData?.totalReactions ?? 0}
           topReactionEmoji={previewData?.topReactionEmoji}
-          respondedUsers={
-            previewData?.respondedUsers ?? snaps.map((sn) => ({ displayName: sn.userName, avatarUrl: sn.userAvatar }))
-          }
+          respondedUsers={previewData?.respondedUsers ?? snaps.map((sn) => ({ displayName: sn.userName }))}
           challengeJustStarted={challengeJustTriggered}
           onRespond={onRespond}
           activityPulseProps={

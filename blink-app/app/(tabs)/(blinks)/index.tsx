@@ -56,7 +56,7 @@ interface PendingChallenge {
 interface AnsweredChallenge {
   group: Group;
   challenge: ChallengeHistoryItem;
-  photoResponses: { responseId: string; userName?: string; photoUrl?: string; timestamp: string }[];
+  photoResponses: { responseId: string; userName?: string; timestamp: string }[];
   /** Responses fetch failed: show the card with the history row's count and no thumbnails. */
   responsesUnavailable: boolean;
 }
@@ -200,11 +200,10 @@ export default function BlinksScreen() {
                 const responses: ApiChallengeResponse[] = await api(`/challenges/${challenge.id}/responses`);
                 if (!Array.isArray(responses)) return;
                 const photoResponses = responses
-                  .filter((resp) => resp.photo_url)
+                  .filter((resp) => resp.has_photo)
                   .map((resp) => ({
                     responseId: resp.id,
                     userName: resp.display_name || 'User',
-                    photoUrl: resp.photo_url ?? undefined,
                     timestamp: resp.responded_at || resp.created_at,
                   }));
                 if (photoResponses.length > 0) {
@@ -466,7 +465,7 @@ export default function BlinksScreen() {
               router.push('/(tabs)/profile' as never);
             }}
           >
-            <AvatarRing uri={user.avatar} name={user.name} size={34} ringColor={theme.coral} showStatus hasResponded />
+            <AvatarRing name={user.name} size={34} ringColor={theme.coral} showStatus hasResponded />
           </TouchableOpacity>
         </View>
       </View>

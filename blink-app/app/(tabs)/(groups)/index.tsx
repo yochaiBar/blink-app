@@ -125,7 +125,6 @@ const GroupListCard = React.memo(function GroupListCard({
               {displayedMembers.map((member, i) => (
                 <View key={member.id} style={[styles.memberAvatar, { marginLeft: i > 0 ? -6 : 0, zIndex: 10 - i }]}>
                   <AvatarRing
-                    uri={member.avatar}
                     name={member.name}
                     size={24}
                     ringColor={member.isOnline ? theme.green : theme.border}

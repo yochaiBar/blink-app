@@ -12,14 +12,13 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 import {
   Settings,
   Camera,
   Flame,
   Users,
   ChevronRight,
-  Bell as BellIcon,
+  Settings as SettingsIcon,
   HelpCircle,
   Edit3,
   LogOut,
@@ -31,8 +30,7 @@ import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services/api';
-import { Skeleton, GlassCard } from '@/components/ui';
-import StreakCalendar from '@/components/StreakCalendar';
+import { Skeleton, GlassCard, AvatarRing } from '@/components/ui';
 
 // Animated stat card with staggered slide-up entrance
 const AnimatedStatCard = React.memo(function AnimatedStatCard({
@@ -69,7 +67,6 @@ const AnimatedStatCard = React.memo(function AnimatedStatCard({
   );
 });
 
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
 const APP_VERSION = '1.0.0';
 
 export default function ProfileScreen() {
@@ -122,7 +119,7 @@ export default function ProfileScreen() {
 
   const menuItems = [
     { icon: Edit3, label: 'Edit Profile', color: theme.coral, route: '/edit-profile' },
-    { icon: BellIcon, label: 'Notification Settings', color: theme.yellow, route: '/settings' },
+    { icon: SettingsIcon, label: 'Settings', color: theme.yellow, route: '/settings' },
     { icon: HelpCircle, label: 'Help & FAQ', color: theme.blue, route: '/help-faq' },
   ];
 
@@ -165,12 +162,9 @@ export default function ProfileScreen() {
           <GlassCard style={styles.profileCard}>
             <View style={styles.profileCardInner}>
               <View style={styles.avatarRing}>
-                <Image source={{ uri: user.avatar || DEFAULT_AVATAR }} style={styles.avatar} contentFit="cover" />
+                <AvatarRing name={user.name} size={80} />
               </View>
               <Text style={[typography.displayMedium, { color: theme.text, marginTop: spacing.md }]}>{user.name}</Text>
-              <Text style={[typography.bodyMedium, { color: theme.textSecondary, marginTop: spacing.xs }]}>
-                {user.username}
-              </Text>
               <TouchableOpacity
                 style={styles.editProfileBtn}
                 onPress={() => router.push('/edit-profile' as never)}
@@ -216,11 +210,6 @@ export default function ProfileScreen() {
               <Text style={[typography.labelSmall, { color: theme.textMuted }]}>Groups</Text>
             </AnimatedStatCard>
           </View>
-        )}
-
-        {/* ── Streak Calendar ── */}
-        {!isLoading && (
-          <StreakCalendar totalSnaps={user.totalSnaps} longestStreak={user.longestStreak} joinDate={user.joinDate} />
         )}
 
         {/* ── Menu Section ── */}
@@ -342,11 +331,6 @@ const styles = StyleSheet.create({
     borderColor: theme.coral,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
   },
   editProfileBtn: {
     flexDirection: 'row',

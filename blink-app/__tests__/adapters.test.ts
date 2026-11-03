@@ -26,8 +26,6 @@ import {
 
 import type { ApiGroupListItem, ApiGroupMember, ApiGroupDetail, ApiChallengeResponse } from '../types/api';
 
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
-
 // ─────────────────────────────────────────────────────────────────
 // apiGroupListToGroup
 // ─────────────────────────────────────────────────────────────────
@@ -109,7 +107,6 @@ describe('apiMemberToGroupMember', () => {
     const member: ApiGroupMember = {
       user_id: 'user-1',
       display_name: 'Alice',
-      avatar_url: 'https://example.com/alice.jpg',
       role: 'admin',
       streak: 7,
       participation_rate: 85,
@@ -121,18 +118,16 @@ describe('apiMemberToGroupMember', () => {
 
     expect(result.id).toBe('user-1');
     expect(result.name).toBe('Alice');
-    expect(result.avatar).toBe('https://example.com/alice.jpg');
     expect(result.streak).toBe(7);
     expect(result.isOnline).toBe(false);
     expect(result.totalSnaps).toBe(42);
     expect(result.role).toBe('admin');
   });
 
-  it('should use default values for null display_name and avatar_url', () => {
+  it('should use default values for null display_name', () => {
     const member: ApiGroupMember = {
       user_id: 'user-2',
       display_name: null,
-      avatar_url: null,
       role: 'member',
       streak: 0,
       participation_rate: 0,
@@ -143,7 +138,6 @@ describe('apiMemberToGroupMember', () => {
     const result = apiMemberToGroupMember(member);
 
     expect(result.name).toBe('User');
-    expect(result.avatar).toBe(DEFAULT_AVATAR);
     expect(result.streak).toBe(0);
   });
 
@@ -151,7 +145,6 @@ describe('apiMemberToGroupMember', () => {
     const member: any = {
       user_id: 'user-3',
       display_name: 'Bob',
-      avatar_url: null,
       role: 'member',
       streak: undefined,
       participation_rate: 0,
@@ -179,7 +172,6 @@ describe('apiGroupDetailToGroup', () => {
       {
         user_id: 'user-1',
         display_name: 'Alice',
-        avatar_url: 'https://example.com/alice.jpg',
         role: 'admin',
         streak: 5,
         participation_rate: 90,
@@ -233,8 +225,6 @@ describe('apiResponseToSnap', () => {
       challenge_id: 'challenge-1',
       user_id: 'user-1',
       display_name: 'Alice',
-      avatar_url: 'https://example.com/alice.jpg',
-      photo_url: 'https://example.com/photo.jpg',
       response_time_ms: 3500,
       responded_at: '2024-01-01T12:00:00Z',
       created_at: '2024-01-01T12:00:00Z',
@@ -245,19 +235,16 @@ describe('apiResponseToSnap', () => {
     expect(result.id).toBe('resp-1');
     expect(result.userId).toBe('user-1');
     expect(result.userName).toBe('Alice');
-    expect(result.imageUrl).toBe('https://example.com/photo.jpg');
     expect(result.timestamp).toBe('2024-01-01T12:00:00Z');
     expect(result.reactions).toEqual([]);
   });
 
-  it('should use defaults for null display_name and photo_url', () => {
+  it('should use defaults for null display_name', () => {
     const response: ApiChallengeResponse = {
       id: 'resp-2',
       challenge_id: 'c-1',
       user_id: 'user-2',
       display_name: null,
-      avatar_url: null,
-      photo_url: null,
       response_time_ms: null,
       responded_at: '2024-01-01T12:00:00Z',
       created_at: '2024-01-01T12:00:00Z',
@@ -266,8 +253,6 @@ describe('apiResponseToSnap', () => {
     const result = apiResponseToSnap(response);
 
     expect(result.userName).toBe('User');
-    expect(result.userAvatar).toBe(DEFAULT_AVATAR);
-    expect(result.imageUrl).toBe('');
   });
 
   it('should prefer responded_at over created_at for timestamp', () => {
@@ -276,8 +261,6 @@ describe('apiResponseToSnap', () => {
       challenge_id: 'c-1',
       user_id: 'user-3',
       display_name: 'Bob',
-      avatar_url: null,
-      photo_url: null,
       response_time_ms: null,
       responded_at: '2024-06-15T10:00:00Z',
       created_at: '2024-06-15T09:59:00Z',
@@ -297,7 +280,6 @@ describe('apiMembersToLeaderboard', () => {
       {
         user_id: 'u1',
         display_name: 'Alice',
-        avatar_url: null,
         role: 'member',
         streak: 5,
         participation_rate: 80,
@@ -307,7 +289,6 @@ describe('apiMembersToLeaderboard', () => {
       {
         user_id: 'u2',
         display_name: 'Bob',
-        avatar_url: null,
         role: 'member',
         streak: 3,
         participation_rate: 60,
@@ -317,7 +298,6 @@ describe('apiMembersToLeaderboard', () => {
       {
         user_id: 'u3',
         display_name: 'Charlie',
-        avatar_url: null,
         role: 'admin',
         streak: 1,
         participation_rate: 40,
@@ -348,7 +328,6 @@ describe('apiMembersToLeaderboard', () => {
       {
         user_id: 'u1',
         display_name: 'Solo',
-        avatar_url: null,
         role: 'admin',
         streak: 0,
         participation_rate: 0,
@@ -367,7 +346,6 @@ describe('apiMembersToLeaderboard', () => {
       {
         user_id: 'u1',
         display_name: 'A',
-        avatar_url: null,
         role: 'member',
         streak: 0,
         participation_rate: 0,
@@ -377,7 +355,6 @@ describe('apiMembersToLeaderboard', () => {
       {
         user_id: 'u2',
         display_name: 'B',
-        avatar_url: null,
         role: 'member',
         streak: 0,
         participation_rate: 0,
@@ -401,7 +378,6 @@ describe('apiUserToProfile', () => {
       id: 'user-1',
       phone_number: '+15551234567',
       display_name: 'Alice',
-      avatar_url: 'https://example.com/alice.jpg',
       bio: 'Hello world',
     };
 
@@ -409,26 +385,20 @@ describe('apiUserToProfile', () => {
 
     expect(result.id).toBe('user-1');
     expect(result.name).toBe('Alice');
-    expect(result.avatar).toBe('https://example.com/alice.jpg');
     expect(result.bio).toBe('Hello world');
-    expect(result.username).toBe('');
-    expect(result.notificationsEnabled).toBe(true);
-    expect(result.privacyMode).toBe('everyone');
   });
 
-  it('should use defaults for null display_name, avatar_url, and bio', () => {
+  it('should use defaults for null display_name and bio', () => {
     const user = {
       id: 'user-2',
       phone_number: '+19995550000',
       display_name: null,
-      avatar_url: null,
       bio: null,
     };
 
     const result = apiUserToProfile(user);
 
     expect(result.name).toBe('');
-    expect(result.avatar).toBe(DEFAULT_AVATAR);
     expect(result.bio).toBe('');
   });
 
@@ -437,7 +407,6 @@ describe('apiUserToProfile', () => {
       id: 'user-3',
       phone_number: '+15551234567',
       display_name: 'Bob',
-      avatar_url: null,
     };
 
     const result = apiUserToProfile(user);
@@ -449,7 +418,6 @@ describe('apiUserToProfile', () => {
       id: 'user-1',
       phone_number: '+15551234567',
       display_name: 'Test',
-      avatar_url: null,
     };
 
     const result = apiUserToProfile(user);

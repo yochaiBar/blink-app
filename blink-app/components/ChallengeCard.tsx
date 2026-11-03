@@ -60,10 +60,10 @@ function LivePill({ expiresAt }: { expiresAt?: string }) {
   );
 }
 
-// ── Response thumbnail (E2E local photo first, S3 fallback) ──
+// ── Response thumbnail (E2E local photo) ──
 
-function ResponseThumb({ responseId, photoUrl, overlay }: { responseId: string; photoUrl?: string; overlay?: string }) {
-  const uri = usePhotoUri(responseId) ?? photoUrl;
+function ResponseThumb({ responseId, overlay }: { responseId: string; overlay?: string }) {
+  const uri = usePhotoUri(responseId);
 
   return (
     <View style={styles.thumb}>
@@ -147,7 +147,6 @@ export default function ChallengeCard({ item }: { item: FeedItemData }) {
                 <ResponseThumb
                   key={r.responseId}
                   responseId={r.responseId}
-                  photoUrl={r.photoUrl}
                   overlay={isLast && extra > 0 ? `+${extra}` : undefined}
                 />
               );

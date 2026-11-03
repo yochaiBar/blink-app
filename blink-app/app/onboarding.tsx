@@ -33,7 +33,6 @@ import {
   ImagePlus,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
@@ -69,7 +68,8 @@ const COUNTRY_CODES = [
 const RESEND_COOLDOWN_SECONDS = 30;
 const OTP_LENGTH = 6;
 
-type OnboardingStep = 'welcome' | 'phone' | 'otp' | 'age' | 'terms' | 'name' | 'avatar';
+type OnboardingStep = 'welcome' | 'phone' | 'otp' | 'age' | 'terms' | 'name';
+const STEPS: readonly OnboardingStep[] = ['welcome', 'phone', 'otp', 'age', 'terms', 'name'];
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -77,7 +77,6 @@ export default function OnboardingScreen() {
   const requestOtp = useAuthStore((s) => s.requestOtp);
   const verifyOtp = useAuthStore((s) => s.verifyOtp);
   const updateName = useAuthStore((s) => s.updateName);
-  const updateAvatar = useAuthStore((s) => s.updateAvatar);
 
   const [step, setStep] = useState<OnboardingStep>('welcome');
   const [phone, setPhone] = useState('');
@@ -85,7 +84,6 @@ export default function OnboardingScreen() {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [otpDigits, setOtpDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [name, setName] = useState('');
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -265,16 +263,7 @@ export default function OnboardingScreen() {
         } catch {
           // Non-blocking — name is saved locally, server sync can happen later
         }
-        animateTransition('avatar');
-        return;
-      }
-
-      if (step === 'avatar') {
-        // Phase 6: avatar uploads removed. Whether the user picked a
-        // photo or skipped, navigate straight to the app — AvatarRing
-        // falls back to generated initials. The step UI is kept for
-        // now to avoid churn in the onboarding flow; a follow-up will
-        // delete the step entirely.
+        // Last step: members are shown by their initials, there is no profile photo.
         router.replace('/');
         return;
       }
@@ -355,32 +344,6 @@ export default function OnboardingScreen() {
     }
   }, [resendCountdown, isSubmitting, phone, countryCode, requestOtp]);
 
-  const handlePickAvatar = useCallback(async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      if (!result.canceled && result.assets[0]) {
-        setAvatarUri(result.assets[0].uri);
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-      }
-    } catch {
-      Alert.alert('Error', 'Could not open photo library');
-    }
-  }, []);
-
-  const handleSkipAvatar = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.replace('/');
-  }, [router]);
-
   const previousStep: Record<string, OnboardingStep | null> = {
     welcome: null,
     phone: 'welcome',
@@ -388,9 +351,6 @@ export default function OnboardingScreen() {
     age: 'otp',
     terms: 'age',
     name: 'terms',
-    // Intentionally no back from `avatar` — name has already been persisted to the
-    // server, and going back would cause a duplicate PATCH on advance.
-    avatar: null,
   };
 
   const isNextDisabled =
@@ -421,9 +381,7 @@ export default function OnboardingScreen() {
       case 'terms':
         return 'I Agree';
       case 'name':
-        return 'Continue';
-      case 'avatar':
-        return avatarUri ? 'Start Blinking' : 'Skip for now';
+        return 'Start Blinking';
     }
   };
 
@@ -440,16 +398,13 @@ export default function OnboardingScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.progressBar}>
-            {(['welcome', 'phone', 'otp', 'age', 'terms', 'name', 'avatar'] as const).map((s, i) => (
+            {STEPS.map((s, i) => (
               <View
                 key={s}
                 style={[
                   styles.progressDot,
                   {
-                    backgroundColor:
-                      (['welcome', 'phone', 'otp', 'age', 'terms', 'name', 'avatar'] as const).indexOf(step) >= i
-                        ? theme.coral
-                        : theme.surface,
+                    backgroundColor: STEPS.indexOf(step) >= i ? theme.coral : theme.surface,
                   },
                 ]}
               />
@@ -728,46 +683,6 @@ export default function OnboardingScreen() {
                 />
               </View>
             )}
-
-            {step === 'avatar' && (
-              <View style={styles.inputStep}>
-                <Text style={styles.stepEmoji}>📸</Text>
-                <Text style={styles.stepTitle}>Add a profile photo</Text>
-                <Text style={styles.stepSubtitle}>So your friends recognize you. You can change it later.</Text>
-                <TouchableOpacity
-                  style={styles.avatarPicker}
-                  onPress={handlePickAvatar}
-                  activeOpacity={0.85}
-                  disabled={isSubmitting}
-                  testID="onboarding-avatar-picker"
-                >
-                  {avatarUri ? (
-                    <Image source={{ uri: avatarUri }} style={styles.avatarPreview} contentFit="cover" />
-                  ) : (
-                    <View style={styles.avatarPlaceholder}>
-                      <ImagePlus size={36} color={theme.coral} />
-                    </View>
-                  )}
-                  {isSubmitting && (
-                    <View style={styles.avatarUploadOverlay}>
-                      <ActivityIndicator size="small" color={theme.white} />
-                    </View>
-                  )}
-                  <View style={styles.avatarEditBadge}>
-                    <Camera size={16} color={theme.white} />
-                  </View>
-                </TouchableOpacity>
-                {avatarUri && (
-                  <TouchableOpacity
-                    onPress={() => setAvatarUri(null)}
-                    disabled={isSubmitting}
-                    style={styles.avatarSkipLink}
-                  >
-                    <Text style={styles.avatarSkipText}>Remove photo</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
           </Animated.View>
 
           <Button
@@ -948,60 +863,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: theme.border,
     textAlign: 'center',
-  },
-  avatarPicker: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    marginTop: 24,
-    position: 'relative',
-  },
-  avatarPlaceholder: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: theme.bgCard,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: theme.coral,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarPreview: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 3,
-    borderColor: theme.coral,
-  },
-  avatarUploadOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 70,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarEditBadge: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: theme.coral,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: theme.bg,
-  },
-  avatarSkipLink: {
-    marginTop: 18,
-    padding: 8,
-  },
-  avatarSkipText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: theme.textMuted,
   },
   phoneRow: {
     flexDirection: 'row',

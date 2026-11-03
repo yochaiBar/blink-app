@@ -19,12 +19,12 @@ export interface FeedItemData {
   type: FeedItemType;
   // Photo items
   userName?: string;
-  userAvatar?: string;
   groupName?: string;
   groupEmoji?: string;
   groupId?: string;
   challengeId?: string;
-  photoUrl?: string;
+  /** Response whose photo to show (from the local photo store). */
+  responseId?: string;
   challengePrompt?: string;
   timeAgo?: string;
   reactions?: { emoji: string; count: number }[];
@@ -33,7 +33,7 @@ export interface FeedItemData {
   memberCount?: number;
   isLive?: boolean;
   expiresAt?: string;
-  challengeResponses?: { responseId: string; userName?: string; photoUrl?: string }[];
+  challengeResponses?: { responseId: string; userName?: string }[];
   // Sortable timestamp (ISO string)
   timestamp?: string;
   // Callbacks passed through
@@ -53,12 +53,11 @@ function PhotoFeedItem({ item }: { item: FeedItemData }) {
   // id doesn't follow the convention, skip the comments section entirely.
   const responseId = item.id.startsWith('photo_') ? item.id.slice('photo_'.length) : null;
 
-  // E2E photo flow (Phase 5): resolve the image URI from the local sandbox
-  // first. v2 responses arrive via /api/photos/relay → photoStore; the feed
-  // item itself carries no S3 URL. v1 responses fall back to item.photoUrl
-  // (S3). useSocket invalidates ['localPhoto', response_id] when a photo
-  // lands; this query re-runs and the Image swaps the source.
-  const effectivePhotoUri = usePhotoUri(responseId) ?? item.photoUrl;
+  // E2E photo flow: the image comes from the local photo store (photos
+  // arrive via /api/photos/relay; the feed item carries no URL). useSocket
+  // invalidates ['localPhoto', response_id] when a photo lands and the Image
+  // swaps the source.
+  const effectivePhotoUri = usePhotoUri(item.responseId ?? responseId);
 
   const { onReact, onPress } = item;
   const handleReact = useCallback(
@@ -83,14 +82,7 @@ function PhotoFeedItem({ item }: { item: FeedItemData }) {
       <View style={styles.photoItem}>
         {/* Header row */}
         <View style={styles.headerRow}>
-          <AvatarRing
-            uri={item.userAvatar}
-            name={item.userName}
-            size={32}
-            ringColor={theme.coral}
-            showStatus
-            hasResponded
-          />
+          <AvatarRing name={item.userName} size={32} ringColor={theme.coral} showStatus hasResponded />
           <View style={styles.headerText}>
             <View style={styles.headerNameRow}>
               <Text style={styles.userName} numberOfLines={1}>
@@ -106,10 +98,9 @@ function PhotoFeedItem({ item }: { item: FeedItemData }) {
           </View>
         </View>
 
-        {/* Full-width photo — local sandbox first (v2), S3 fallback (v1).
-            Shows a skeleton when the photo hasn't arrived yet (e.g. a v2
-            response we just heard about via socket but the relay frame
-            hasn't landed). Server-side pickup_request will get it sent. */}
+        {/* Full-width photo from the local store. Shows a skeleton until it
+            arrives (e.g. a response we just heard about via socket but the
+            relay frame hasn't landed). Server-side pickup_request gets it sent. */}
         <View style={styles.photoContainer}>
           {effectivePhotoUri ? (
             <Image

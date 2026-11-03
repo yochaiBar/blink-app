@@ -98,7 +98,6 @@ describe('verifyOtp', () => {
       id: 'user-1',
       phone_number: '+15551234567',
       display_name: 'Test User',
-      avatar_url: null,
       bio: null,
     };
 
@@ -132,7 +131,7 @@ describe('verifyOtp', () => {
   it('should send phone_number and code in dev mode body', async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse(200, {
-        user: { id: 'u1', phone_number: '+15551234567', display_name: null, avatar_url: null, bio: null },
+        user: { id: 'u1', phone_number: '+15551234567', display_name: null, bio: null },
         access_token: 'at',
         refresh_token: 'rt',
       }),
@@ -163,7 +162,6 @@ describe('restoreSession', () => {
       id: 'user-1',
       phone_number: '+15551234567',
       display_name: 'Restored User',
-      avatar_url: null,
       bio: null,
     };
 
@@ -233,7 +231,7 @@ describe('logout', () => {
     // Set up authenticated state first
     mockFetch.mockResolvedValueOnce(
       mockResponse(200, {
-        user: { id: 'u1', phone_number: '+1', display_name: 'T', avatar_url: null, bio: null },
+        user: { id: 'u1', phone_number: '+1', display_name: 'T', bio: null },
         access_token: 'at',
         refresh_token: 'rt',
       }),
@@ -261,7 +259,7 @@ describe('Local State Updates', () => {
     // Set up authenticated state
     mockFetch.mockResolvedValueOnce(
       mockResponse(200, {
-        user: { id: 'u1', phone_number: '+1', display_name: 'Original', avatar_url: null, bio: 'Original bio' },
+        user: { id: 'u1', phone_number: '+1', display_name: 'Original', bio: 'Original bio' },
         access_token: 'at',
         refresh_token: 'rt',
       }),

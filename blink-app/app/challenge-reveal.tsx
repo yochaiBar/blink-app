@@ -26,6 +26,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import EncryptedImage from '@/components/EncryptedImage';
 import { ApiChallengeResponse } from '@/types/api';
 import { useChallengeReveal } from '@/hooks/useChallenge';
+import { resolvePhotoUri } from '@/hooks/usePhotoUri';
 import { Users } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -191,13 +192,8 @@ export default function ChallengeRevealScreen() {
       if (b.user_id === user.id) return 1;
       return new Date(a.responded_at).getTime() - new Date(b.responded_at).getTime();
     });
-    // If the user's own response has no photo_url yet (upload still propagating),
-    // fall back to the local photo URI passed from snap-challenge
-    if (localPhotoUri && responses.length > 0 && responses[0].user_id === user.id && !responses[0].photo_url) {
-      responses[0] = { ...responses[0], photo_url: localPhotoUri };
-    }
     return responses;
-  }, [revealData?.responses, user.id, localPhotoUri]);
+  }, [revealData?.responses, user.id]);
 
   const totalResponses = sortedResponses.length;
   const memberCount = groupData?.members?.length ?? totalResponses;
@@ -417,12 +413,15 @@ export default function ChallengeRevealScreen() {
   );
 
   // ── Navigation ──────────────────────────────────────────────────
-  const handleShare = useCallback(() => {
+  const handleShare = useCallback(async () => {
     // Find the user's own response to share
     const ownResponse = sortedResponses.find((r) => r.user_id === user.id);
     const responseToShare = ownResponse ?? sortedResponses[0];
+    const photoUri = responseToShare
+      ? ((await resolvePhotoUri(responseToShare.id)) ?? (responseToShare === ownResponse ? localPhotoUri : null))
+      : null;
 
-    if (!responseToShare?.photo_url) {
+    if (!responseToShare || !photoUri) {
       Alert.alert('No Photo', 'There is no photo to share for this challenge.');
       return;
     }
@@ -435,16 +434,15 @@ export default function ChallengeRevealScreen() {
     router.push({
       pathname: '/share-card',
       params: {
-        photoUri: responseToShare.photo_url,
+        photoUri,
         prompt: challengePrompt ?? 'Blink Challenge',
         userName: responseToShare.display_name ?? 'User',
-        userAvatar: responseToShare.avatar_url ?? '',
         groupName: groupData?.name ?? 'Group',
         groupEmoji: groupData?.icon ?? '',
         ...(responseTimeSec != null ? { responseTimeSec } : {}),
       },
     });
-  }, [sortedResponses, user.id, challengePrompt, groupData, router]);
+  }, [sortedResponses, user.id, challengePrompt, groupData, router, localPhotoUri]);
 
   const handleBackToFeed = useCallback(() => {
     router.dismiss();
@@ -488,11 +486,11 @@ export default function ChallengeRevealScreen() {
         ]}
       >
         <View style={styles.photoContainer}>
-          {/* Photo -- render for any non-empty photo_url including file:// and data: URIs */}
-          {response.photo_url || response.has_photo ? (
+          {/* Photo from the local store; your own snap falls back to the file you just took */}
+          {response.has_photo || (isOwnResponse && localPhotoUri) ? (
             <EncryptedImage
-              uri={response.photo_url}
               responseId={response.id}
+              fallbackUri={isOwnResponse ? localPhotoUri : undefined}
               style={styles.photo}
               contentFit="cover"
               transition={300}
@@ -511,7 +509,7 @@ export default function ChallengeRevealScreen() {
             pointerEvents="box-none"
           >
             <View style={styles.userInfoRow}>
-              <AvatarRing uri={response.avatar_url} name={response.display_name ?? undefined} size={32} />
+              <AvatarRing name={response.display_name ?? undefined} size={32} />
               <View style={styles.userInfoText}>
                 <View style={styles.nameRow}>
                   <Text style={styles.userName} numberOfLines={1}>

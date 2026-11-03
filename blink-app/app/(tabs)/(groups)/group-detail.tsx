@@ -505,7 +505,6 @@ export default function GroupDetailScreen() {
           members={(groupQuery.data?.members ?? []).map((m) => ({
             id: m.user_id,
             name: m.display_name ?? 'User',
-            avatar: m.avatar_url ?? '',
           }))}
           respondedUserIds={respondedUserIds}
           hasActiveChallenge={group.hasActiveChallenge}

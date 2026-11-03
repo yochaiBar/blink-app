@@ -11,7 +11,6 @@ const TOOLTIP_AUTO_DISMISS_MS = 2000;
 export interface MemberAvatarData {
   id: string;
   name: string;
-  avatar: string;
 }
 
 interface AnimatedMemberAvatarProps {
@@ -61,7 +60,6 @@ const AnimatedMemberAvatar = React.memo(function AnimatedMemberAvatar({
       </Animated.View>
       <Animated.View style={{ transform: [{ scale: springScale }] }}>
         <AvatarRing
-          uri={member.avatar}
           name={member.name}
           size={46}
           hasResponded={hasResponded}

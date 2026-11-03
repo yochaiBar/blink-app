@@ -52,7 +52,6 @@ export function useComments(responseId: string | undefined): UseCommentsResult {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         display_name: user?.display_name ?? 'You',
-        avatar_url: user?.avatar_url ?? null,
       };
       queryClient.setQueryData<CommentItem[]>(key, (old) => [...(old ?? []), optimistic]);
       return { previous };

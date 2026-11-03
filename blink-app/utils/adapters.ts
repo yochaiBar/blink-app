@@ -2,8 +2,6 @@ import { Group, GroupMember, UserProfile, SnapSubmission, LeaderboardEntry } fro
 import { ApiGroupListItem, ApiGroupDetail, ApiGroupMember, ApiChallengeResponse } from '@/types/api';
 import { theme } from '@/constants/colors';
 
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
-
 export function apiGroupListToGroup(item: ApiGroupListItem): Group {
   const hasActive = item.has_active_challenge ?? false;
   const endTime = item.challenge_expires_at ? new Date(item.challenge_expires_at).getTime() : undefined;
@@ -28,7 +26,6 @@ export function apiMemberToGroupMember(m: ApiGroupMember): GroupMember {
   return {
     id: m.user_id,
     name: m.display_name ?? 'User',
-    avatar: m.avatar_url ?? DEFAULT_AVATAR,
     streak: m.streak ?? 0,
     isOnline: false,
     totalSnaps: m.total_responses ?? 0,
@@ -62,9 +59,7 @@ export function apiResponseToSnap(r: ApiChallengeResponse): SnapSubmission {
     id: r.id,
     userId: r.user_id,
     userName: r.display_name ?? 'User',
-    userAvatar: r.avatar_url ?? DEFAULT_AVATAR,
     groupId: '',
-    imageUrl: r.photo_url ?? '',
     timestamp: r.responded_at ?? r.created_at,
     reactions: [],
   };
@@ -76,31 +71,20 @@ export function apiMembersToLeaderboard(members: ApiGroupMember[]): LeaderboardE
     .map((m, i) => ({
       userId: m.user_id,
       userName: m.display_name ?? 'User',
-      userAvatar: m.avatar_url ?? DEFAULT_AVATAR,
       score: m.total_responses,
       streak: m.streak ?? 0,
       rank: i + 1,
     }));
 }
 
-export function apiUserToProfile(user: {
-  id: string;
-  phone_number: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  bio?: string | null;
-}): UserProfile {
+export function apiUserToProfile(user: { id: string; display_name: string | null; bio?: string | null }): UserProfile {
   return {
     id: user.id,
     name: user.display_name ?? '',
-    username: '',
-    avatar: user.avatar_url ?? DEFAULT_AVATAR,
     bio: user.bio ?? '',
     totalSnaps: 0,
     longestStreak: 0,
     groupCount: 0,
     joinDate: new Date().toISOString(),
-    notificationsEnabled: true,
-    privacyMode: 'everyone',
   };
 }

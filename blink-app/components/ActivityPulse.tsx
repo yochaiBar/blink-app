@@ -1,12 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { Image } from 'expo-image';
 import { theme } from '@/constants/colors';
+import AvatarRing from '@/components/ui/AvatarRing';
 
 interface RespondedUser {
   userId: string;
   displayName: string;
-  avatarUrl?: string;
 }
 
 export interface ActivityPulseProps {
@@ -96,13 +95,7 @@ export default function ActivityPulse({
             key={u.userId}
             style={[styles.avatarWrapper, { marginLeft: i > 0 ? -OVERLAP : 0, zIndex: MAX_VISIBLE - i }]}
           >
-            <Image
-              source={{
-                uri: u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
-              }}
-              style={styles.avatar}
-              contentFit="cover"
-            />
+            <AvatarRing name={u.displayName} size={AVATAR_SIZE - 4} />
           </View>
         ))}
         {Array.from({ length: placeholderCount }).map((_, i) => (
@@ -155,11 +148,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: theme.bg,
     overflow: 'hidden',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-    borderRadius: AVATAR_SIZE / 2,
   },
   placeholderWrapper: {
     backgroundColor: theme.bgCard,

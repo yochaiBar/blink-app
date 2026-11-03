@@ -1,7 +1,6 @@
 export interface GroupMember {
   id: string;
   name: string;
-  avatar: string;
   streak: number;
   isOnline: boolean;
   totalSnaps?: number;
@@ -33,18 +32,9 @@ export interface SnapSubmission {
   id: string;
   userId: string;
   userName: string;
-  userAvatar: string;
   groupId: string;
-  imageUrl: string;
   timestamp: string;
   reactions: Reaction[];
-  encryptionMetadata?: {
-    v: number;
-    alg: string;
-    iv: string;
-    tag: string;
-    key_enc: string;
-  } | null;
 }
 
 export interface Reaction {
@@ -56,17 +46,11 @@ export interface Reaction {
 export interface UserProfile {
   id: string;
   name: string;
-  username: string;
-  avatar: string;
   bio: string;
   totalSnaps: number;
   longestStreak: number;
   groupCount: number;
   joinDate: string;
-  notificationsEnabled: boolean;
-  quietHoursStart?: string;
-  quietHoursEnd?: string;
-  privacyMode: 'everyone' | 'friends' | 'groups_only';
 }
 
 export interface NotificationItem {
@@ -78,22 +62,12 @@ export interface NotificationItem {
   read: boolean;
   groupId?: string;
   groupName?: string;
-  fromUserAvatar?: string;
 }
 
 export interface LeaderboardEntry {
   userId: string;
   userName: string;
-  userAvatar: string;
   score: number;
   streak: number;
   rank: number;
-}
-
-export interface AppSettings {
-  notificationsEnabled: boolean;
-  quietHoursEnabled: boolean;
-  quietHoursStart: string;
-  quietHoursEnd: string;
-  privacyMode: 'everyone' | 'friends' | 'groups_only';
 }

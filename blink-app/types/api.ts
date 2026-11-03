@@ -4,7 +4,6 @@ export interface ApiUser {
   id: string;
   phone_number: string;
   display_name: string | null;
-  avatar_url: string | null;
   bio: string | null;
 }
 
@@ -23,7 +22,6 @@ export interface ApiGroupListItem {
 export interface ApiGroupMember {
   user_id: string;
   display_name: string | null;
-  avatar_url: string | null;
   role: string;
   streak: number;
   participation_rate: number;
@@ -65,21 +63,10 @@ export interface ApiChallengeResponse {
   challenge_id: string;
   user_id: string;
   display_name: string | null;
-  avatar_url: string | null;
-  /** v1 only; null for v2 responses (Phase 6 cutover). Dropped in migration 015. */
-  photo_url: string | null;
-  /** True for both v1 + v2 photo responses. Added in migration 014. */
+  /** The photo itself never touches the server: it arrives over the E2E relay into the local photo store. */
   has_photo?: boolean;
   response_time_ms: number | null;
   responded_at: string;
   created_at: string;
   reactions?: ApiReaction[];
-}
-
-export interface EncryptionMetadata {
-  v: number;
-  alg: string;
-  iv: string;
-  tag: string;
-  key_enc: string;
 }

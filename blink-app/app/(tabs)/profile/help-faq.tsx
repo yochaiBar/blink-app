@@ -46,16 +46,6 @@ const faqData: FAQItem[] = [
     answer:
       'No! Snaps are locked until you submit your own. This ensures everyone captures their authentic moment without being influenced by others.',
   },
-  {
-    question: 'How do I change my privacy settings?',
-    answer:
-      'Go to Profile → Settings → Privacy. You can control who sees your snaps: Everyone, Friends Only, or Groups Only.',
-  },
-  {
-    question: 'What are Quiet Hours?',
-    answer:
-      'Quiet Hours let you mute notifications during certain times (e.g., 10 PM to 8 AM). You can enable this in Settings → Notifications → Quiet Hours.',
-  },
 ];
 
 export default function HelpFAQScreen() {
