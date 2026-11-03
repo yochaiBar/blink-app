@@ -22,7 +22,6 @@ import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services/api';
-import { getSocket } from '@/services/socket';
 import { Group } from '@/types';
 import { ApiChallenge, ApiChallengeResponse } from '@/types/api';
 import AvatarRing from '@/components/ui/AvatarRing';
@@ -285,27 +284,8 @@ export default function BlinksScreen() {
     return out;
   }, [pendingChallenges, feedQuery.data]);
 
-  // ── Socket listeners ──
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-
-    const handleUpdate = () => {
-      queryClient.invalidateQueries({ queryKey: ['feed-active-challenges'] });
-      queryClient.invalidateQueries({ queryKey: ['blinks-feed-v2'] });
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
-    };
-
-    socket.on('challenge:started', handleUpdate);
-    socket.on('challenge:completed', handleUpdate);
-    socket.on('challenge:response', handleUpdate);
-
-    return () => {
-      socket.off('challenge:started', handleUpdate);
-      socket.off('challenge:completed', handleUpdate);
-      socket.off('challenge:response', handleUpdate);
-    };
-  }, [queryClient]);
+  // Live updates (started / response / finalized) invalidate this screen's
+  // queries in services/socketEvents.
 
   // ── Handlers ──
 

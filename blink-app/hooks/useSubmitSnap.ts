@@ -9,6 +9,7 @@ import { queryKeys } from '@/utils/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { b64ToBytes, getOrCreateDeviceKey } from '@/services/groupCrypto';
 import { sendPhoto } from '@/services/photoTransfer';
+import { queueRelayRetry } from '@/services/relayRetry';
 import { putReceivedPhoto } from '@/services/photoStore';
 
 /**
@@ -150,13 +151,22 @@ async function submitV2(args: V2Args): Promise<RespondResponse> {
   //    we may reach; none in a 1-member group). sendPhoto also writes to the
   //    sender plaintext cache (for pickup-on-demand).
   if (!args.selfUserId) throw new Error('useSubmitSnap: not signed in');
-  await sendPhoto({
+  const relay = {
     groupId: args.groupId,
     challengeId: args.challengeId,
     responseId: response.id,
     senderUserId: args.selfUserId,
-    plaintext,
-  });
+  };
+  try {
+    await sendPhoto({ ...relay, plaintext });
+  } catch (err) {
+    // The response is recorded (a second /respond is refused), so the photo
+    // must still go out: queue it for the next foreground / reconnect / key.
+    await queueRelayRetry(relay).catch(() => undefined);
+    // Only a missing key needs the user (onError's "Setup Required");
+    // anything else is retried quietly.
+    if (err instanceof Error && err.message.includes('no group key')) throw err;
+  }
 
   return response;
 }

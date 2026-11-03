@@ -2,9 +2,15 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 
 // This file is the app's only Expo config (there is no app.json).
 
-// API_URL is set per EAS build profile (see eas.json).
-// Falls back to localhost for local web dev and LAN IP for device dev.
-const API_URL = process.env.API_URL || 'https://blink-api-production.up.railway.app/api';
+// EXPO_PUBLIC_API_URL is set per EAS build profile (see eas.json). Local dev
+// leaves it unset and the app talks to the dev machine (services/api.ts).
+// A release build without it fails here instead of pointing somewhere else.
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const isReleaseBuild =
+  ['preview', 'production'].includes(process.env.EAS_BUILD_PROFILE ?? '') || process.env.NODE_ENV === 'production';
+if (isReleaseBuild && !API_URL) {
+  throw new Error('EXPO_PUBLIC_API_URL must be set for a release build (see eas.json)');
+}
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,

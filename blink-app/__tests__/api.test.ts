@@ -17,10 +17,14 @@ import './setup';
 // We need to re-import after mocks are set up
 // The api module uses Platform.OS at import time, which we mock as 'web'
 import {
+  ApiError,
   loadToken,
   setTokens,
   clearTokens,
   api,
+  getAccessToken,
+  onSessionExpired,
+  refreshSession,
   getNotifications,
   markNotificationsRead,
   addReactionApi,
@@ -255,6 +259,68 @@ describe('api()', () => {
 
     await expect(api('/protected')).rejects.toThrow('No token');
     expect(mockFetch).toHaveBeenCalledTimes(1); // No refresh attempt
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Errors and the session refresh
+// ─────────────────────────────────────────────────────────────────
+describe('ApiError and refreshSession()', () => {
+  const expired = jest.fn();
+  beforeEach(async () => {
+    expired.mockReset();
+    onSessionExpired(expired);
+    mockFetch.mockReset();
+    await setTokens('old-access', 'old-refresh');
+  });
+
+  it('carries the HTTP status', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(409, { error: 'Reaction already exists' }, false));
+
+    const err = await api('/x').catch((e) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 409, message: 'Reaction already exists' });
+  });
+
+  it('shares one refresh between requests that 401 at the same time', async () => {
+    mockFetch.mockImplementation(async (url, init) => {
+      if (String(url).endsWith('/auth/refresh')) {
+        return mockResponse(200, { access_token: 'new-access', refresh_token: 'new-refresh' });
+      }
+      const auth = (init?.headers as Record<string, string>)?.Authorization;
+      return auth === 'Bearer new-access' ? mockResponse(200, { ok: true }) : mockResponse(401, {}, false);
+    });
+
+    await Promise.all([api('/a'), api('/b'), api('/c')]);
+
+    const refreshes = mockFetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/refresh'));
+    expect(refreshes).toHaveLength(1);
+    expect(getAccessToken()).toBe('new-access');
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it('a refused refresh clears the tokens and ends the session once', async () => {
+    mockFetch.mockImplementation(async (url) =>
+      String(url).endsWith('/auth/refresh')
+        ? mockResponse(401, { error: 'revoked' }, false)
+        : mockResponse(401, {}, false),
+    );
+
+    await expect(Promise.all([api('/a'), api('/b')])).rejects.toBeInstanceOf(ApiError);
+
+    expect(expired).toHaveBeenCalledTimes(1);
+    expect(getAccessToken()).toBeNull();
+    expect(localStorage.getItem('refreshToken')).toBeNull();
+  });
+
+  it('an offline refresh keeps the session', async () => {
+    mockFetch.mockRejectedValueOnce(new TypeError('Network request failed'));
+
+    expect(await refreshSession()).toBe(false);
+
+    expect(expired).not.toHaveBeenCalled();
+    expect(localStorage.getItem('refreshToken')).toBe('old-refresh');
   });
 });
 

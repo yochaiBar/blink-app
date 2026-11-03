@@ -34,7 +34,7 @@ import {
 import { useOnboardingStore, tourMessages } from '@/stores/onboardingStore';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
 import StreakCelebration from '@/components/StreakCelebration';
-import { getSocket } from '@/services/socket';
+import { subscribe } from '@/services/socketEvents';
 
 import {
   MemberAvatarRow,
@@ -162,42 +162,30 @@ export default function GroupDetailScreen() {
   }, [activeChallenge?.id]);
 
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-    const handleProgress = (data: {
-      respondedUsers?: { userId: string; displayName: string }[];
-      totalMembers?: number;
-    }) => {
-      if (data.respondedUsers && data.totalMembers) {
-        setProgressData({ responded: data.respondedUsers, totalMembers: data.totalMembers });
-        setChallengeJustTriggered(false);
-      }
-    };
-    const handleResponse = () => {
-      if (activeChallenge?.id) {
-        responsesQuery.refetch();
-        fetchChallengeProgress(activeChallenge.id)
-          .then((data) => {
-            if (data) setProgressData({ responded: data.respondedUsers ?? [], totalMembers: data.totalMembers ?? 0 });
-          })
-          .catch(() => {}); // Non-critical: progress refresh is best-effort
-      }
-    };
-    const handleStreak = (data: { userName?: string; streakDays?: number }) => {
-      if (data.userName && data.streakDays) {
-        setStreakCelebration({ userName: data.userName, streakDays: data.streakDays });
-        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-    };
-    socket.on('challenge:progress', handleProgress);
-    socket.on('challenge:response', handleResponse);
-    socket.on('streak:milestone', handleStreak);
+    // A response to this challenge: refresh the list and the progress bar.
+    const offResponse = subscribe('challenge:response', (event) => {
+      if (!activeChallenge?.id || event.challengeId !== activeChallenge.id) return;
+      setChallengeJustTriggered(false);
+      responsesQuery.refetch();
+      fetchChallengeProgress(activeChallenge.id)
+        .then((data) => {
+          if (data) setProgressData({ responded: data.respondedUsers ?? [], totalMembers: data.totalMembers ?? 0 });
+        })
+        .catch(() => {}); // Non-critical: progress refresh is best-effort
+    });
+    // A finished challenge in this group: celebrate streak milestones.
+    const offFinalized = subscribe('challenge:finalized', (event) => {
+      if (event.groupId !== id) return;
+      const milestone = event.milestones[0];
+      if (!milestone) return;
+      setStreakCelebration({ userName: milestone.displayName, streakDays: milestone.streak });
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    });
     return () => {
-      socket.off('challenge:progress', handleProgress);
-      socket.off('challenge:response', handleResponse);
-      socket.off('streak:milestone', handleStreak);
+      offResponse();
+      offFinalized();
     };
-  }, [activeChallenge?.id, responsesQuery]);
+  }, [id, activeChallenge?.id, responsesQuery]);
 
   // ── Mutations ──
   const ringMutation = useMutation({

@@ -6,13 +6,15 @@ import { ArrowLeft, Shield, LogOut, ChevronRight, Trash2, FileText, Mail, UserX,
 import * as Haptics from 'expo-haptics';
 import { theme } from '@/constants/colors';
 import { useApp } from '@/providers/AppProvider';
-import { api, API_URL, getBlockedUsers, unblockUser } from '@/services/api';
+import { useAuthStore } from '@/stores/authStore';
+import { API_URL, getBlockedUsers, unblockUser } from '@/services/api';
 import { AvatarRing, Button } from '@/components/ui';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { logout } = useApp();
+  const deleteAccount = useAuthStore((s) => s.deleteAccount);
 
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
   const [blockedUsers, setBlockedUsers] = useState<{ blocked_id: string; display_name: string | null }[]>([]);
@@ -75,13 +77,11 @@ export default function SettingsScreen() {
     const doDelete = async () => {
       try {
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        await api('/auth/delete-account', { method: 'DELETE' });
-        await logout();
+        await deleteAccount();
         router.replace('/onboarding' as never);
-      } catch {
-        // Server-side delete failed -- still log out locally to unblock the user
-        await logout();
-        router.replace('/onboarding' as never);
+      } catch (err) {
+        // Nothing was deleted: say so, and stay signed in.
+        Alert.alert('Could not delete account', err instanceof Error ? err.message : 'Please try again.');
       }
     };
 
@@ -96,7 +96,7 @@ export default function SettingsScreen() {
         { text: 'Delete', style: 'destructive', onPress: doDelete },
       ]);
     }
-  }, [logout, router]);
+  }, [deleteAccount, router]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

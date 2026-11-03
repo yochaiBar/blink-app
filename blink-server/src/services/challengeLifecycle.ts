@@ -124,25 +124,6 @@ async function finalizeOn(
 function announceFinalized(event: ChallengeFinalized): void {
   emitToGroup(event.groupId, 'challenge:finalized', event);
 
-  // TODO(Stage 4): the app still listens to these; drop them once it uses
-  // challenge:finalized (services/socketEvents.ts).
-  if (event.status === 'completed') {
-    emitToGroup(event.groupId, 'challenge:completed', { challengeId: event.challengeId, groupId: event.groupId });
-  }
-  emitToGroup(event.groupId, 'group:streak_update', {
-    groupId: event.groupId,
-    groupStreak: event.groupStreak,
-    brokenBy: event.brokenBy,
-  });
-  for (const m of event.milestones) {
-    emitToGroup(event.groupId, 'streak:milestone', {
-      userId: m.userId,
-      displayName: m.displayName,
-      milestone: m.streak,
-      groupId: event.groupId,
-    });
-  }
-
   query<{ user_id: string }>(`SELECT user_id FROM group_members WHERE group_id = $1`, [event.groupId])
     .then(({ rows }) =>
       sendPushToUsers(
