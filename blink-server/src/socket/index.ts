@@ -179,7 +179,3 @@ export async function emitToUserWithAck(
 
   return { acked, nacked, failed };
 }
-
-export function getIO(): SocketServer | null {
-  return io;
-}

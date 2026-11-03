@@ -6,7 +6,7 @@ import { respondChallengeSchema } from '../../utils/schemas';
 import logger from '../../utils/logger';
 import { emitToGroup } from '../../socket';
 import { validateUuidParams } from '../../middleware/validateParams';
-import { submitResponse, checkChallengeCompletion, ModerationError } from '../../services/challengeService';
+import { submitResponse, checkChallengeCompletion } from '../../services/challengeService';
 import { notifyUserOfResponse, notifySocialObligation } from '../../services/notificationService';
 import { processStreakRewards } from '../../services/streakService';
 
@@ -19,28 +19,15 @@ router.post(
   validateBody(respondChallengeSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
-    const { photo_url, has_photo, response_time_ms, answer_index, answer_text } = req.body;
+    const { has_photo, response_time_ms } = req.body;
 
     // Submit the response (validates challenge, membership, duplicates).
-    // has_photo carries the v2 client's signal that bytes will arrive via
-    // /api/photos/relay separately — the response row goes in with no URL.
-    // photo_url is kept only for v1 backwards compat during the cutover.
+    // has_photo carries the client's signal that bytes will arrive via
+    // /api/photos/relay separately — the response row never holds a photo.
     let response, challenge;
     try {
-      ({ response, challenge } = await submitResponse(
-        id,
-        req.userId!,
-        photo_url || null,
-        response_time_ms || null,
-        answer_index ?? null,
-        answer_text || null,
-        has_photo,
-      ));
+      ({ response, challenge } = await submitResponse(id, req.userId!, response_time_ms || null, has_photo === true));
     } catch (err: unknown) {
-      if (err instanceof ModerationError) {
-        res.status(400).json({ error: err.message, moderation_labels: err.labels });
-        return;
-      }
       if (err instanceof Error && 'statusCode' in err) {
         const statusErr = err as Error & { statusCode: number };
         res.status(statusErr.statusCode).json({ error: statusErr.message });
@@ -52,8 +39,8 @@ router.post(
     const c = challenge;
 
     // Notify the challenge trigger-er that someone responded
-    if (c.triggered_by && c.triggered_by !== req.userId) {
-      notifyUserOfResponse(c.triggered_by, req.userId!, c.group_id, id).catch((err: unknown) => {
+    if (c.created_by && c.created_by !== req.userId) {
+      notifyUserOfResponse(c.created_by, req.userId!, c.group_id, id).catch((err: unknown) => {
         logger.error('Notify response error', {
           error: err instanceof Error ? err.message : String(err),
           challengeId: id,

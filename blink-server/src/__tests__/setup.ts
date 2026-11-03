@@ -80,7 +80,6 @@ jest.mock('../socket', () => ({
   emitToUserWithAck: jest.fn().mockResolvedValue({ acked: 0, nacked: 0, failed: 0 }),
   onUserConnect: jest.fn(),
   initSocket: jest.fn().mockReturnValue({}),
-  getIO: jest.fn().mockReturnValue(null),
 }));
 
 // ── Mock notification utility ─────────────────────────────────────

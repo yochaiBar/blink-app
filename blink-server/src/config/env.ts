@@ -21,24 +21,14 @@ const envSchema = z.object({
   // ── Optional flags ──────────────────────────────────────────────
   ALLOW_DEV_OTP_FALLBACK: z.string().optional(),
   OTP_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().optional(),
-  // Closed-testing "jump right in": accept the universal dev OTP (123456)
-  // for any phone, no SMS. NOT gated on NODE_ENV so it can run on the prod
-  // backend during a test phase. Leave UNSET for real launches.
-  TESTING_MODE: z.string().optional(),
 
   // ── Twilio ──────────────────────────────────────────────────────
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_PHONE_NUMBER: z.string().optional(),
 
-  // ── AWS S3 ──────────────────────────────────────────────────────
-  AWS_ACCESS_KEY_ID: z.string().optional(),
-  AWS_SECRET_ACCESS_KEY: z.string().optional(),
-  AWS_S3_BUCKET: z.string().optional(),
-
   // ── Observability ───────────────────────────────────────────────
   SENTRY_DSN: z.string().optional(),
-  EXPO_PUBLIC_SENTRY_DSN: z.string().optional(),
 
   // ── Database extras (used by database.ts pool config) ───────────
   DB_POOL_MAX: z.string().optional(),

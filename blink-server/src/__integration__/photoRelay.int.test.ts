@@ -52,7 +52,7 @@ describe('POST /api/photos/relay', () => {
     const alice = await createUser();
     const bob = await createUser();
     const group = await createGroup({ createdBy: alice, members: [bob] });
-    const challenge = await createChallenge({ groupId: group.id, triggeredBy: alice });
+    const challenge = await createChallenge({ groupId: group.id, createdBy: alice });
     const response = await createResponse({ challengeId: challenge.id, user: alice });
     const bobOnline = await onlineRecipient(bob);
 
@@ -72,7 +72,7 @@ describe('POST /api/photos/relay', () => {
     const alice = await createUser();
     const bob = await createUser();
     const group = await createGroup({ createdBy: alice, members: [bob] });
-    const challenge = await createChallenge({ groupId: group.id, triggeredBy: alice });
+    const challenge = await createChallenge({ groupId: group.id, createdBy: alice });
     const response = await createResponse({ challengeId: challenge.id, user: alice });
 
     const res = await server
@@ -98,7 +98,7 @@ describe('POST /api/photos/relay', () => {
     const bob = await createUser();
     const mallory = await createUser();
     const group = await createGroup({ createdBy: alice, members: [bob] });
-    const challenge = await createChallenge({ groupId: group.id, triggeredBy: alice });
+    const challenge = await createChallenge({ groupId: group.id, createdBy: alice });
     const response = await createResponse({ challengeId: challenge.id, user: alice });
     const bobOnline = await onlineRecipient(bob);
 

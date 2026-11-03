@@ -1,47 +1,23 @@
 import { query, withTransaction } from '../config/database';
-import logger from '../utils/logger';
 import { emitToGroup } from '../socket';
-import { commentOnResponses, AiPersonality } from './aiService';
 import { processSkipsForChallenge } from './streakService';
 import { sendPushToGroup } from './pushNotifications';
 import { ChallengeRow, GroupMemberRow, ChallengeResponseRow, CountRow } from '../types/db';
-
-/**
- * Legacy moderation error type — retained so existing test fixtures and any
- * remaining `instanceof ModerationError` checks compile. Server-side image
- * moderation is gone (Phase 6: photos no longer reach the server). Future
- * cleanup can drop this class entirely once all references are gone.
- */
-export class ModerationError extends Error {
-  labels: string[];
-  confidence: number | undefined;
-  constructor(labels: string[], confidence: number | undefined) {
-    super('Your photo was flagged. Please try a different photo.');
-    this.name = 'ModerationError';
-    this.labels = labels;
-    this.confidence = confidence;
-  }
-}
 
 /**
  * Submit a response to a challenge. Validates preconditions, inserts the response,
  * triggers notifications, social obligation loop, streak rewards, and completion checks.
  *
  * Returns the inserted response row.
- * Throws on validation failures (not found, expired, not member, already responded, moderation).
+ * Throws on validation failures (not found, expired, not member, already responded).
  */
 export async function submitResponse(
   challengeId: string,
   userId: string,
-  photoUrl: string | null,
   responseTimeMs: number | null,
-  answerIndex: number | null,
-  answerText: string | null,
-  // v2 photo flow: client says "I will relay the bytes peer-to-peer."
-  // No photo_url; recipients fetch from their local sandbox once the
-  // /api/photos/relay arrives. Either path sets has_photo=true; only
-  // pure answers (quiz / prompt with no media) stay has_photo=false.
-  explicitHasPhoto?: boolean,
+  // The client says "I will relay the bytes peer-to-peer" (E2E photo flow):
+  // the server only records that a photo exists, never the photo itself.
+  hasPhoto: boolean,
 ): Promise<{ response: ChallengeResponseRow; challenge: ChallengeRow }> {
   // Fetch challenge
   const challenge = await query<ChallengeRow>(`SELECT * FROM challenges WHERE id = $1`, [challengeId]);
@@ -72,27 +48,11 @@ export async function submitResponse(
     throw Object.assign(new Error('Already responded'), { statusCode: 400 });
   }
 
-  // (Phase 6: no server-side moderation — photos no longer reach the server.
-  // Reporting + block-list remain as the user-driven safety surface.)
-
-  // Insert response. has_photo = either v1 (photo_url set, legacy clients
-  // before HTTP 426 cutover) or v2 (client signaled explicitly).
-  const responseType = c.type === 'quiz' || c.type === 'prompt' ? 'answer' : 'photo';
-  const hasPhoto = explicitHasPhoto === true || photoUrl != null;
   const result = await query<ChallengeResponseRow>(
-    `INSERT INTO challenge_responses (challenge_id, user_id, response_type, photo_url, has_photo, answer_index, answer_text, response_time_ms)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO challenge_responses (challenge_id, user_id, has_photo, response_time_ms)
+     VALUES ($1, $2, $3, $4)
      RETURNING *`,
-    [
-      challengeId,
-      userId,
-      responseType,
-      photoUrl,
-      hasPhoto,
-      answerIndex ?? null,
-      answerText || null,
-      responseTimeMs || null,
-    ],
+    [challengeId, userId, hasPhoto, responseTimeMs || null],
   );
 
   return { response: result.rows[0], challenge: c };
@@ -100,24 +60,24 @@ export async function submitResponse(
 
 /**
  * Check if all group members have responded to a challenge.
- * If so, mark it as completed, process skips, trigger AI commentary.
+ * If so, mark it as completed and settle member stats.
  */
 export async function checkChallengeCompletion(challengeId: string, groupId: string): Promise<boolean> {
   const completed = await withTransaction(async (client) => {
-    // Fetch the challenge's triggered_at to only count members who were in the group at that time
-    const challengeResult = await client.query<{ triggered_at: Date; status: string }>(
-      `SELECT triggered_at, status FROM challenges WHERE id = $1 FOR UPDATE`,
+    // Fetch the challenge's created_at to only count members who were in the group at that time
+    const challengeResult = await client.query<{ created_at: Date; status: string }>(
+      `SELECT created_at, status FROM challenges WHERE id = $1 FOR UPDATE`,
       [challengeId],
     );
     if (challengeResult.rows.length === 0 || challengeResult.rows[0].status !== 'active') {
       return false;
     }
-    const challengeTriggeredAt = challengeResult.rows[0].triggered_at;
+    const challengeCreatedAt = challengeResult.rows[0].created_at;
 
-    // Only count members who joined before the challenge was triggered
+    // Only count members who joined before the challenge was created
     const totalMembers = await client.query<CountRow>(
       `SELECT COUNT(*) FROM group_members WHERE group_id = $1 AND joined_at <= $2`,
-      [groupId, challengeTriggeredAt],
+      [groupId, challengeCreatedAt],
     );
     const totalResponses = await client.query<CountRow>(
       `SELECT COUNT(*) FROM challenge_responses WHERE challenge_id = $1`,
@@ -148,39 +108,5 @@ export async function checkChallengeCompletion(challengeId: string, groupId: str
     groupId,
   }).catch(() => {});
 
-  // AI commentary on challenge results (fire-and-forget)
-  generateAiCommentary(challengeId, groupId).catch((err: unknown) => {
-    logger.error('AI commentary generation failed', {
-      error: err instanceof Error ? err.message : String(err),
-      challengeId,
-    });
-  });
-
   return true;
-}
-
-/**
- * Generate AI commentary for a completed challenge and cache it.
- */
-async function generateAiCommentary(challengeId: string, groupId: string): Promise<void> {
-  const groupPersonalityResult = await query(`SELECT ai_personality FROM groups WHERE id = $1`, [groupId]);
-  const personality: AiPersonality = groupPersonalityResult.rows[0]?.ai_personality || 'funny';
-  const allResponsesForCommentary = await query(
-    `SELECT cr.answer_text, cr.response_time_ms, COALESCE(u.display_name, u.phone_number) AS display_name
-     FROM challenge_responses cr
-     JOIN users u ON u.id = cr.user_id
-     JOIN group_members gm ON gm.group_id = $2 AND gm.user_id = cr.user_id
-     WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
-    [challengeId, groupId],
-  );
-  const responsesData = allResponsesForCommentary.rows.map((r) => ({
-    userName: r.display_name || 'Someone',
-    answerText: r.answer_text || undefined,
-    responseTimeMs: r.response_time_ms || undefined,
-  }));
-  if (responsesData.length > 0) {
-    const commentary = await commentOnResponses(responsesData, personality);
-    await query(`UPDATE challenges SET ai_commentary = $1 WHERE id = $2`, [commentary.commentary, challengeId]);
-    emitToGroup(groupId, 'challenge:commentary', { challengeId, commentary: commentary.commentary });
-  }
 }

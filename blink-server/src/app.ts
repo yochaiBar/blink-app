@@ -13,9 +13,6 @@ import { query } from './config/database';
 import authRoutes from './routes/auth';
 import groupRoutes from './routes/groups';
 import challengeRoutes from './routes/challenges';
-import uploadRoutes from './routes/upload';
-import spotlightRoutes from './routes/spotlight';
-import activityRoutes from './routes/activity';
 import notificationRoutes from './routes/notifications';
 import moderationRoutes from './routes/moderation';
 import deviceKeysRoutes from './routes/deviceKeys';
@@ -120,14 +117,6 @@ export function createApp(): express.Express {
     message: { error: 'Too many OTP requests, please try again later' },
   });
 
-  const uploadLimiter = rateLimit({
-    windowMs: RATE_LIMITS.PHOTO_UPLOAD.windowMs,
-    max: RATE_LIMITS.PHOTO_UPLOAD.max,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many upload requests, please try again later' },
-  });
-
   const groupCreationLimiter = rateLimit({
     windowMs: RATE_LIMITS.GROUP_CREATION.windowMs,
     max: RATE_LIMITS.GROUP_CREATION.max,
@@ -156,16 +145,12 @@ export function createApp(): express.Express {
   app.use('/api/auth/request-otp', otpLimiter);
   app.use('/api/auth/verify-otp', verifyOtpLimiter);
   app.use('/api/groups/join', joinGroupLimiter);
-  app.use('/api/upload', uploadLimiter);
   app.post('/api/groups', groupCreationLimiter);
 
   // Routes
   app.use('/api/auth', authRoutes);
   app.use('/api/groups', groupRoutes);
   app.use('/api/challenges', challengeRoutes);
-  app.use('/api/upload', uploadRoutes);
-  app.use('/api/spotlight', spotlightRoutes);
-  app.use('/api/activity', activityRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/moderation', moderationRoutes);
   app.use('/api/device-keys', deviceKeysRoutes);
@@ -180,15 +165,6 @@ export function createApp(): express.Express {
   app.get('/terms', (_req, res) => {
     res.setHeader('Content-Security-Policy', termsCsp);
     res.sendFile(path.join(legalDir, 'terms-of-service.html'));
-  });
-
-  // API routes that redirect to the HTML pages (useful for programmatic access)
-  app.get('/api/legal/privacy', (_req, res) => {
-    res.redirect('/privacy');
-  });
-
-  app.get('/api/legal/terms', (_req, res) => {
-    res.redirect('/terms');
   });
 
   // Health check

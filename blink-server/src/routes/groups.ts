@@ -31,7 +31,7 @@ router.post(
   '/',
   validateBody(createGroupSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { name, icon, category, quiet_hours_start, quiet_hours_end, skip_penalty_type, ai_personality } = req.body;
+    const { name, icon, quiet_hours_start, quiet_hours_end } = req.body;
 
     // 3-group free tier limit
     const userGroups = await query<CountRow>(`SELECT COUNT(*) FROM group_members WHERE user_id = $1`, [req.userId]);
@@ -44,20 +44,10 @@ router.post(
 
     const newGroup = await withTransaction(async (client) => {
       const group = await client.query<GroupRow>(
-        `INSERT INTO groups (name, icon, category, created_by, invite_code, quiet_hours_start, quiet_hours_end, skip_penalty_type, ai_personality)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
-        [
-          name,
-          icon || '\u{1F465}',
-          category || 'friends',
-          req.userId,
-          inviteCode,
-          quiet_hours_start || '22:00',
-          quiet_hours_end || '08:00',
-          skip_penalty_type || 'wanted_poster',
-          ai_personality || 'funny',
-        ],
+        `INSERT INTO groups (name, icon, created_by, invite_code, quiet_hours_start, quiet_hours_end)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [name, icon || '\u{1F465}', req.userId, inviteCode, quiet_hours_start || '22:00', quiet_hours_end || '08:00'],
       );
 
       // Add creator as admin
@@ -111,12 +101,11 @@ router.get(
 
     try {
       await verifyMembership(req.userId!, id);
-      const { group, members, active_penalties } = await getGroupWithMembers(id);
+      const { group, members } = await getGroupWithMembers(id);
 
       res.json({
         ...group,
         members,
-        active_penalties,
       });
     } catch (err: unknown) {
       if (err instanceof Error && 'statusCode' in err) {
@@ -300,22 +289,6 @@ router.delete(
   }),
 );
 
-// ── GET /api/groups/:id/encryption-key (legacy) ──
-// Returns HTTP 426 to surface a forced-upgrade modal in v1 clients.
-// The v2 photo flow uses client-side group keys delivered via the
-// courier handshake (Phase 4) — no server-side key retrieval exists.
-router.get(
-  '/:id/encryption-key',
-  validateUuidParams('id'),
-  asyncHandler(async (req: AuthRequest, res: Response) => {
-    logger.info('legacy encryption-key route hit (HTTP 426)', { userId: req.userId });
-    res.status(426).json({
-      error: 'This app version is no longer supported. Please update to the latest version of Blink.',
-      upgrade_required: true,
-    });
-  }),
-);
-
 // ── GET /api/groups/:id/stats -- Group statistics (top trigger, longest streak, fastest responder) ──
 router.get(
   '/:id/stats',
@@ -336,13 +309,13 @@ router.get(
 
     // Top trigger: user who triggered the most challenges in this group
     const topTriggerResult = await query(
-      `SELECT c.triggered_by AS user_id,
+      `SELECT c.created_by AS user_id,
             COALESCE(u.display_name, u.phone_number) AS display_name,
             COUNT(*)::int AS count
      FROM challenges c
-     JOIN users u ON u.id = c.triggered_by
-     WHERE c.group_id = $1 AND c.triggered_by IS NOT NULL
-     GROUP BY c.triggered_by, u.display_name, u.phone_number
+     JOIN users u ON u.id = c.created_by
+     WHERE c.group_id = $1 AND c.created_by IS NOT NULL
+     GROUP BY c.created_by, u.display_name, u.phone_number
      ORDER BY count DESC
      LIMIT 1`,
       [id],
@@ -422,83 +395,6 @@ router.get(
       fastest_responder: fastestResponder,
       total_challenges: totalChallenges,
       completion_rate: completionRate,
-    });
-  }),
-);
-
-// ── GET /api/groups/:id/streaks -- Group streak + member streaks + shields ──
-router.get(
-  '/:id/streaks',
-  validateUuidParams('id'),
-  asyncHandler(async (req: AuthRequest, res: Response) => {
-    const id = req.params.id as string;
-
-    try {
-      await verifyMembership(req.userId!, id);
-    } catch (err: unknown) {
-      if (err instanceof Error && 'statusCode' in err) {
-        const statusErr = err as Error & { statusCode: number };
-        res.status(statusErr.statusCode).json({ error: statusErr.message });
-        return;
-      }
-      throw err;
-    }
-
-    // Get group streak info
-    const groupResult = await query<Pick<GroupRow, 'group_streak' | 'longest_group_streak'>>(
-      `SELECT group_streak, longest_group_streak FROM groups WHERE id = $1`,
-      [id],
-    );
-    const groupStreak = groupResult.rows[0]?.group_streak || 0;
-    const longestGroupStreak = groupResult.rows[0]?.longest_group_streak || 0;
-
-    // Get all members with streaks
-    const members = await query(
-      `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url, gm.current_streak as streak
-     FROM group_members gm
-     JOIN users u ON u.id = gm.user_id
-     WHERE gm.group_id = $1
-     ORDER BY gm.current_streak DESC`,
-      [id],
-    );
-
-    // Get shields remaining per member
-    const shields = await query(
-      `SELECT user_id, COUNT(*)::int as shields_remaining
-     FROM streak_shields
-     WHERE group_id = $1 AND used_at IS NULL
-     GROUP BY user_id`,
-      [id],
-    );
-    const shieldsMap: Record<string, number> = {};
-    for (const row of shields.rows) {
-      shieldsMap[row.user_id] = row.shields_remaining;
-    }
-
-    // Get milestones per member
-    const milestones = await query(
-      `SELECT user_id, ARRAY_AGG(milestone ORDER BY milestone) as milestones
-     FROM streak_milestones
-     WHERE group_id = $1
-     GROUP BY user_id`,
-      [id],
-    );
-    const milestonesMap: Record<string, number[]> = {};
-    for (const row of milestones.rows) {
-      milestonesMap[row.user_id] = row.milestones;
-    }
-
-    res.json({
-      groupStreak,
-      longestGroupStreak,
-      members: members.rows.map((m) => ({
-        userId: m.user_id,
-        displayName: m.display_name,
-        avatarUrl: m.avatar_url,
-        streak: m.streak,
-        shieldsRemaining: shieldsMap[m.user_id] || 0,
-        milestones: milestonesMap[m.user_id] || [],
-      })),
     });
   }),
 );

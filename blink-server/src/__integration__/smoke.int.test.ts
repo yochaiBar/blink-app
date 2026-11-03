@@ -3,7 +3,7 @@
  * authenticate middleware and a real Socket.io server.
  */
 import { query } from '../config/database';
-import { useTestServer, waitForRoomSize } from './support/server';
+import { useTestServer } from './support/server';
 import { bearer, countRows, createChallenge, createGroup, createUser } from './support/factories';
 
 const server = useTestServer();
@@ -65,7 +65,7 @@ describe('smoke', () => {
 
     const aliceSocket = await server.connectSocket(alice.token);
     aliceSocket.emit('join-groups', [group.id]);
-    await waitForRoomSize(`group:${group.id}`, 1);
+    await server.waitForRoomSize(`group:${group.id}`, 1);
     const joined = new Promise<{ groupId: string; userId: string; displayName: string }>((resolve) => {
       aliceSocket.once('group:member-joined', resolve);
     });
@@ -116,7 +116,7 @@ describe('smoke', () => {
   it('expired challenges are expired lazily by GET .../challenges/active', async () => {
     const alice = await createUser();
     const group = await createGroup({ createdBy: alice });
-    const challenge = await createChallenge({ groupId: group.id, triggeredBy: alice, expiresInSeconds: -60 });
+    const challenge = await createChallenge({ groupId: group.id, createdBy: alice, expiresInSeconds: -60 });
 
     const res = await server.api().get(`/api/challenges/groups/${group.id}/challenges/active`).set(bearer(alice));
 

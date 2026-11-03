@@ -62,10 +62,9 @@ describe('POST /api/groups', () => {
 
   it('should create a group with all optional fields', async () => {
     const group = makeGroup({
-      category: 'family',
       icon: '👨‍👩‍👧',
-      skip_penalty_type: 'avatar_change',
-      ai_personality: 'sarcastic',
+      quiet_hours_start: '23:00',
+      quiet_hours_end: '07:00',
     });
     mockQuery.mockResolvedValueOnce(queryResult([{ count: '1' }]));
     mockQuery.mockResolvedValueOnce(queryResult([group]));
@@ -74,9 +73,8 @@ describe('POST /api/groups', () => {
     const res = await request(app).post('/api/groups').set('Authorization', `Bearer ${token}`).send({
       name: 'Family Group',
       icon: '👨‍👩‍👧',
-      category: 'family',
-      skip_penalty_type: 'avatar_change',
-      ai_personality: 'sarcastic',
+      quiet_hours_start: '23:00',
+      quiet_hours_end: '07:00',
     });
 
     expect(res.status).toBe(201);
@@ -111,33 +109,6 @@ describe('POST /api/groups', () => {
       .post('/api/groups')
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'A'.repeat(101) });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('should return 400 for invalid category', async () => {
-    const res = await request(app)
-      .post('/api/groups')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Test', category: 'invalid_category' });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('should return 400 for invalid penalty type', async () => {
-    const res = await request(app)
-      .post('/api/groups')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Test', skip_penalty_type: 'death_penalty' });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('should return 400 for invalid ai_personality', async () => {
-    const res = await request(app)
-      .post('/api/groups')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Test', ai_personality: 'invalid_personality' });
 
     expect(res.status).toBe(400);
   });
@@ -211,14 +182,13 @@ describe('GET /api/groups', () => {
 describe('GET /api/groups/:id', () => {
   const token = generateAccessToken(TEST_USER_ID);
 
-  it('should return group details with members and penalties', async () => {
+  it('should return group details with members', async () => {
     const membership = makeMembership({ role: 'admin' });
     const group = makeGroup();
     const members = [
       {
         user_id: TEST_USER_ID,
         display_name: 'User 1',
-        avatar_url: null,
         role: 'admin',
         joined_at: new Date().toISOString(),
         streak: 5,
@@ -227,20 +197,17 @@ describe('GET /api/groups/:id', () => {
         participation_rate: 83,
       },
     ];
-    const penalties: any[] = [];
-
     mockQuery
       .mockResolvedValueOnce(queryResult([membership])) // membership check
       .mockResolvedValueOnce(queryResult([group])) // group info
-      .mockResolvedValueOnce(queryResult(members)) // members
-      .mockResolvedValueOnce(queryResult(penalties)); // penalties
+      .mockResolvedValueOnce(queryResult(members)); // members
 
     const res = await request(app).get(`/api/groups/${TEST_GROUP_ID}`).set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(TEST_GROUP_ID);
     expect(res.body.members).toHaveLength(1);
-    expect(res.body.active_penalties).toBeDefined();
+    expect(res.body.active_penalties).toBeUndefined();
   });
 
   it('should return 403 when user is not a member', async () => {

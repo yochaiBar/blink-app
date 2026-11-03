@@ -8,7 +8,6 @@ import { UserDisplayNameRow } from '../types/db';
 interface UserSummaryRow {
   user_id: string;
   display_name: string;
-  avatar_url: string | null;
 }
 
 /**
@@ -50,19 +49,19 @@ export async function notifyUserOfResponse(
 export async function notifySocialObligation(challengeId: string, groupId: string): Promise<void> {
   // Get all group members with names
   const allMembers = await query<UserSummaryRow>(
-    `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
+    `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name
      FROM group_members gm
      JOIN users u ON u.id = gm.user_id
      WHERE gm.group_id = $1`,
     [groupId],
   );
 
-  // Get who has responded so far (non-skip)
+  // Get who has responded so far
   const allResponded = await query<UserSummaryRow>(
-    `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name, u.avatar_url
+    `SELECT cr.user_id, COALESCE(u.display_name, u.phone_number) AS display_name
      FROM challenge_responses cr
      JOIN users u ON u.id = cr.user_id
-     WHERE cr.challenge_id = $1 AND cr.response_type != 'skip'`,
+     WHERE cr.challenge_id = $1`,
     [challengeId],
   );
   const respondedUserIds = new Set(allResponded.rows.map((r) => r.user_id));
@@ -75,7 +74,6 @@ export async function notifySocialObligation(challengeId: string, groupId: strin
     respondedUsers: allResponded.rows.map((r) => ({
       userId: r.user_id,
       displayName: r.display_name,
-      avatarUrl: r.avatar_url,
     })),
   });
 
@@ -105,12 +103,7 @@ export async function notifySocialObligation(challengeId: string, groupId: strin
 /**
  * Notify all group members (except the triggerer) about a new challenge.
  */
-export async function notifyGroupOfChallenge(
-  groupId: string,
-  challengeId: string,
-  challengeType: string,
-  triggeredBy: string,
-): Promise<void> {
+export async function notifyGroupOfChallenge(groupId: string, challengeId: string, triggeredBy: string): Promise<void> {
   const groupMembers = await query(
     `SELECT gm.user_id, COALESCE(u.display_name, u.phone_number) AS display_name FROM group_members gm
      JOIN users u ON u.id = gm.user_id
@@ -130,7 +123,7 @@ export async function notifyGroupOfChallenge(
       member.user_id,
       'challenge_started',
       'New Challenge!',
-      `${triggerName} started a ${challengeType} challenge in ${groupName}`,
+      `${triggerName} started a snap challenge in ${groupName}`,
       groupId,
       triggeredBy,
     );
@@ -140,8 +133,8 @@ export async function notifyGroupOfChallenge(
   sendPushToGroup(
     groupId,
     'New Challenge!',
-    `${triggerName} started a ${challengeType} challenge in ${groupName}`,
-    { type: 'challenge_started', challengeId, groupId, challengeType, screen: 'challenge' },
+    `${triggerName} started a snap challenge in ${groupName}`,
+    { type: 'challenge_started', challengeId, groupId, challengeType: 'snap', screen: 'challenge' },
     triggeredBy,
   ).catch(() => {});
 }

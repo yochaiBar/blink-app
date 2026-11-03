@@ -29,16 +29,13 @@ export function testDatabaseName(url: string): string {
 
 // Keys a developer's local .env could inject. dotenv never overrides a key
 // that is already set, so blanking them keeps the suite hermetic: no real
-// Twilio/Expo/Anthropic/Sentry calls, no TESTING_MODE bypass, no scheduler.
+// Twilio/Expo/Sentry calls, no auto-challenge scheduler.
 const BLANKED_KEYS = [
   'TWILIO_ACCOUNT_SID',
   'TWILIO_AUTH_TOKEN',
   'TWILIO_PHONE_NUMBER',
-  'TESTING_MODE',
   'ALLOW_DEV_OTP_FALLBACK',
   'SENTRY_DSN',
-  'ANTHROPIC_API_KEY',
-  'AI_ENABLED',
   'CHALLENGE_SCHEDULER_ENABLED',
   'EXPO_ACCESS_TOKEN',
 ];

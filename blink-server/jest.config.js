@@ -6,7 +6,6 @@ const base = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     // Map ESM-only packages to their CJS entry points
-    '^uuid$': require.resolve('uuid'),
     '^zod$': require.resolve('zod'),
   },
   clearMocks: true,
@@ -19,7 +18,7 @@ const base = {
     ],
   },
   // Allow transforming ESM packages
-  transformIgnorePatterns: ['node_modules/(?!(uuid|zod)/)'],
+  transformIgnorePatterns: ['node_modules/(?!(zod)/)'],
 };
 
 /** @type {import('ts-jest').JestConfigWithTsJest} */

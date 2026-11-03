@@ -72,7 +72,7 @@ router.get(
   '/blocks',
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const result = await query(
-      `SELECT ub.id, ub.blocked_id, u.display_name, u.avatar_url, ub.created_at
+      `SELECT ub.id, ub.blocked_id, u.display_name, ub.created_at
      FROM user_blocks ub
      JOIN users u ON u.id = ub.blocked_id
      WHERE ub.blocker_id = $1

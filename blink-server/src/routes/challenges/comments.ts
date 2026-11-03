@@ -177,7 +177,7 @@ router.get(
     const comments = await query(
       `SELECT rc.id, rc.response_id, rc.user_id, rc.parent_comment_id, rc.text,
               rc.created_at, rc.updated_at,
-              u.display_name, u.avatar_url
+              u.display_name
          FROM response_comments rc
          JOIN users u ON u.id = rc.user_id
         WHERE rc.response_id = $1 AND rc.deleted_at IS NULL

@@ -249,32 +249,6 @@ describe('GET /api/auth/me', () => {
     expect(res.body.display_name).toBe(user.display_name);
   });
 
-  it('returns feature_flags.photo_v2 (default true) — Phase 5 flag carrier', async () => {
-    const user = makeUser();
-    mockQuery.mockResolvedValueOnce(queryResult([user]));
-    delete process.env.PHOTO_V2_ENABLED;
-
-    const token = generateAccessToken(TEST_USER_ID);
-    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.feature_flags).toEqual({ photo_v2: true });
-  });
-
-  it('respects PHOTO_V2_ENABLED=false hot-rollback', async () => {
-    const user = makeUser();
-    mockQuery.mockResolvedValueOnce(queryResult([user]));
-    process.env.PHOTO_V2_ENABLED = 'false';
-
-    const token = generateAccessToken(TEST_USER_ID);
-    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.feature_flags.photo_v2).toBe(false);
-
-    delete process.env.PHOTO_V2_ENABLED;
-  });
-
   it('should return 401 when no Authorization header is provided', async () => {
     const res = await request(app).get('/api/auth/me');
 
@@ -357,31 +331,6 @@ describe('PATCH /api/auth/profile', () => {
     expect(res.body.bio).toBe('My new bio');
   });
 
-  it('should update avatar_url successfully', async () => {
-    const s3Url = 'https://blinks3upload.s3.us-east-1.amazonaws.com/avatars/new-avatar.jpg';
-    const updatedUser = makeUser({ avatar_url: s3Url });
-    mockQuery.mockResolvedValueOnce(queryResult([updatedUser]));
-
-    const res = await request(app)
-      .patch('/api/auth/profile')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ avatar_url: s3Url });
-
-    expect(res.status).toBe(200);
-  });
-
-  it('should allow clearing avatar_url with empty string', async () => {
-    const updatedUser = makeUser({ avatar_url: null });
-    mockQuery.mockResolvedValueOnce(queryResult([updatedUser]));
-
-    const res = await request(app)
-      .patch('/api/auth/profile')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ avatar_url: '' });
-
-    expect(res.status).toBe(200);
-  });
-
   it('should update multiple fields at once', async () => {
     const updatedUser = makeUser({ display_name: 'Updated', bio: 'Updated bio' });
     mockQuery.mockResolvedValueOnce(queryResult([updatedUser]));
@@ -415,15 +364,6 @@ describe('PATCH /api/auth/profile', () => {
       .patch('/api/auth/profile')
       .set('Authorization', `Bearer ${token}`)
       .send({ bio: 'X'.repeat(201) });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('should return 400 for invalid avatar_url (not a URL)', async () => {
-    const res = await request(app)
-      .patch('/api/auth/profile')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ avatar_url: 'not-a-url' });
 
     expect(res.status).toBe(400);
   });

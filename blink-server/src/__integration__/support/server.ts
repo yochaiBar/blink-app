@@ -12,12 +12,14 @@ import type { Express } from 'express';
 import request from 'supertest';
 import { io as connectClient, Socket as ClientSocket } from 'socket.io-client';
 import { createApp } from '../../app';
-import { initSocket, getIO } from '../../socket';
+import type { Server as SocketServer } from 'socket.io';
+import { initSocket } from '../../socket';
 import { registerRelayHub } from '../../services/relayHub';
 import { registerKeyshareHub } from '../../services/keyshareHub';
 
 export interface TestServer {
   baseUrl: string;
+  io: SocketServer;
   resetApp(): void;
   close(): Promise<void>;
 }
@@ -35,6 +37,7 @@ export async function startTestServer(): Promise<TestServer> {
 
   return {
     baseUrl: `http://127.0.0.1:${port}`,
+    io,
     resetApp() {
       app = createApp();
     },
@@ -95,16 +98,15 @@ export function useTestServer() {
       });
       return socket;
     },
+    /** Wait until `count` sockets have joined a server-side room. */
+    async waitForRoomSize(room: string, count: number, timeoutMs = 2000): Promise<void> {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const sockets = await current().io.in(room).fetchSockets();
+        if (sockets.length >= count) return;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      throw new Error(`Timed out waiting for ${count} socket(s) in room ${room}`);
+    },
   };
-}
-
-/** Wait until `count` sockets have joined a server-side room. */
-export async function waitForRoomSize(room: string, count: number, timeoutMs = 2000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const sockets = await getIO()?.in(room).fetchSockets();
-    if ((sockets?.length ?? 0) >= count) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`Timed out waiting for ${count} socket(s) in room ${room}`);
 }

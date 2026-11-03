@@ -86,13 +86,13 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { phone_number } = req.body;
 
-    if (!isSmsConfigured || env.TESTING_MODE === 'true') {
+    if (!isSmsConfigured) {
       // Dev / closed-testing mode: predictable OTP, no SMS sent.
       await storeOtp(phone_number, DEV_OTP);
       logger.info('OTP requested (dev mode)', { phone: maskPhone(phone_number) });
       res.json({
         message: 'OTP sent',
-        ...((env.NODE_ENV !== 'production' || env.TESTING_MODE === 'true') && {
+        ...(env.NODE_ENV !== 'production' && {
           dev_hint: 'Use 123456',
         }),
       });
@@ -129,29 +129,6 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { phone_number, code } = req.body;
 
-    // ── Closed-testing bypass ────────────────────────────────────
-    // When TESTING_MODE is on, accept the universal dev code for any phone
-    // without a stored OTP so testers can jump straight in. This still
-    // upserts a real user and issues a real session, so identity-dependent
-    // features (groups, challenges, the E2E photo key flow) keep working.
-    // Gated by TESTING_MODE, which is unset for real launches.
-    if (env.TESTING_MODE === 'true' && code === DEV_OTP) {
-      const bypassResult = await query<Pick<UserRow, 'id' | 'phone_number' | 'display_name' | 'avatar_url' | 'bio'>>(
-        `INSERT INTO users (phone_number) VALUES ($1)
-         ON CONFLICT (phone_number) DO UPDATE SET last_active_at = NOW()
-         RETURNING id, phone_number, display_name, avatar_url, bio`,
-        [phone_number],
-      );
-      const bypassUser = bypassResult.rows[0];
-      const bypassAccess = jwt.sign({ userId: bypassUser.id }, env.JWT_SECRET, { expiresIn: JWT_ACCESS_EXPIRY });
-      const bypassRefresh = jwt.sign({ userId: bypassUser.id }, env.JWT_REFRESH_SECRET, {
-        expiresIn: JWT_REFRESH_EXPIRY,
-      });
-      logger.info('User authenticated (testing bypass)', { userId: bypassUser.id });
-      res.json({ user: bypassUser, accessToken: bypassAccess, refreshToken: bypassRefresh });
-      return;
-    }
-
     const pending = await getOtp(phone_number);
     if (!pending) {
       res.status(401).json({ error: 'Invalid or expired OTP' });
@@ -179,10 +156,10 @@ router.post(
     logger.info('OTP verified', { phone: maskPhone(phone_number) });
 
     // ── Upsert user ──────────────────────────────────────────────
-    const result = await query<Pick<UserRow, 'id' | 'phone_number' | 'display_name' | 'avatar_url' | 'bio'>>(
+    const result = await query<Pick<UserRow, 'id' | 'phone_number' | 'display_name' | 'bio'>>(
       `INSERT INTO users (phone_number) VALUES ($1)
        ON CONFLICT (phone_number) DO UPDATE SET last_active_at = NOW()
-       RETURNING id, phone_number, display_name, avatar_url, bio`,
+       RETURNING id, phone_number, display_name, bio`,
       [phone_number],
     );
     const user = result.rows[0];
@@ -218,26 +195,13 @@ router.post('/refresh', validateBody(refreshTokenSchema), (req: Request, res: Re
   }
 });
 
-// ── Feature flags ────────────────────────────────────────────────
-// Read per-request so ops can flip the value without redeploying
-// (Plan §"Feature-flag design"). Default true since the migration
-// (014_challenge_response_has_photo) has already shipped — once code
-// is in the air the only reason to flag-off photo_v2 is incident
-// response. Set PHOTO_V2_ENABLED=false on Railway to hot-rollback.
-function getFeatureFlags() {
-  const v2 = process.env.PHOTO_V2_ENABLED;
-  return {
-    photo_v2: v2 === undefined ? true : v2 !== 'false',
-  };
-}
-
 // ── GET /api/auth/me ─────────────────────────────────────────────
 router.get(
   '/me',
   authenticate,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const result = await query<UserRow>(
-      `SELECT id, phone_number, display_name, avatar_url, bio, created_at, last_active_at
+      `SELECT id, phone_number, display_name, bio, created_at, last_active_at
        FROM users WHERE id = $1`,
       [req.userId],
     );
@@ -247,10 +211,7 @@ router.get(
       return;
     }
 
-    res.json({
-      ...result.rows[0],
-      feature_flags: getFeatureFlags(),
-    });
+    res.json(result.rows[0]);
   }),
 );
 
@@ -279,7 +240,7 @@ router.patch(
   authenticate,
   validateBody(updateProfileSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { display_name, avatar_url, bio } = req.body;
+    const { display_name, bio } = req.body;
 
     const setClauses: string[] = [];
     const values: unknown[] = [];
@@ -288,10 +249,6 @@ router.patch(
     if (display_name !== undefined) {
       setClauses.push(`display_name = $${paramIndex++}`);
       values.push(display_name);
-    }
-    if (avatar_url !== undefined) {
-      setClauses.push(`avatar_url = $${paramIndex++}`);
-      values.push(avatar_url || null);
     }
     if (bio !== undefined) {
       setClauses.push(`bio = $${paramIndex++}`);
@@ -303,7 +260,7 @@ router.patch(
     const result = await query<UserRow>(
       `UPDATE users SET ${setClauses.join(', ')}
        WHERE id = $${paramIndex}
-       RETURNING id, phone_number, display_name, avatar_url, bio, created_at, last_active_at`,
+       RETURNING id, phone_number, display_name, bio, created_at, last_active_at`,
       values,
     );
 
