@@ -1,5 +1,4 @@
 export const JWT_ACCESS_EXPIRY = '15m';
-export const JWT_REFRESH_EXPIRY = '7d';
 
 // OTP rate limit: defaults to 3/hour in production.
 // Override via OTP_RATE_LIMIT_PER_HOUR env var for development/testing.

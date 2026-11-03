@@ -16,7 +16,7 @@ describe('DELETE /api/auth/delete-account', () => {
     expect(await countRows('SELECT COUNT(*) FROM users WHERE id = $1', [alice.id])).toBe(0);
     const me = await server.api().get('/api/auth/me').set(bearer(alice));
     expect(me.status).toBe(401);
-    expect(me.body).toEqual({ error: 'Token revoked' });
+    expect(me.body).toEqual({ error: 'Invalid token' });
   });
 
   // Was KNOWN BUG (a) until 001_baseline set ON DELETE on every FK to users.

@@ -40,12 +40,19 @@ const BLANKED_KEYS = [
   'EXPO_ACCESS_TOKEN',
 ];
 
+// A fixed App Store review login, enabled for every integration run.
+export const APP_REVIEW_PHONE = '+15550000999';
+export const APP_REVIEW_OTP = '424242';
+
 export function applyIntegrationEnv(): void {
   process.env.NODE_ENV = 'test';
   process.env.DATABASE_URL = resolveTestDatabaseUrl();
   process.env.JWT_SECRET = 'integration-jwt-secret-0123456789';
   process.env.JWT_REFRESH_SECRET = 'integration-jwt-refresh-secret-0123456789';
   process.env.PORT = '0';
+  process.env.OTP_PEPPER = 'integration-otp-pepper-0123456789';
+  process.env.APP_REVIEW_PHONE = APP_REVIEW_PHONE;
+  process.env.APP_REVIEW_OTP = APP_REVIEW_OTP;
   for (const key of BLANKED_KEYS) {
     process.env[key] = '';
   }

@@ -26,10 +26,10 @@ describe('smoke', () => {
     const verify = await server.api().post('/api/auth/verify-otp').send({ phone_number: phone, code: '123456' });
     expect(verify.status).toBe(200);
     expect(verify.body.user.phone_number).toBe(phone);
-    expect(typeof verify.body.accessToken).toBe('string');
-    expect(typeof verify.body.refreshToken).toBe('string');
+    expect(typeof verify.body.access_token).toBe('string');
+    expect(typeof verify.body.refresh_token).toBe('string');
 
-    const me = await server.api().get('/api/auth/me').set('Authorization', `Bearer ${verify.body.accessToken}`);
+    const me = await server.api().get('/api/auth/me').set('Authorization', `Bearer ${verify.body.access_token}`);
     expect(me.status).toBe(200);
     expect(me.body.id).toBe(verify.body.user.id);
 

@@ -20,12 +20,12 @@ for you. CI runs the same command against a `postgres:16` service.
 
 ## What is real and what is stubbed
 
-| Real | Stubbed |
-|---|---|
-| `createApp()` (all middleware, rate limits, routes, error handler) | Expo Push HTTP calls (`exp.host`) |
-| `authenticate` middleware, incl. the `revoked_tokens` check | Twilio SMS HTTP calls (`api.twilio.com`) |
-| Postgres + every migration | |
-| Socket.io server on a random port, `socket.io-client` | |
+| Real                                                               | Stubbed                                  |
+| ------------------------------------------------------------------ | ---------------------------------------- |
+| `createApp()` (all middleware, rate limits, routes, error handler) | Expo Push HTTP calls (`exp.host`)        |
+| `authenticate` middleware, incl. the live-session check            | Twilio SMS HTTP calls (`api.twilio.com`) |
+| Postgres + every migration                                         |                                          |
+| Socket.io server on a random port, `socket.io-client`              |                                          |
 
 Stubs live in `support/httpStubs.ts` and intercept `fetch`; recorded calls are
 in `pushRequests` / `smsRequests`. Any other non-local fetch throws.
@@ -39,7 +39,7 @@ import { bearer, createGroup, createUser } from './support/factories';
 const server = useTestServer(); // one server per file, fresh app (rate limits) per test
 
 it('...', async () => {
-  const alice = await createUser();                  // SQL factory, returns a token
+  const alice = await createUser(); // SQL factory, returns a token
   const group = await createGroup({ createdBy: alice });
   const res = await server.api().get(`/api/groups/${group.id}`).set(bearer(alice));
   expect(res.status).toBe(200);

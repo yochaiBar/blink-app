@@ -111,15 +111,12 @@ async function refreshAccessToken(): Promise<boolean> {
     const res = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      body: JSON.stringify({ refresh_token: refreshToken }),
     });
     if (!res.ok) return false;
-    const data = await res.json();
-    accessToken = data.accessToken;
-    await storage.set('accessToken', data.accessToken);
-    if (data.refreshToken) {
-      await storage.set('refreshToken', data.refreshToken);
-    }
+    // The server rotates the refresh token on every refresh; keep both.
+    const data = (await res.json()) as { access_token: string; refresh_token: string };
+    await setTokens(data.access_token, data.refresh_token);
     return true;
   } catch {
     return false;

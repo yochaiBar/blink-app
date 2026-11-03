@@ -52,8 +52,9 @@ jest.mock('../middleware/auth', () => {
       }
       try {
         const token = header.split(' ')[1];
-        const payload = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
-        req.userId = payload.userId;
+        const payload = jwt.verify(token, process.env.JWT_SECRET!) as { sub: string; sid: string };
+        req.userId = payload.sub;
+        req.sessionId = payload.sid;
         next();
       } catch {
         res.status(401).json({ error: 'Invalid token' });
@@ -79,6 +80,8 @@ jest.mock('../socket', () => ({
   isUserOnline: jest.fn().mockResolvedValue(false),
   emitToUserWithAck: jest.fn().mockResolvedValue({ acked: 0, nacked: 0, failed: 0 }),
   onUserConnect: jest.fn(),
+  disconnectSession: jest.fn(),
+  disconnectUser: jest.fn(),
   initSocket: jest.fn().mockReturnValue({}),
 }));
 

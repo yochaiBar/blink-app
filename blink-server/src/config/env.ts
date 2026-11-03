@@ -8,7 +8,7 @@ import { z } from 'zod';
  * imports, the eager parse is safe for both production and test environments.
  */
 
-const envSchema = z.object({
+const baseSchema = z.object({
   // ── Required ────────────────────────────────────────────────────
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET must be at least 16 characters'),
@@ -22,10 +22,26 @@ const envSchema = z.object({
   ALLOW_DEV_OTP_FALLBACK: z.string().optional(),
   OTP_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().optional(),
 
-  // ── Twilio ──────────────────────────────────────────────────────
+  // ── Twilio (required in production — see productionRules) ───────
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_PHONE_NUMBER: z.string().optional(),
+
+  // ── OTP ─────────────────────────────────────────────────────────
+  // HMAC key for stored login codes. Required in production.
+  OTP_PEPPER: z.string().optional(),
+  // App Store review login: this one phone number accepts this fixed code
+  // without an SMS. Set both or neither; leave unset outside review windows.
+  APP_REVIEW_PHONE: z
+    .string()
+    .regex(/^\+[1-9]\d{1,14}$/, 'APP_REVIEW_PHONE must be E.164 (e.g. +15551234567)')
+    .optional()
+    .or(z.literal('')),
+  APP_REVIEW_OTP: z
+    .string()
+    .regex(/^\d{6}$/, 'APP_REVIEW_OTP must be 6 digits')
+    .optional()
+    .or(z.literal('')),
 
   // ── Observability ───────────────────────────────────────────────
   SENTRY_DSN: z.string().optional(),
@@ -39,10 +55,34 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().optional(),
 });
 
+// Production must never fall back to the dev OTP (123456): without Twilio
+// the server refuses to boot instead of quietly accepting a known code.
+const envSchema = baseSchema.superRefine((e, ctx) => {
+  if (!!e.APP_REVIEW_PHONE !== !!e.APP_REVIEW_OTP) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['APP_REVIEW_OTP'],
+      message: 'Set APP_REVIEW_PHONE and APP_REVIEW_OTP together',
+    });
+  }
+  if (e.NODE_ENV !== 'production') return;
+  for (const key of ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER'] as const) {
+    if (!e[key]) ctx.addIssue({ code: 'custom', path: [key], message: `${key} is required in production` });
+  }
+  if (!e.OTP_PEPPER || e.OTP_PEPPER.length < 16) {
+    ctx.addIssue({ code: 'custom', path: ['OTP_PEPPER'], message: 'OTP_PEPPER (16+ chars) is required in production' });
+  }
+});
+
 export type Env = z.infer<typeof envSchema>;
 
+/** Validate an environment without side effects (exported for tests). */
+export function validateEnv(source: Record<string, string | undefined>) {
+  return envSchema.safeParse(source);
+}
+
 function parseEnv(): Env {
-  const result = envSchema.safeParse(process.env);
+  const result = validateEnv(process.env);
   if (!result.success) {
     const formatted = result.error.issues.map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`).join('\n');
     const message = `Environment validation failed:\n${formatted}`;

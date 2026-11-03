@@ -3,20 +3,16 @@
  * them to arrange state; exercise behaviour through the HTTP API.
  */
 import crypto from 'crypto';
-import jwt from 'jsonwebtoken';
 import { query } from '../../config/database';
-import { JWT_ACCESS_EXPIRY } from '../../utils/constants';
+import { createSession } from '../../services/authSessions';
 import type { ChallengeResponseRow, ChallengeRow, GroupRow, UserRow } from '../../types/db';
 
 let phoneCounter = 0;
 
 export interface TestUser extends UserRow {
-  /** A valid access token, verified by the real authenticate middleware. */
+  /** Access token of a real auth_sessions row, accepted by the real authenticate middleware. */
   token: string;
-}
-
-export function accessTokenFor(userId: string): string {
-  return jwt.sign({ userId }, process.env.JWT_SECRET as string, { expiresIn: JWT_ACCESS_EXPIRY });
+  refreshToken: string;
 }
 
 export function bearer(user: { token: string }): { Authorization: string } {
@@ -31,7 +27,8 @@ export async function createUser(overrides: { phone_number?: string; display_nam
     overrides.display_name ?? `User ${phoneCounter}`,
   ]);
   const user = result.rows[0];
-  return { ...user, token: accessTokenFor(user.id) };
+  const tokens = await createSession(user.id);
+  return { ...user, token: tokens.access_token, refreshToken: tokens.refresh_token };
 }
 
 export async function addMember(groupId: string, userId: string, role: 'admin' | 'member' = 'member'): Promise<void> {

@@ -14,10 +14,6 @@ import './setup';
 // Reset the module registry to get a fresh store per test file
 // We need to be careful with Zustand stores in tests
 let useAuthStore: any;
-let api: any;
-let setTokens: any;
-let clearTokens: any;
-let loadToken: any;
 
 const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
 
@@ -34,15 +30,10 @@ function mockResponse(status: number, body: any, ok?: boolean) {
 beforeEach(() => {
   jest.resetModules();
 
-  // Re-require the modules to get fresh instances
-  const apiModule = require('../services/api');
+  // Re-require the store (and with it a fresh services/api) per test
   const storeModule = require('../stores/authStore');
 
   useAuthStore = storeModule.useAuthStore;
-  api = apiModule.api;
-  setTokens = apiModule.setTokens;
-  clearTokens = apiModule.clearTokens;
-  loadToken = apiModule.loadToken;
 });
 
 // ─────────────────────────────────────────────────────────────────
@@ -114,8 +105,8 @@ describe('verifyOtp', () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse(200, {
         user: mockUser,
-        accessToken: 'access-token-123',
-        refreshToken: 'refresh-token-456',
+        access_token: 'access-token-123',
+        refresh_token: 'refresh-token-456',
       }),
     );
 
@@ -142,8 +133,8 @@ describe('verifyOtp', () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse(200, {
         user: { id: 'u1', phone_number: '+15551234567', display_name: null, avatar_url: null, bio: null },
-        accessToken: 'at',
-        refreshToken: 'rt',
+        access_token: 'at',
+        refresh_token: 'rt',
       }),
     );
 
@@ -243,8 +234,8 @@ describe('logout', () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse(200, {
         user: { id: 'u1', phone_number: '+1', display_name: 'T', avatar_url: null, bio: null },
-        accessToken: 'at',
-        refreshToken: 'rt',
+        access_token: 'at',
+        refresh_token: 'rt',
       }),
     );
 
@@ -271,8 +262,8 @@ describe('Local State Updates', () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse(200, {
         user: { id: 'u1', phone_number: '+1', display_name: 'Original', avatar_url: null, bio: 'Original bio' },
-        accessToken: 'at',
-        refreshToken: 'rt',
+        access_token: 'at',
+        refresh_token: 'rt',
       }),
     );
 
