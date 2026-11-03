@@ -27,7 +27,7 @@ import {
 } from '@/constants/demoData';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 
-/** Same shape as GET /challenges/:id/progress. */
+/** Who has answered a challenge (services/challengeReads progressOf). */
 export interface ChallengeProgress {
   respondedCount: number;
   totalMembers: number;
@@ -38,6 +38,8 @@ export interface ChallengeProgress {
 export interface RevealData {
   responses: ApiChallengeResponse[];
   challenge: { id: string; prompt: string | null } | null;
+  /** Hide others' photos: the challenge is open and you haven't answered it. */
+  blurOthers?: boolean;
 }
 
 const isDemoId = (id: string | null | undefined): boolean => !!id && id.startsWith(DEMO_ID_PREFIX);
@@ -81,7 +83,7 @@ export const demoSource = {
     return DEMO_RESPONSES;
   },
 
-  /** GET /challenges/:id/progress */
+  /** Who has answered the demo challenge. */
   progress(): ChallengeProgress {
     return {
       respondedCount: DEMO_RESPONSES.length,

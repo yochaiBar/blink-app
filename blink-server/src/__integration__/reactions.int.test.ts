@@ -78,9 +78,9 @@ describe('reactions', () => {
     expect(await countRows('SELECT COUNT(*) FROM reactions WHERE response_id = $1', [friendsPhoto.id])).toBe(0);
 
     // The owner's own photo shows no reactions from the blocked friend…
-    const list = await server.api().get(`/api/challenges/${challenge.id}/responses`).set(bearer(owner));
+    const list = await server.api().get(`/api/challenges/${challenge.id}`).set(bearer(owner));
     expect(list.status).toBe(200);
-    expect(list.body.map((r: { user_id: string }) => r.user_id)).toEqual([owner.id]);
-    expect(list.body[0].reactions).toEqual([]);
+    expect(list.body.responses.map((r: { user_id: string }) => r.user_id)).toEqual([owner.id]);
+    expect(list.body.responses[0].reactions).toEqual([]);
   });
 });

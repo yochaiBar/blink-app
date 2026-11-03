@@ -183,7 +183,7 @@ describe('groups', () => {
   it('pagination limits are validated', async () => {
     const alice = await createUser();
     const group = await createGroup({ createdBy: alice });
-    const url = `/api/challenges/groups/${group.id}/challenges/history`;
+    const url = `/api/groups/${group.id}/challenges`;
 
     expect((await server.api().get(`${url}?limit=0`).set(bearer(alice))).status).toBe(400);
     expect((await server.api().get(`${url}?limit=51`).set(bearer(alice))).status).toBe(400);

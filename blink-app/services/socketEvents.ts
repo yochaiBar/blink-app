@@ -121,6 +121,8 @@ export function attachSocketEvents(socket: SocketLike, queryClient: QueryClient)
   socket.on('challenge:response', (data: ChallengeResponseEvent) => {
     invalidate('responses', data.challengeId);
     invalidate('challenge-reveal', data.challengeId);
+    invalidate('challenge-progress', data.challengeId);
+    invalidate('group-mini-feed', data.groupId);
     invalidate('challenge', data.groupId);
     invalidate('groups');
     invalidate('feed-active-challenges');
@@ -131,6 +133,8 @@ export function attachSocketEvents(socket: SocketLike, queryClient: QueryClient)
   socket.on('challenge:finalized', (data: ChallengeFinalizedEvent) => {
     invalidate('challenge', data.groupId);
     invalidate('responses', data.challengeId);
+    invalidate('challenge-reveal', data.challengeId);
+    invalidate('group-mini-feed', data.groupId);
     invalidate('groups');
     invalidate('feed-active-challenges');
     invalidate('blinks-feed-v2');

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
 import {
@@ -8,38 +8,8 @@ import {
   type ChallengeProgress,
   type RevealData,
 } from '@/services/demoSource';
-import { ApiChallenge, ApiChallengeResponse, ApiGroupDetail } from '@/types/api';
-
-/** GET /challenges/:id/reveal (camelCase, unlike the rest of the API). */
-interface RevealPayload {
-  challenge?: { id: string; prompt: string | null; groupName?: string; groupEmoji?: string } | null;
-  responses?: {
-    id: string;
-    userId: string;
-    displayName: string | null;
-    hasPhoto: boolean;
-    responseTimeMs: number | null;
-    respondedAt: string;
-    reactions?: { emoji: string; count: number }[];
-  }[];
-}
-
-function revealResponseToResponse(
-  r: NonNullable<RevealPayload['responses']>[number],
-  challengeId: string,
-): ApiChallengeResponse {
-  return {
-    id: r.id,
-    challenge_id: challengeId,
-    user_id: r.userId,
-    display_name: r.displayName,
-    has_photo: r.hasPhoto,
-    response_time_ms: r.responseTimeMs,
-    responded_at: r.respondedAt,
-    created_at: r.respondedAt,
-    reactions: r.reactions,
-  };
-}
+import { fetchChallenge, progressOf, shouldBlurOthers } from '@/services/challengeReads';
+import { ApiChallenge, ApiGroupDetail } from '@/types/api';
 
 /** The challenge being answered on the snap screen. */
 export function useActiveChallenge(groupId: string | undefined, challengeId?: string) {
@@ -55,15 +25,14 @@ export function useActiveChallenge(groupId: string | undefined, challengeId?: st
   });
 }
 
-/** Who has answered so far; polls every 5s for real challenges. */
+/** Who has answered so far; challenge:response events refresh it (services/socketEvents). */
 export function useChallengeProgress(challengeId: string | undefined, enabled: boolean) {
   const isSample = isDemoChallenge(challengeId);
   return useQuery({
     queryKey: ['challenge-progress', challengeId],
     queryFn: async (): Promise<ChallengeProgress> =>
-      isSample ? demoSource.progress() : api<ChallengeProgress>(`/challenges/${challengeId}/progress`),
+      isSample ? demoSource.progress() : progressOf(await fetchChallenge(challengeId!)),
     enabled: !!challengeId && enabled,
-    refetchInterval: isSample ? false : 5000,
   });
 }
 
@@ -77,39 +46,22 @@ export function useChallengeReveal(
   self: { id: string; name: string },
 ) {
   const isSample = isDemoGroup(groupId);
-  // Stop refetching 10s after the screen opened.
-  const mountedAt = useRef(Date.now()).current;
 
+  // No polling: a new response (challenge:response) and a photo arriving
+  // (photo:incoming → localPhoto) both refresh what this screen shows.
   const revealQuery = useQuery<RevealData>({
     queryKey: ['challenge-reveal', challengeId],
     queryFn: async (): Promise<RevealData> => {
       if (isSample) return demoSource.reveal(self);
-
-      // Try reveal endpoint first
-      try {
-        const res = await api<RevealPayload>(`/challenges/${challengeId}/reveal`);
-        return {
-          responses: (res.responses ?? []).map((r) => revealResponseToResponse(r, challengeId ?? '')),
-          challenge: res.challenge ? { id: res.challenge.id, prompt: res.challenge.prompt } : null,
-        };
-      } catch {
-        // Reveal endpoint may not exist yet -- fall back to responses endpoint
-        const responses: ApiChallengeResponse[] = await api(`/challenges/${challengeId}/responses`);
-        return { responses: Array.isArray(responses) ? responses : [], challenge: null };
-      }
+      const challenge = await fetchChallenge(challengeId!);
+      return {
+        responses: challenge.responses,
+        challenge: { id: challenge.id, prompt: challenge.prompt },
+        blurOthers: shouldBlurOthers(challenge),
+      };
     },
     enabled: !!challengeId,
     staleTime: 60_000,
-    // Refetch every 3s for the first 10s while any response is still without a photo
-    refetchInterval: isSample
-      ? false
-      : (query) => {
-          const elapsed = Date.now() - mountedAt;
-          if (elapsed > 10_000) return false;
-          const responses = query.state.data?.responses ?? [];
-          const hasMissingPhoto = responses.some((r: ApiChallengeResponse) => !r.has_photo);
-          return hasMissingPhoto ? 3000 : false;
-        },
   });
 
   const groupQuery = useQuery<ApiGroupDetail>({

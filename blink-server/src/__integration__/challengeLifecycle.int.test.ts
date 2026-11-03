@@ -371,11 +371,14 @@ describe('read endpoints', () => {
     expect((await server.api().get(`/api/challenges/${missing}`).set(bearer(stranger))).status).toBe(404);
   });
 
-  it('the old /responses and /reveal routes no longer require having played', async () => {
+  it('the old per-challenge read routes are gone', async () => {
     const { alice, challenge } = await scene();
 
-    expect((await server.api().get(`/api/challenges/${challenge.id}/responses`).set(bearer(alice))).status).toBe(200);
-    expect((await server.api().get(`/api/challenges/${challenge.id}/reveal`).set(bearer(alice))).status).toBe(200);
+    for (const path of ['responses', 'reveal', 'progress', 'preview']) {
+      expect((await server.api().get(`/api/challenges/${challenge.id}/${path}`).set(bearer(alice))).status).toBe(404);
+    }
+    const history = `/api/challenges/groups/${challenge.group_id}/challenges/history`;
+    expect((await server.api().get(history).set(bearer(alice))).status).toBe(404);
   });
 
   it('GET /api/groups/:id/challenges pages newest first with a before cursor', async () => {
@@ -400,9 +403,13 @@ describe('read endpoints', () => {
       status: 'expired',
     });
     const url = `/api/groups/${group.id}/challenges`;
+    await createResponse({ challengeId: newest.id, user: alice });
 
     const page1 = await server.api().get(`${url}?limit=2`).set(bearer(alice));
     expect(page1.body.map((c: { id: string }) => c.id)).toEqual([newest.id, middle.id]);
+    // Each item carries its responses, as on the feed.
+    expect(page1.body[0].responses.map((r: { user_id: string }) => r.user_id)).toEqual([alice.id]);
+    expect(page1.body[1].responses).toEqual([]);
     const before = new Date(page1.body[1].created_at).toISOString();
     const page2 = await server
       .api()
