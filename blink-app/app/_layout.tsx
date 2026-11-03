@@ -23,8 +23,8 @@ import {
   setBadgeCount,
 } from '@/utils/notifications';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import * as Linking from 'expo-linking';
 import { useSocket } from '@/hooks/useSocket';
+import { useInviteReplay } from '@/hooks/useInviteReplay';
 import { useGroupKeySync } from '@/hooks/useGroupKeySync';
 import { useForegroundMaintenance } from '@/hooks/useForegroundMaintenance';
 import { useDeviceKeyRegistration } from '@/hooks/useDeviceKeyRegistration';
@@ -108,14 +108,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const inOnboarding = (segments[0] as string) === 'onboarding';
 
     if (!isAuthenticated && !inOnboarding) {
-      router.replace('/onboarding' as never);
+      router.replace('/onboarding');
     } else if (isAuthenticated && inOnboarding) {
       // New users who just verified their OTP have display_name=null and still
       // need to complete the name step — don't redirect them yet.
       // Returning users already have a display_name and should go straight to the app.
       const { user } = useAuthStore.getState();
       if (user?.display_name) {
-        router.replace('/' as never);
+        router.replace('/');
       }
     }
   }, [isAuthenticated, isLoading, segments]);
@@ -133,7 +133,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         const data = response.notification.request.content.data as Record<string, string | undefined> | undefined;
         const route = getNotificationRoute(data);
         if (route) {
-          router.push(route as never);
+          router.push(route);
         }
       }
     });
@@ -150,7 +150,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
         const route = getNotificationRoute(data);
         if (route) {
-          router.push(route as never);
+          router.push(route);
         }
 
         // Clear badge after tap
@@ -161,30 +161,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return cleanup;
   }, [isAuthenticated, isLoading, router]);
 
-  // Handle deep links: blink://join/CODE or https://blink.app/join/CODE
-  useEffect(() => {
-    if (!isAuthenticated || isLoading) return;
-
-    const handleUrl = (event: { url: string }) => {
-      const parsed = Linking.parse(event.url);
-      // Match path like /join/ABCDEF
-      if (parsed.path?.startsWith('join/')) {
-        const code = parsed.path.replace('join/', '');
-        if (code) {
-          router.push({ pathname: '/join-group' as never, params: { code } });
-        }
-      }
-    };
-
-    // Handle URL that opened the app
-    Linking.getInitialURL().then((url) => {
-      if (url) handleUrl({ url });
-    });
-
-    // Handle URLs while app is running
-    const subscription = Linking.addEventListener('url', handleUrl);
-    return () => subscription.remove();
-  }, [isAuthenticated, isLoading, router]);
+  // Invite links (app/+native-intent.tsx) open once signed in and out of onboarding.
+  useInviteReplay((segments[0] as string) === 'onboarding');
 
   if (isLoading) {
     return (

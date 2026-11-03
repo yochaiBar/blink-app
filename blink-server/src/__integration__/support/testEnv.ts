@@ -48,6 +48,10 @@ export function applyIntegrationEnv(): void {
   process.env.NODE_ENV = 'test';
   process.env.DATABASE_URL = resolveTestDatabaseUrl();
   process.env.JWT_SECRET = 'integration-jwt-secret-0123456789';
+  process.env.APPLE_TEAM_ID = 'RW54G9U2AP';
+  process.env.IOS_BUNDLE_ID = 'com.yochaibar.blinks';
+  process.env.ANDROID_PACKAGE = 'com.yochaibar.blinks';
+  process.env.ANDROID_CERT_SHA256 = 'AA:BB:CC, DD:EE:FF';
   process.env.JWT_REFRESH_SECRET = 'integration-jwt-refresh-secret-0123456789';
   process.env.PORT = '0';
   process.env.OTP_PEPPER = 'integration-otp-pepper-0123456789';

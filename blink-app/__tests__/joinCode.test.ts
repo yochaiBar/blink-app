@@ -3,7 +3,7 @@
  * (a full invite link, a custom-scheme link, or the raw code) down to the code.
  */
 import './setup';
-import { extractInviteCode, looksLikeInviteLink } from '../utils/inviteCode';
+import { extractInviteCode, looksLikeInviteLink, parseInviteLink } from '../utils/inviteCode';
 
 describe('extractInviteCode', () => {
   it('returns a raw code uppercased', () => {
@@ -72,4 +72,24 @@ describe('extractInviteCode — edge cases beyond the happy path', () => {
       expect(extractInviteCode(pastedLink)).toBe('CREW25');
     },
   );
+});
+
+describe('parseInviteLink', () => {
+  const domains = ['blink.example'];
+
+  it('reads the code from the scheme link, our universal link and a bare path', () => {
+    expect(parseInviteLink('blink://join/abc123', domains)).toBe('ABC123');
+    expect(parseInviteLink('https://blink.example/join/ABC123', domains)).toBe('ABC123');
+    expect(parseInviteLink('https://BLINK.example/join/ABC123/?ref=sms#x', domains)).toBe('ABC123');
+    expect(parseInviteLink('/join/abc123', domains)).toBe('ABC123');
+  });
+
+  it('ignores other domains, schemes and paths', () => {
+    expect(parseInviteLink('https://evil.example/join/ABC123', domains)).toBeNull();
+    expect(parseInviteLink('http://blink.example/join/ABC123', domains)).toBeNull();
+    expect(parseInviteLink('otherapp://join/ABC123', domains)).toBeNull();
+    expect(parseInviteLink('https://blink.example/groups/ABC123', domains)).toBeNull();
+    expect(parseInviteLink('blink://join/', domains)).toBeNull();
+    expect(parseInviteLink('/join/ABC123/extra', domains)).toBeNull();
+  });
 });

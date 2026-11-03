@@ -63,7 +63,7 @@ export default function SettingsScreen() {
       try {
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         await logout();
-        router.replace('/onboarding' as never);
+        router.replace('/onboarding');
       } catch {
         Alert.alert('Error', 'Could not log out. Please try again.');
       } finally {
@@ -87,7 +87,7 @@ export default function SettingsScreen() {
       try {
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         await deleteAccount();
-        router.replace('/onboarding' as never);
+        router.replace('/onboarding');
       } catch (err) {
         // Nothing was deleted: say so, and stay signed in.
         Alert.alert('Could not delete account', err instanceof Error ? err.message : 'Please try again.');

@@ -65,7 +65,7 @@ export default function NotificationsScreen() {
           activeOpacity={0.7}
           onPress={() => {
             if (item.groupId) {
-              router.push({ pathname: '/group-detail' as never, params: { id: item.groupId } });
+              router.push({ pathname: '/group-detail', params: { id: item.groupId } });
             }
           }}
           testID={`notif-${item.id}`}

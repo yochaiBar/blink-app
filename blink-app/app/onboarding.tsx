@@ -35,6 +35,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/services/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button } from '@/components/ui';
+import { LEGAL_URLS } from '@/services/links';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -636,15 +637,12 @@ export default function OnboardingScreen() {
                 <Text style={styles.stepTitle}>Terms & Privacy</Text>
                 <Text style={styles.stepSubtitle}>Please review and accept to continue</Text>
                 <View style={styles.legalLinks}>
-                  <TouchableOpacity style={styles.legalLink} onPress={() => Linking.openURL('https://blink.app/terms')}>
+                  <TouchableOpacity style={styles.legalLink} onPress={() => Linking.openURL(LEGAL_URLS.terms)}>
                     <FileText size={18} color={theme.coral} />
                     <Text style={styles.legalLinkText}>Terms of Service</Text>
                     <ChevronRight size={16} color={theme.textMuted} />
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.legalLink}
-                    onPress={() => Linking.openURL('https://blink.app/privacy')}
-                  >
+                  <TouchableOpacity style={styles.legalLink} onPress={() => Linking.openURL(LEGAL_URLS.privacy)}>
                     <Shield size={18} color={theme.coral} />
                     <Text style={styles.legalLinkText}>Privacy Policy</Text>
                     <ChevronRight size={16} color={theme.textMuted} />

@@ -12,6 +12,11 @@ if (isReleaseBuild && !API_URL) {
   throw new Error('EXPO_PUBLIC_API_URL must be set for a release build (see eas.json)');
 }
 
+// The domain invite links live on (https://<domain>/join/CODE). The server
+// there serves /.well-known/* (blink-server routes/wellKnown.ts). Not settled
+// yet, so it's configurable per build.
+const LINK_DOMAIN = process.env.EXPO_PUBLIC_LINK_DOMAIN || 'blink.app';
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Blinks',
@@ -30,7 +35,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.yochaibar.blinks',
-    associatedDomains: ['applinks:blink.app'],
+    associatedDomains: [`applinks:${LINK_DOMAIN}`],
     infoPlist: {
       NSCameraUsageDescription: 'Blink needs camera access to capture snap challenges with your friends.',
       ITSAppUsesNonExemptEncryption: false,
@@ -97,7 +102,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         data: [
           {
             scheme: 'https',
-            host: 'blink.app',
+            host: LINK_DOMAIN,
             pathPrefix: '/join',
           },
         ],
@@ -110,7 +115,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png',
   },
   plugins: [
-    ['expo-router', { origin: 'https://blink.app/' }],
+    ['expo-router', { origin: `https://${LINK_DOMAIN}/` }],
     'expo-secure-store',
     [
       'expo-camera',
@@ -141,8 +146,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   extra: {
     apiUrl: API_URL,
+    linkDomain: LINK_DOMAIN,
     router: {
-      origin: 'https://blink.app/',
+      origin: `https://${LINK_DOMAIN}/`,
     },
     eas: {
       projectId: '5377c833-4d39-4386-8880-9f67046357b1',

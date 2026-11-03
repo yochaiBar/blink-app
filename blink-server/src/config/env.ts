@@ -63,6 +63,14 @@ const baseSchema = z.object({
 
   // ── CORS ────────────────────────────────────────────────────────
   CORS_ORIGINS: z.string().optional(),
+
+  // ── App links (routes/wellKnown.ts) ─────────────────────────────
+  // Served at the invite-link domain so https://<domain>/join/CODE opens
+  // the app. Unset → those files 404 and links open in the browser.
+  APPLE_TEAM_ID: z.string().optional(), // e.g. RW54G9U2AP
+  IOS_BUNDLE_ID: z.string().optional(), // e.g. com.yochaibar.blinks
+  ANDROID_PACKAGE: z.string().optional(),
+  ANDROID_CERT_SHA256: z.string().optional(), // comma-separated signing-cert fingerprints
 });
 
 // Production must never fall back to the dev OTP (123456): without Twilio

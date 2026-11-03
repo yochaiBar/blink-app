@@ -39,7 +39,7 @@ export default function JoinGroupScreen() {
         Alert.alert('Joined!', `You're now a member of ${result.groupName}`, [
           {
             text: 'View Group',
-            onPress: () => router.replace({ pathname: '/group-detail' as never, params: { id: result.groupId } }),
+            onPress: () => router.replace({ pathname: '/group-detail', params: { id: result.groupId } }),
           },
           { text: 'OK', onPress: () => router.back() },
         ]);

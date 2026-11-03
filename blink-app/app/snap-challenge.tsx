@@ -278,7 +278,7 @@ function SnapChallengeScreen() {
       // Navigate to challenge reveal instead of going back
       if (resolvedChallengeId) {
         router.replace({
-          pathname: '/challenge-reveal' as never,
+          pathname: '/challenge-reveal',
           params: {
             challengeId: resolvedChallengeId,
             groupId: groupId ?? '',
@@ -396,7 +396,7 @@ function SnapChallengeScreen() {
           </View>
           <TouchableOpacity
             style={styles.expiredButton}
-            onPress={() => router.replace(`/group-detail?id=${groupId}` as never)}
+            onPress={() => router.replace(`/group-detail?id=${groupId}`)}
             activeOpacity={0.85}
             testID="expired-back-btn"
           >

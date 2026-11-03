@@ -22,3 +22,31 @@ export function extractInviteCode(raw: string): string {
 export function looksLikeInviteLink(text: string): boolean {
   return /join\/|:\/\//i.test(text);
 }
+
+/**
+ * The invite code in a URL the OS opened the app with, or null when it isn't
+ * an invite link: `blink://join/CODE`, `https://<link domain>/join/CODE` (for
+ * one of `linkDomains`), or the bare path `/join/CODE` that expo-router
+ * passes for links it has already matched.
+ */
+export function parseInviteLink(url: string, linkDomains: string[]): string | null {
+  const trimmed = url.trim();
+  let path: string;
+  if (trimmed.startsWith('/')) {
+    path = trimmed;
+  } else {
+    const match = trimmed.match(/^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)(\/[^?#]*)?/i);
+    if (!match) return null;
+    const [, scheme, host, rest = ''] = match;
+    if (scheme.toLowerCase() === 'blink') {
+      // blink://join/CODE puts "join" where a host would be.
+      path = `/${host}${rest}`;
+    } else if (scheme.toLowerCase() === 'https' && linkDomains.includes(host.toLowerCase())) {
+      path = rest;
+    } else {
+      return null;
+    }
+  }
+  const code = path.match(/^\/join\/([A-Za-z0-9]+)\/?$/)?.[1];
+  return code ? code.toUpperCase() : null;
+}

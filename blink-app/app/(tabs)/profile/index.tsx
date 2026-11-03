@@ -119,9 +119,9 @@ export default function ProfileScreen() {
   }, [deleteAccount]);
 
   const menuItems = [
-    { icon: Edit3, label: 'Edit Profile', color: theme.coral, route: '/edit-profile' },
-    { icon: SettingsIcon, label: 'Settings', color: theme.yellow, route: '/settings' },
-    { icon: HelpCircle, label: 'Help & FAQ', color: theme.blue, route: '/help-faq' },
+    { icon: Edit3, label: 'Edit Profile', color: theme.coral, route: '/profile/edit-profile' as const },
+    { icon: SettingsIcon, label: 'Settings', color: theme.yellow, route: '/profile/settings' as const },
+    { icon: HelpCircle, label: 'Help & FAQ', color: theme.blue, route: '/profile/help-faq' as const },
   ];
 
   const destructiveItems = [
@@ -136,7 +136,7 @@ export default function ProfileScreen() {
         <Text style={[typography.headlineLarge, { color: theme.text }]}>You</Text>
         <TouchableOpacity
           style={styles.settingsBtn}
-          onPress={() => router.push('/settings' as never)}
+          onPress={() => router.push('/profile/settings')}
           testID="settings-btn"
         >
           <Settings size={20} color={theme.text} />
@@ -168,7 +168,7 @@ export default function ProfileScreen() {
               <Text style={[typography.displayMedium, { color: theme.text, marginTop: spacing.md }]}>{user.name}</Text>
               <TouchableOpacity
                 style={styles.editProfileBtn}
-                onPress={() => router.push('/edit-profile' as never)}
+                onPress={() => router.push('/profile/edit-profile')}
                 activeOpacity={0.7}
               >
                 <Edit3 size={13} color={theme.coral} />
@@ -227,7 +227,7 @@ export default function ProfileScreen() {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   }
                   if (item.route) {
-                    router.push(item.route as never);
+                    router.push(item.route);
                   }
                 }}
               >

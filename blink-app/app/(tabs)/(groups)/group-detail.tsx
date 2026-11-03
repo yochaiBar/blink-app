@@ -208,7 +208,7 @@ export default function GroupDetailScreen() {
         respondedUsers: [],
       });
 
-      router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
+      router.push({ pathname: '/snap-challenge', params: { groupId: id } });
     },
     onError: (error: Error) => Alert.alert('Error', error.message || 'Failed to create challenge'),
   });
@@ -229,7 +229,7 @@ export default function GroupDetailScreen() {
   // ── Event handlers ──
   const handleSnapChallenge = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    router.push({ pathname: '/snap-challenge' as never, params: { groupId: id } });
+    router.push({ pathname: '/snap-challenge', params: { groupId: id } });
   }, [router, id]);
 
   // Two-step start (tap, then confirm) as before, now that there is no type picker.
@@ -555,7 +555,7 @@ export default function GroupDetailScreen() {
             leaderboardCount={leaderboard.length}
             isStartingChallenge={ringMutation.isPending}
             onChallengeNow={handleChallengeNow}
-            onViewLeaderboard={() => router.push({ pathname: '/group-leaderboard' as never, params: { groupId: id } })}
+            onViewLeaderboard={() => router.push({ pathname: '/group-leaderboard', params: { groupId: id } })}
           />
         )}
 
@@ -582,7 +582,7 @@ export default function GroupDetailScreen() {
         onClose={() => setShowGroupMenu(false)}
         onInviteMembers={() => {
           setShowGroupMenu(false);
-          router.push({ pathname: '/invite-members' as never, params: { groupId: id } });
+          router.push({ pathname: '/invite-members', params: { groupId: id } });
         }}
         onShareGroup={handleShareGroup}
         onDeleteGroup={handleDeleteGroup}
