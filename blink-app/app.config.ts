@@ -1,5 +1,7 @@
 import { ExpoConfig, ConfigContext } from 'expo/config';
 
+// This file is the app's only Expo config (there is no app.json).
+
 // API_URL is set per EAS build profile (see eas.json).
 // Falls back to localhost for local web dev and LAN IP for device dev.
 const API_URL = process.env.API_URL || 'https://blink-api-production.up.railway.app/api';
@@ -104,8 +106,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     ['expo-router', { origin: 'https://blink.app/' }],
-    'expo-font',
-    'expo-web-browser',
     'expo-secure-store',
     [
       'expo-camera',
@@ -129,7 +129,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       '@sentry/react-native/expo',
       {
-        organization: 'REPLACE_WITH_SENTRY_ORG',
+        // Sentry org slug for source-map upload. Not recorded anywhere yet, so it
+        // comes from the build env; EAS builds skip the upload anyway
+        // (SENTRY_DISABLE_AUTO_UPLOAD in eas.json).
+        organization: process.env.SENTRY_ORG,
         project: 'blink-app',
       },
     ],
