@@ -12,7 +12,7 @@
 
 import { api } from '@/services/api';
 import type { ChallengeProgress } from '@/services/demoSource';
-import type { ApiChallengeDetail, ApiChallengeSummary, ApiFeedPage } from '@/types/api';
+import type { ApiChallengeDetail, ApiChallengeResponse, ApiChallengeSummary, ApiFeedPage } from '@/types/api';
 
 /** Teaser numbers for a member who hasn't answered yet. */
 export interface ChallengePreview {
@@ -46,13 +46,24 @@ export function progressOf(challenge: ApiChallengeDetail): ChallengeProgress {
   };
 }
 
-export function previewOf(challenge: ApiChallengeDetail): ChallengePreview {
+/** Each emoji's total count across `responses`, most-used first. */
+function rankReactions(responses: Pick<ApiChallengeResponse, 'reactions'>[]): [string, number][] {
   const totals = new Map<string, number>();
-  for (const r of challenge.responses) {
-    for (const reaction of r.reactions ?? [])
+  for (const r of responses) {
+    for (const reaction of r.reactions ?? []) {
       totals.set(reaction.emoji, (totals.get(reaction.emoji) ?? 0) + reaction.count);
+    }
   }
-  const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+  return [...totals.entries()].filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1]);
+}
+
+/** The most-used reaction across `responses`; null when nobody reacted (never a made-up default). */
+export function topReactionOf(responses: Pick<ApiChallengeResponse, 'reactions'>[]): string | null {
+  return rankReactions(responses)[0]?.[0] ?? null;
+}
+
+export function previewOf(challenge: ApiChallengeDetail): ChallengePreview {
+  const ranked = rankReactions(challenge.responses);
   return {
     respondedCount: challenge.responses.length,
     totalMembers: challenge.member_count,

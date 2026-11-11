@@ -26,6 +26,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import EncryptedImage from '@/components/EncryptedImage';
 import { ApiChallengeResponse } from '@/types/api';
 import { useChallengeReveal } from '@/hooks/useChallenge';
+import { topReactionOf } from '@/services/challengeReads';
 import { resolvePhotoUri } from '@/hooks/usePhotoUri';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -210,6 +211,9 @@ export default function ChallengeRevealScreen() {
     if (times.length === 0) return null;
     return (times.reduce((a, b) => a + b, 0) / times.length / 1000).toFixed(1);
   }, [sortedResponses]);
+
+  // The real most-used reaction; no line at all when nobody has reacted.
+  const topReaction = useMemo(() => topReactionOf(sortedResponses), [sortedResponses]);
 
   // ── Phase 1: "You're In!" animation ─────────────────────────────
   useEffect(() => {
@@ -708,10 +712,12 @@ export default function ChallengeRevealScreen() {
                     <Text style={styles.statLabel}>avg time</Text>
                   </View>
                 )}
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{'\u{1F525}'}</Text>
-                  <Text style={styles.statLabel}>top reaction</Text>
-                </View>
+                {topReaction && (
+                  <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{topReaction}</Text>
+                    <Text style={styles.statLabel}>top reaction</Text>
+                  </View>
+                )}
               </View>
             </GlassCard>
 
