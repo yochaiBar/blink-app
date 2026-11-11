@@ -7,6 +7,9 @@ const SOCKET_URL = API_URL.replace(/\/api$/, '');
 
 let socket: Socket | null = null;
 
+/** After a refresh that couldn't reach the server, wait this long before reconnecting. */
+const AUTH_RETRY_MS = 5_000;
+
 /**
  * Connect to the Socket.io server using the current JWT token.
  * Safe to call multiple times -- reconnects only if not already connected.
@@ -69,7 +72,18 @@ export function connectSocket(): Socket | null {
     refreshedForAuth = true;
     refreshSession()
       .then((ok) => {
-        if (ok && socket === current) current.connect();
+        if (socket !== current) return; // logged out (a rejected refresh) or replaced
+        if (ok) {
+          current.connect();
+          return;
+        }
+        // The refresh never got an answer (offline, server restarting): the
+        // session is intact, so try the whole handshake again in a bit.
+        setTimeout(() => {
+          if (socket !== current) return;
+          refreshedForAuth = false;
+          current.connect();
+        }, AUTH_RETRY_MS);
       })
       .catch(() => undefined);
   });

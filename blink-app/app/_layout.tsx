@@ -25,6 +25,8 @@ import {
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useSocket } from '@/hooks/useSocket';
 import { useInviteReplay } from '@/hooks/useInviteReplay';
+import OfflineScreen from '@/components/OfflineScreen';
+import { authRedirect } from '@/utils/authRedirect';
 import { useGroupKeySync } from '@/hooks/useGroupKeySync';
 import { useForegroundMaintenance } from '@/hooks/useForegroundMaintenance';
 import { useDeviceKeyRegistration } from '@/hooks/useDeviceKeyRegistration';
@@ -69,6 +71,7 @@ const queryClient = new QueryClient();
 function AuthGate({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const isOffline = useAuthStore((s) => s.isOffline);
   const restoreSession = useAuthStore((s) => s.restoreSession);
   const router = useRouter();
   const segments = useSegments();
@@ -105,20 +108,18 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
     SplashScreen.hideAsync().catch(() => {});
 
-    const inOnboarding = (segments[0] as string) === 'onboarding';
-
-    if (!isAuthenticated && !inOnboarding) {
-      router.replace('/onboarding');
-    } else if (isAuthenticated && inOnboarding) {
-      // New users who just verified their OTP have display_name=null and still
-      // need to complete the name step — don't redirect them yet.
-      // Returning users already have a display_name and should go straight to the app.
-      const { user } = useAuthStore.getState();
-      if (user?.display_name) {
-        router.replace('/');
-      }
-    }
-  }, [isAuthenticated, isLoading, segments]);
+    // Only a real sign-out leads to onboarding; an unconfirmed (offline)
+    // session stays put and shows OfflineScreen below. New users still on
+    // the name step (display_name null) aren't taken out of onboarding.
+    const target = authRedirect({
+      isLoading,
+      isAuthenticated,
+      isOffline,
+      inOnboarding: (segments[0] as string) === 'onboarding',
+      hasName: !!useAuthStore.getState().user?.display_name,
+    });
+    if (target) router.replace(target);
+  }, [isAuthenticated, isOffline, isLoading, segments]);
 
   // ── Notification tap handling ──────────────────────────────────
   useEffect(() => {
@@ -171,6 +172,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       </View>
     );
   }
+
+  if (isOffline) return <OfflineScreen onRetry={restoreSession} />;
 
   return <>{children}</>;
 }

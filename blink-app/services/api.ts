@@ -116,6 +116,11 @@ export async function setTokens(access: string, refresh: string) {
   await storage.set('refreshToken', refresh);
 }
 
+/** Is a session stored on this device (a refresh token we haven't been told is dead)? */
+export async function hasStoredSession(): Promise<boolean> {
+  return !!(await storage.get('refreshToken'));
+}
+
 export async function clearTokens() {
   accessToken = null;
   await storage.remove('accessToken');

@@ -209,17 +209,125 @@ describe('restoreSession', () => {
     expect(state.isLoading).toBe(false);
   });
 
-  it('should handle network errors gracefully', async () => {
+  it('keeps the session when the server is unreachable at app start, and says so', async () => {
     localStorage.setItem('accessToken', 'some-token');
+    localStorage.setItem('refreshToken', 'some-refresh');
+    mockFetch.mockRejectedValue(new TypeError('Network request failed'));
 
-    mockFetch.mockRejectedValueOnce(new Error('Network error'));
-
-    const { restoreSession } = useAuthStore.getState();
-    await restoreSession();
+    await useAuthStore.getState().restoreSession();
 
     const state = useAuthStore.getState();
-    expect(state.isAuthenticated).toBe(false);
     expect(state.isLoading).toBe(false);
+    expect(state.isOffline).toBe(true);
+    // Not signed out: the tokens stay, so a retry can restore the session.
+    expect(localStorage.getItem('accessToken')).toBe('some-token');
+    expect(localStorage.getItem('refreshToken')).toBe('some-refresh');
+    mockFetch.mockReset();
+  });
+
+  it('signs back in on a retry once the server is reachable again', async () => {
+    localStorage.setItem('accessToken', 'some-token');
+    localStorage.setItem('refreshToken', 'some-refresh');
+    mockFetch.mockRejectedValueOnce(new TypeError('Network request failed'));
+    await useAuthStore.getState().restoreSession();
+    expect(useAuthStore.getState().isOffline).toBe(true);
+
+    mockFetch.mockResolvedValueOnce(mockResponse(200, { id: 'u1', phone_number: '+1', display_name: 'T', bio: null }));
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState()).toMatchObject({ isAuthenticated: true, isOffline: false });
+  });
+});
+
+describe('the session survives everything but a rejected refresh', () => {
+  const me = { id: 'u1', phone_number: '+1', display_name: 'T', bio: null };
+  const route = (handlers: Record<string, () => Response>) =>
+    mockFetch.mockImplementation(async (url) => {
+      const path = String(url).replace(/^.*\/api/, '');
+      const handler = handlers[path];
+      if (!handler) throw new Error(`unexpected ${path}`);
+      return handler();
+    });
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    localStorage.setItem('accessToken', 'expired-access');
+    localStorage.setItem('refreshToken', 'refresh-1');
+  });
+
+  it('expired access token at app start: refreshes and signs in', async () => {
+    let meCalls = 0;
+    route({
+      '/auth/me': () => (++meCalls === 1 ? mockResponse(401, {}, false) : mockResponse(200, me)),
+      '/auth/refresh': () => mockResponse(200, { access_token: 'access-2', refresh_token: 'refresh-2' }),
+    });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState()).toMatchObject({ isAuthenticated: true, isOffline: false });
+    expect(localStorage.getItem('refreshToken')).toBe('refresh-2');
+  });
+
+  it('only a refresh token stored at app start: refreshes and signs in', async () => {
+    localStorage.removeItem('accessToken');
+    route({
+      '/auth/refresh': () => mockResponse(200, { access_token: 'access-2', refresh_token: 'refresh-2' }),
+      // Like the server: /me needs a valid access token.
+      '/auth/me': () => {
+        const [, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
+        const auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
+        return auth === 'Bearer access-2' ? mockResponse(200, me) : mockResponse(401, {}, false);
+      },
+    });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState()).toMatchObject({ isAuthenticated: true, isOffline: false });
+  });
+
+  it('a 5xx at app start keeps the session', async () => {
+    route({ '/auth/me': () => mockResponse(503, { error: 'Service Unavailable' }, false) });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState()).toMatchObject({ isAuthenticated: false, isOffline: true });
+    expect(localStorage.getItem('refreshToken')).toBe('refresh-1');
+  });
+
+  it('a server restart while signed in (401s, then a successful refresh) keeps the session through a reload', async () => {
+    const { setTokens, api } = require('../services/api');
+    await setTokens('expired-access', 'refresh-1');
+    route({
+      '/groups': () =>
+        mockFetch.mock.calls.filter(([u]) => String(u).endsWith('/auth/refresh')).length === 0
+          ? mockResponse(401, {}, false)
+          : mockResponse(200, []),
+      '/auth/refresh': () => mockResponse(200, { access_token: 'access-2', refresh_token: 'refresh-2' }),
+      '/auth/me': () => mockResponse(200, me),
+    });
+    await Promise.all([api('/groups'), api('/groups'), api('/groups')]);
+
+    // The JS reloads: a fresh store reads what's stored.
+    jest.resetModules();
+    const reloaded = require('../stores/authStore').useAuthStore;
+    await reloaded.getState().restoreSession();
+
+    expect(reloaded.getState()).toMatchObject({ isAuthenticated: true, isOffline: false });
+    expect(localStorage.getItem('accessToken')).toBe('access-2');
+  });
+
+  it('only a refresh the server rejects signs out', async () => {
+    route({
+      '/auth/me': () => mockResponse(401, {}, false),
+      '/auth/refresh': () => mockResponse(401, { error: 'Invalid refresh token' }, false),
+      '/auth/logout': () => mockResponse(401, {}, false),
+    });
+
+    await useAuthStore.getState().restoreSession();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // the logout it triggers
+
+    expect(useAuthStore.getState()).toMatchObject({ isAuthenticated: false, isOffline: false });
+    expect(localStorage.getItem('refreshToken')).toBeNull();
   });
 });
 
