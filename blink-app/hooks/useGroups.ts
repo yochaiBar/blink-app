@@ -12,6 +12,15 @@ import { getOrCreateDeviceKey } from '@/services/groupCrypto';
 import { mintGroupKey } from '@/services/keyTransfer';
 import { queryKeys } from '@/utils/queryKeys';
 
+/** This device's IANA time zone (e.g. Asia/Jerusalem); undefined if the engine can't tell (server keeps UTC). */
+function deviceTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** GET /groups as app Groups (shared by every query on queryKeys.groups.all). */
 export async function fetchGroups(): Promise<Group[]> {
   const data: ApiGroupListItem[] = await api('/groups');
@@ -21,7 +30,8 @@ export async function fetchGroups(): Promise<Group[]> {
 export function useGroups() {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const tourComplete = useOnboardingStore((s) => s.tourComplete);
+  // Re-render when the user hides the demo (demoSource.isVisible reads it).
+  useOnboardingStore((s) => s.demoDismissed);
   const completeTourAction = useOnboardingStore((s) => s.completeTour);
 
   // ── Groups list ──
@@ -34,12 +44,12 @@ export function useGroups() {
 
   const realGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
   const querySettled = groupsQuery.isFetched || groupsQuery.isError;
-  const shouldShowDemoGroup = querySettled && realGroups.length === 0 && !tourComplete;
+  const shouldShowDemoGroup = querySettled && demoSource.isVisible({ realGroupCount: realGroups.length });
 
   // Group keys are reconciled once, app-wide, by useGroupKeySync.
 
-  // Until the user has a real group (and hasn't finished the tour), the list
-  // shows the demo group from demoSource.
+  // Until the user has a real group (or hides it), the list shows the demo
+  // group from demoSource. Finishing the tour doesn't end it.
   const groups = useMemo(
     () => (shouldShowDemoGroup ? [demoSource.listItem()] : realGroups),
     [realGroups, shouldShowDemoGroup],
@@ -50,7 +60,8 @@ export function useGroups() {
     mutationFn: async (group: Group) => {
       const result = await api<{ id: string; group_key_version?: number }>('/groups', {
         method: 'POST',
-        body: JSON.stringify({ name: group.name, icon: group.emoji }),
+        // The device's IANA zone: the daily challenge runs in the group's local hours.
+        body: JSON.stringify({ name: group.name, icon: group.emoji, timezone: deviceTimeZone() }),
       });
       // Group creator becomes the source of truth for the group key. No
       // handshake needed — we ARE the only member. Confirming it lets us

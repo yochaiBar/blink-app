@@ -32,7 +32,7 @@ export async function shareImage(uri: string): Promise<void> {
   if (isAvailable) {
     await Sharing.shareAsync(uri, {
       mimeType: 'image/png',
-      dialogTitle: 'Share your Blink',
+      dialogTitle: 'Share your blink',
     });
   } else if (Platform.OS !== 'web') {
     // Fallback to RN Share for platforms where expo-sharing is unavailable

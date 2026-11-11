@@ -5,7 +5,7 @@
 
 import './setup';
 
-import { isOpen, previewOf, progressOf, shouldBlurOthers } from '../services/challengeReads';
+import { isOpen, previewOf, progressOf, shouldBlurOthers, topReactionOf } from '../services/challengeReads';
 import type { ApiChallengeDetail } from '../types/api';
 
 const NOW = Date.parse('2026-11-03T12:00:00Z');
@@ -67,5 +67,13 @@ describe('challengeReads', () => {
     // Past its window but not finalized yet: closed for the viewer.
     expect(shouldBlurOthers(challenge({ expires_at: aMinuteAgo }), NOW)).toBe(false);
     expect(isOpen(challenge({ expires_at: aMinuteAgo }), NOW)).toBe(false);
+  });
+});
+
+describe('topReactionOf', () => {
+  it('is the most-used emoji across the responses, or null when nobody reacted', () => {
+    expect(topReactionOf([])).toBeNull();
+    expect(topReactionOf([response('u1', 'Dana')])).toBeNull();
+    expect(topReactionOf(challenge().responses)).toBe('😂');
   });
 });

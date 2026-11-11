@@ -7,12 +7,15 @@ interface OnboardingState {
   tourComplete: boolean;
   tourStep: TourStep;
   demoChallengeCompleted: boolean;
+  /** The user hid the demo group (demoSource.isVisible). */
+  demoDismissed: boolean;
   demoPhotoUri: string | null;
   startTour: () => void;
   advanceTour: (step: TourStep) => void;
   completeTour: () => void;
   setDemoPhotoUri: (uri: string) => void;
   completeDemoChallenge: () => void;
+  dismissDemo: () => void;
   reset: () => Promise<void>;
   hydrate: () => Promise<void>;
 }
@@ -25,6 +28,7 @@ export const tourMessages: Record<Exclude<TourStep, null>, string> = {
 
 const STORAGE_KEY = 'onboarding_tour_complete';
 const DEMO_CHALLENGE_KEY = 'onboarding_demo_challenge_complete';
+const DEMO_DISMISSED_KEY = 'onboarding_demo_dismissed';
 
 const storage = {
   async get(key: string): Promise<string | null> {
@@ -56,6 +60,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   tourComplete: false,
   tourStep: null,
   demoChallengeCompleted: false,
+  demoDismissed: false,
   demoPhotoUri: null,
 
   startTour: () => {
@@ -80,13 +85,32 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
     storage.set(DEMO_CHALLENGE_KEY, 'true');
   },
 
+  dismissDemo: () => {
+    set({ demoDismissed: true });
+    storage.set(DEMO_DISMISSED_KEY, 'true');
+  },
+
   reset: async () => {
-    await Promise.all([storage.remove(STORAGE_KEY), storage.remove(DEMO_CHALLENGE_KEY)]);
-    set({ tourComplete: false, tourStep: null, demoChallengeCompleted: false, demoPhotoUri: null });
+    await Promise.all([
+      storage.remove(STORAGE_KEY),
+      storage.remove(DEMO_CHALLENGE_KEY),
+      storage.remove(DEMO_DISMISSED_KEY),
+    ]);
+    set({
+      tourComplete: false,
+      tourStep: null,
+      demoChallengeCompleted: false,
+      demoDismissed: false,
+      demoPhotoUri: null,
+    });
   },
 
   hydrate: async () => {
-    const [tourValue, demoValue] = await Promise.all([storage.get(STORAGE_KEY), storage.get(DEMO_CHALLENGE_KEY)]);
+    const [tourValue, demoValue, dismissedValue] = await Promise.all([
+      storage.get(STORAGE_KEY),
+      storage.get(DEMO_CHALLENGE_KEY),
+      storage.get(DEMO_DISMISSED_KEY),
+    ]);
     const updates: Partial<OnboardingState> = {};
     if (tourValue === 'true') {
       updates.tourComplete = true;
@@ -94,6 +118,9 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
     }
     if (demoValue === 'true') {
       updates.demoChallengeCompleted = true;
+    }
+    if (dismissedValue === 'true') {
+      updates.demoDismissed = true;
     }
     if (Object.keys(updates).length > 0) {
       set(updates as OnboardingState);

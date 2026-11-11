@@ -42,6 +42,14 @@ describe('demoSource data', () => {
     expect(group.challengeEndTime).toBeGreaterThan(Date.now());
   });
 
+  it('has one member count everywhere: the list, the detail and the progress', () => {
+    const listed = demoSource.listItem();
+    const count = listed.memberCount ?? listed.members.length;
+    expect(demoSource.groupDetail().members).toHaveLength(count);
+    expect(demoSource.progress().totalMembers).toBe(count);
+    expect(demoSource.homeItems()[0].memberCount).toBe(count);
+  });
+
   it('reports progress consistent with its responses and members', () => {
     const progress = demoSource.progress();
     expect(progress.respondedCount).toBe(demoSource.responses().length);
@@ -82,5 +90,56 @@ describe('demo reveal', () => {
     const state = useOnboardingStore.getState();
     expect(state.demoChallengeCompleted).toBe(true);
     expect(state.tourComplete).toBe(true);
+  });
+});
+
+describe('demo on Home', () => {
+  beforeEach(async () => {
+    await useOnboardingStore.getState().reset();
+  });
+
+  it('is a live challenge card for the demo group, so tapping it starts the demo snap', () => {
+    const [card] = demoSource.homeItems();
+    expect(card).toMatchObject({
+      type: 'challenge_card',
+      groupId: demoSource.groupId,
+      challengeId: demoSource.challengeId,
+      isLive: true,
+    });
+  });
+});
+
+describe('when the demo group shows', () => {
+  beforeEach(async () => {
+    await useOnboardingStore.getState().reset();
+  });
+
+  it('stays after the tour and the demo reveal, so a new user can still reach it', () => {
+    useOnboardingStore.getState().completeTour();
+    demoSource.completeChallenge();
+
+    expect(demoSource.isVisible({ realGroupCount: 0 })).toBe(true);
+  });
+
+  it('goes once the user hides it', () => {
+    useOnboardingStore.getState().dismissDemo();
+
+    expect(demoSource.isVisible({ realGroupCount: 0 })).toBe(false);
+  });
+
+  it('stays hidden after the app restarts', async () => {
+    useOnboardingStore.getState().dismissDemo();
+    useOnboardingStore.setState({ demoDismissed: false }); // a fresh launch, before hydrate
+
+    await useOnboardingStore.getState().hydrate();
+
+    expect(demoSource.isVisible({ realGroupCount: 0 })).toBe(false);
+  });
+
+  it('comes back for the next account after a logout', async () => {
+    useOnboardingStore.getState().dismissDemo();
+    await useOnboardingStore.getState().reset();
+
+    expect(demoSource.isVisible({ realGroupCount: 0 })).toBe(true);
   });
 });

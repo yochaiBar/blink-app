@@ -13,6 +13,7 @@ import { ApiGroupDetail } from '@/types/api';
 import { apiMembersToLeaderboard } from '@/utils/adapters';
 import AvatarRing from '@/components/ui/AvatarRing';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui';
+import { streakLabel } from '@/utils/counts';
 
 const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
 const rankEmojis = ['🥇', '🥈', '🥉'];
@@ -76,7 +77,7 @@ export default function GroupLeaderboardScreen() {
             </Text>
             <View style={styles.listStreakRow}>
               <Flame size={12} color={theme.yellow} />
-              <Text style={styles.listStreakText}>{item.streak} day streak</Text>
+              <Text style={styles.listStreakText}>{streakLabel(item.streak)}</Text>
             </View>
           </View>
           <Text style={styles.listScore}>{item.score}</Text>

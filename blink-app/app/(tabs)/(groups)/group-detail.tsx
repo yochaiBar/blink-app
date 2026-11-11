@@ -71,7 +71,7 @@ export default function GroupDetailScreen() {
   }>({ contentType: 'photo' });
   const [challengeBarLayout, setChallengeBarLayout] = useState<TargetLayout | null>(null);
   const challengeBarRef = useRef<View>(null);
-  const [streakCelebration, setStreakCelebration] = useState<{ userName: string; streakDays: number } | null>(null);
+  const [streakCelebration, setStreakCelebration] = useState<{ userName: string; streak: number } | null>(null);
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [previewData, setPreviewData] = useState<ChallengePreview | null>(null);
   const [challengeJustTriggered, setChallengeJustTriggered] = useState(false);
@@ -177,7 +177,7 @@ export default function GroupDetailScreen() {
       if (event.groupId !== id) return;
       const milestone = event.milestones[0];
       if (!milestone) return;
-      setStreakCelebration({ userName: milestone.displayName, streakDays: milestone.streak });
+      setStreakCelebration({ userName: milestone.displayName, streak: milestone.streak });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     });
     return () => {
@@ -358,7 +358,7 @@ export default function GroupDetailScreen() {
 
   const handleShareGroup = useCallback(() => {
     setShowGroupMenu(false);
-    Share.share({ message: `Join my group "${group?.name}" on Blink! Use invite code: ${group?.inviteCode}` });
+    Share.share({ message: `Join my group "${group?.name}" on Blinks! Use invite code: ${group?.inviteCode}` });
   }, [group?.name, group?.inviteCode]);
 
   const onRefresh = useCallback(() => {
@@ -606,7 +606,7 @@ export default function GroupDetailScreen() {
       <StreakCelebration
         visible={!!streakCelebration}
         userName={streakCelebration?.userName ?? ''}
-        streakDays={streakCelebration?.streakDays ?? 0}
+        streak={streakCelebration?.streak ?? 0}
         onDismiss={() => setStreakCelebration(null)}
       />
     </View>

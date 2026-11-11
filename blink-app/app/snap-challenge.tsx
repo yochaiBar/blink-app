@@ -68,7 +68,7 @@ function SnapChallengeScreen() {
   // ── Camera permission ──
   useEffect(() => {
     if (!permission?.granted && permission?.canAskAgain) {
-      Alert.alert('Camera Access', 'Blink needs your camera to capture snap challenges with friends. Allow access?', [
+      Alert.alert('Camera Access', 'Blinks needs your camera to capture snap challenges with friends. Allow access?', [
         { text: 'Not Now', style: 'cancel' },
         { text: 'Allow', onPress: () => requestPermission() },
       ]);

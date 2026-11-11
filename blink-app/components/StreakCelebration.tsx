@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { theme } from '@/constants/colors';
+import { streakLabel } from '@/utils/counts';
 
 export interface StreakCelebrationProps {
   visible: boolean;
   userName: string;
-  streakDays: number;
+  streak: number;
   onDismiss: () => void;
 }
 
@@ -73,7 +74,7 @@ function ConfettiPiece({ delay, color, startX }: { delay: number; color: string;
   );
 }
 
-export default function StreakCelebration({ visible, userName, streakDays, onDismiss }: StreakCelebrationProps) {
+export default function StreakCelebration({ visible, userName, streak, onDismiss }: StreakCelebrationProps) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -124,7 +125,7 @@ export default function StreakCelebration({ visible, userName, streakDays, onDis
       <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
         <Text style={styles.emoji}>{'\uD83D\uDD25'}</Text>
         <Text style={styles.title}>
-          {userName} hit a {streakDays}-day streak!
+          {userName} hit a {streakLabel(streak)}!
         </Text>
         <Text style={styles.subtitle}>Incredible dedication!</Text>
       </Animated.View>

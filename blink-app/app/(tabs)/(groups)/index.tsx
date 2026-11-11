@@ -17,6 +17,7 @@ import { GroupCardSkeleton } from '@/components/ui';
 import StreakIcon from '@/components/StreakIcon';
 import Tooltip, { TargetLayout } from '@/components/Tooltip';
 import { useOnboardingStore, tourMessages } from '@/stores/onboardingStore';
+import { plural, streakLabel } from '@/utils/counts';
 
 // ── Simplified Group Card ──
 
@@ -101,16 +102,13 @@ const GroupListCard = React.memo(function GroupListCard({
                 </View>
 
                 <View style={styles.groupMetaRow}>
-                  <Text style={styles.groupMeta}>
-                    {group.memberCount ?? group.members.length} member
-                    {(group.memberCount ?? group.members.length) !== 1 ? 's' : ''}
-                  </Text>
+                  <Text style={styles.groupMeta}>{plural(group.memberCount ?? group.members.length, 'member')}</Text>
 
                   {topStreak > 0 && (
                     <>
                       <Text style={styles.groupMetaDot}>{'\u00B7'}</Text>
                       <StreakIcon streak={topStreak} size={13} />
-                      <Text style={styles.streakText}>{topStreak} days</Text>
+                      <Text style={styles.streakText}>{streakLabel(topStreak)}</Text>
                     </>
                   )}
 
