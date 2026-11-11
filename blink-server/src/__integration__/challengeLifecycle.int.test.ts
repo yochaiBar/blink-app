@@ -290,7 +290,14 @@ describe('daily scheduler', () => {
       .send({ name: 'Tel Aviv crew', timezone: 'Asia/Jerusalem' });
     expect(res.status).toBe(201);
     expect(res.body.timezone).toBe('Asia/Jerusalem');
-    expect(new Date(res.body.next_auto_challenge_at).getTime()).toBeGreaterThan(Date.now());
+    const firstSlot = new Date(res.body.next_auto_challenge_at);
+    expect(firstSlot.getTime()).toBeGreaterThan(Date.now());
+    // The daily window is local hours in the group's zone, not UTC.
+    expect(localHour(firstSlot, 'Asia/Jerusalem')).toBeGreaterThanOrEqual(DAY_START_HOUR);
+    expect(localHour(firstSlot, 'Asia/Jerusalem')).toBeLessThan(DAY_END_HOUR);
+
+    const unspecified = await server.api().post('/api/groups').set(bearer(alice)).send({ name: 'Somewhere' });
+    expect(unspecified.body.timezone).toBe('UTC');
 
     const bad = await server.api().post('/api/groups').set(bearer(alice)).send({ name: 'x', timezone: 'Mars/Base' });
     expect(bad.status).toBe(400);

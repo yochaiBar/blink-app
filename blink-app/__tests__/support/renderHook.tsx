@@ -8,6 +8,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const { create } = TestRenderer;
 
+// Tell React this is a test renderer environment, so act() works without warnings.
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 export function newQueryClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
 }
