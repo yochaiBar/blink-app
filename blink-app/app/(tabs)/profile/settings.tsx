@@ -237,7 +237,7 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Blink v1.0.0</Text>
+          <Text style={styles.footerText}>Blinks v1.0.0</Text>
           <Text style={styles.footerText}>Made with 📸 for your crew</Text>
         </View>
 

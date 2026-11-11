@@ -40,7 +40,7 @@ export default function ShareCard({
     <View style={styles.card}>
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
-        <Text style={styles.logoText}>Blink</Text>
+        <Text style={styles.logoText}>Blinks</Text>
         <View style={styles.groupPill}>
           {groupEmoji ? <Text style={styles.groupEmoji}>{groupEmoji}</Text> : null}
           <Text style={styles.groupName} numberOfLines={1}>
@@ -81,7 +81,7 @@ export default function ShareCard({
         {/* Branding / watermark */}
         <View style={styles.brandRow}>
           <View style={styles.brandDot} />
-          <Text style={styles.brandText}>Join us on Blink</Text>
+          <Text style={styles.brandText}>Join us on Blinks</Text>
         </View>
       </View>
     </View>

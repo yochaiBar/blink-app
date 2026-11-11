@@ -5,6 +5,7 @@ import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import AvatarRing from '@/components/ui/AvatarRing';
+import { respondedSummary } from '@/utils/counts';
 
 const TOOLTIP_AUTO_DISMISS_MS = 2000;
 
@@ -108,8 +109,6 @@ export default function MemberAvatarRow({
   // Filter out the current user from the avatar row
   const visibleMembers = currentUserId ? members.filter((m) => m.id !== currentUserId) : members;
 
-  const respondedCount = hasActiveChallenge ? members.filter((m) => respondedUserIds.has(m.id)).length : 0;
-
   const handleMemberPress = useCallback((memberId: string) => {
     setSelectedMemberId((prev) => (prev === memberId ? null : memberId));
   }, []);
@@ -133,7 +132,10 @@ export default function MemberAvatarRow({
       </ScrollView>
       {hasActiveChallenge && visibleMembers.length > 0 && (
         <Text style={styles.respondedCount}>
-          {respondedCount}/{visibleMembers.length + (currentUserId ? 1 : 0)} responded (incl. you)
+          {respondedSummary(
+            members.map((m) => m.id),
+            respondedUserIds,
+          )}
         </Text>
       )}
     </View>

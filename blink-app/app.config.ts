@@ -40,7 +40,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundleIdentifier: 'com.yochaibar.blinks',
     associatedDomains: LINK_DOMAIN ? [`applinks:${LINK_DOMAIN}`] : [],
     infoPlist: {
-      NSCameraUsageDescription: 'Blink needs camera access to capture snap challenges with your friends.',
+      NSCameraUsageDescription: 'Blinks needs camera access to capture snap challenges with your friends.',
       ITSAppUsesNonExemptEncryption: false,
     },
     privacyManifests: {
@@ -119,7 +119,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-camera',
       {
-        cameraPermission: 'Blink needs camera access to capture snap challenges with your friends.',
+        cameraPermission: 'Blinks needs camera access to capture snap challenges with your friends.',
       },
     ],
     [

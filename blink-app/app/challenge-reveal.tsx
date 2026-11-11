@@ -436,7 +436,7 @@ export default function ChallengeRevealScreen() {
       pathname: '/share-card',
       params: {
         photoUri,
-        prompt: challengePrompt ?? 'Blink Challenge',
+        prompt: challengePrompt ?? 'Blinks challenge',
         userName: responseToShare.display_name ?? 'User',
         groupName: groupData?.name ?? 'Group',
         groupEmoji: groupData?.icon ?? '',
@@ -753,7 +753,7 @@ export default function ChallengeRevealScreen() {
               <View style={styles.actionButtons}>
                 <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85}>
                   <Share2 size={18} color={theme.white} />
-                  <Text style={styles.shareBtnText}>Share This Blink</Text>
+                  <Text style={styles.shareBtnText}>Share this blink</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.feedBtn} onPress={handleBackToFeed} activeOpacity={0.7}>

@@ -234,7 +234,7 @@ export default function OnboardingScreen() {
 
       if (step === 'age') {
         if (!ageConfirmed) {
-          Alert.alert('Age Required', 'You must be at least 13 to use Blink');
+          Alert.alert('Age Required', 'You must be at least 13 to use Blinks');
           return;
         }
         animateTransition('terms');
@@ -621,7 +621,7 @@ export default function OnboardingScreen() {
               <View style={styles.inputStep}>
                 <Text style={styles.stepEmoji}>🎂</Text>
                 <Text style={styles.stepTitle}>Age Verification</Text>
-                <Text style={styles.stepSubtitle}>You must be at least 13 years old to use Blink</Text>
+                <Text style={styles.stepSubtitle}>You must be at least 13 years old to use Blinks</Text>
                 <TouchableOpacity style={styles.checkboxRow} onPress={() => setAgeConfirmed(!ageConfirmed)}>
                   <View style={[styles.checkbox, ageConfirmed && styles.checkboxChecked]}>
                     {ageConfirmed && <Check size={16} color={theme.white} />}

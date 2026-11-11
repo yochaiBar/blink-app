@@ -13,9 +13,9 @@ interface FAQItem {
 
 const faqData: FAQItem[] = [
   {
-    question: 'What is Blink?',
+    question: 'What is Blinks?',
     answer:
-      'Blink is a social photo-sharing app where you and your friends participate in timed snap challenges, maintain streaks, and compete on leaderboards. Think of it as spontaneous moments with your favorite people!',
+      'Blinks is a social photo-sharing app where you and your friends participate in timed snap challenges, maintain streaks, and compete on leaderboards. Think of it as spontaneous moments with your favorite people!',
   },
   {
     question: 'How do Snap Challenges work?',
@@ -25,7 +25,7 @@ const faqData: FAQItem[] = [
   {
     question: 'What are streaks?',
     answer:
-      "Streaks track how many consecutive days you've submitted snaps in a group. Keep your streak alive by participating every day! The longer your streak, the higher you climb on the leaderboard.",
+      "A streak counts the challenges you've answered in a row in a group. Miss one and it starts over. Your streak shows next to your name on the group's leaderboard.",
   },
   {
     question: 'How do I join a group?',
@@ -40,7 +40,7 @@ const faqData: FAQItem[] = [
   {
     question: 'How does the leaderboard work?',
     answer:
-      'Each group has its own leaderboard ranking members by their total snaps submitted and streak length. The top 3 members are featured on the podium. Stay active to climb the ranks!',
+      "Each group has its own leaderboard, ranking members by how many challenges they've answered. Once a group has three or more members, the top three get the podium. Stay active to climb the ranks!",
   },
   {
     question: 'Can others see my snaps before I submit?',

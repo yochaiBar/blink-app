@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { theme } from '@/constants/colors';
 import StreakIcon from '@/components/StreakIcon';
+import { plural } from '@/utils/counts';
 
 export interface GroupStreakBannerProps {
   groupStreak: number;
@@ -42,14 +43,10 @@ export default function GroupStreakBanner({ groupStreak, longestGroupStreak }: G
         <>
           <View style={styles.mainRow}>
             <StreakIcon streak={groupStreak} size={18} />
-            <Text style={styles.activeText}>
-              Group Streak: {groupStreak} day{groupStreak !== 1 ? 's' : ''} — everyone showed up!
-            </Text>
+            <Text style={styles.activeText}>Group streak: {plural(groupStreak, 'challenge')} everyone answered!</Text>
           </View>
           {longestGroupStreak > 0 && (
-            <Text style={styles.bestText}>
-              Best: {longestGroupStreak} day{longestGroupStreak !== 1 ? 's' : ''}
-            </Text>
+            <Text style={styles.bestText}>Best: {plural(longestGroupStreak, 'challenge')}</Text>
           )}
         </>
       ) : (

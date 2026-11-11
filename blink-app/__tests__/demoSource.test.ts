@@ -42,6 +42,14 @@ describe('demoSource data', () => {
     expect(group.challengeEndTime).toBeGreaterThan(Date.now());
   });
 
+  it('has one member count everywhere: the list, the detail and the progress', () => {
+    const listed = demoSource.listItem();
+    const count = listed.memberCount ?? listed.members.length;
+    expect(demoSource.groupDetail().members).toHaveLength(count);
+    expect(demoSource.progress().totalMembers).toBe(count);
+    expect(demoSource.homeItems()[0].memberCount).toBe(count);
+  });
+
   it('reports progress consistent with its responses and members', () => {
     const progress = demoSource.progress();
     expect(progress.respondedCount).toBe(demoSource.responses().length);

@@ -10,6 +10,7 @@ import { useApp } from '@/providers/AppProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button } from '@/components/ui';
 import { inviteLinkFor } from '@/services/links';
+import { plural } from '@/utils/counts';
 
 export default function InviteMembersScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -48,7 +49,7 @@ export default function InviteMembersScreen() {
   const handleShare = useCallback(async () => {
     try {
       await Share.share({
-        message: `Join ${group?.name ?? 'my group'} on Blink! Use code: ${inviteCode} or tap: ${inviteLink}`,
+        message: `Join ${group?.name ?? 'my group'} on Blinks! Use code: ${inviteCode} or tap: ${inviteLink}`,
       });
     } catch {
       // Non-critical: user may have cancelled the share sheet
@@ -98,7 +99,7 @@ export default function InviteMembersScreen() {
         <View style={styles.groupInfo}>
           <Text style={styles.groupEmoji}>{group.emoji}</Text>
           <Text style={styles.groupName}>{group.name}</Text>
-          <Text style={styles.groupMembers}>{group.memberCount ?? group.members.length} members</Text>
+          <Text style={styles.groupMembers}>{plural(group.memberCount ?? group.members.length, 'member')}</Text>
         </View>
 
         <LinearGradient colors={[`${group.color}15`, `${group.color}08`]} style={styles.codeCard}>
