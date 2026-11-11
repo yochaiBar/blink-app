@@ -84,3 +84,54 @@ describe('demo reveal', () => {
     expect(state.tourComplete).toBe(true);
   });
 });
+
+describe('demo on Home', () => {
+  beforeEach(async () => {
+    await useOnboardingStore.getState().reset();
+  });
+
+  it('is a live challenge card for the demo group, so tapping it starts the demo snap', () => {
+    const [card] = demoSource.homeItems();
+    expect(card).toMatchObject({
+      type: 'challenge_card',
+      groupId: demoSource.groupId,
+      challengeId: demoSource.challengeId,
+      isLive: true,
+    });
+  });
+});
+
+describe('when the demo group shows', () => {
+  beforeEach(async () => {
+    await useOnboardingStore.getState().reset();
+  });
+
+  it('stays after the tour and the demo reveal, so a new user can still reach it', () => {
+    useOnboardingStore.getState().completeTour();
+    demoSource.completeChallenge();
+
+    expect(demoSource.isVisible({ realGroupCount: 0 })).toBe(true);
+  });
+
+  it('goes once the user hides it', () => {
+    useOnboardingStore.getState().dismissDemo();
+
+    expect(demoSource.isVisible({ realGroupCount: 0 })).toBe(false);
+  });
+
+  it('stays hidden after the app restarts', async () => {
+    useOnboardingStore.getState().dismissDemo();
+    useOnboardingStore.setState({ demoDismissed: false }); // a fresh launch, before hydrate
+
+    await useOnboardingStore.getState().hydrate();
+
+    expect(demoSource.isVisible({ realGroupCount: 0 })).toBe(false);
+  });
+
+  it('comes back for the next account after a logout', async () => {
+    useOnboardingStore.getState().dismissDemo();
+    await useOnboardingStore.getState().reset();
+
+    expect(demoSource.isVisible({ realGroupCount: 0 })).toBe(true);
+  });
+});

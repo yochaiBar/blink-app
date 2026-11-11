@@ -14,18 +14,19 @@ import { useRouter } from 'expo-router';
 import { useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, Zap } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { theme } from '@/constants/colors';
 import { typography } from '@/constants/typography';
-import { spacing, borderRadius } from '@/constants/spacing';
+import { spacing } from '@/constants/spacing';
 import { useApp } from '@/providers/AppProvider';
 import { fetchFeed, shouldBlurOthers } from '@/services/challengeReads';
 import type { ApiChallengeDetail } from '@/types/api';
 import AvatarRing from '@/components/ui/AvatarRing';
 import { FeedItemData } from '@/components/FeedItem';
 import ChallengeCard from '@/components/ChallengeCard';
+import HomeEmptyState from '@/components/HomeEmptyState';
+import { homeView } from '@/services/homeView';
 import DemoChallengeAlert from '@/components/DemoChallengeAlert';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 
@@ -221,7 +222,15 @@ export default function BlinksScreen() {
       })),
     [handleFeedItemPress, handleFeedItemRespond, handleReact],
   );
-  const wiredFeedData = useMemo(() => wire(feedData), [wire, feedData]);
+  const hasRealGroups = serverGroups.length > 0;
+  const isLoading = isGroupsLoading || (hasRealGroups && feedQuery.isLoading);
+  // A user without a real group gets the demo's card and a get-started
+  // empty state (services/homeView); the screen doesn't branch on the demo.
+  const view = useMemo(
+    () => homeView({ hasRealGroups, demoVisible: shouldShowDemoGroup, feedItems: feedData, isLoading }),
+    [hasRealGroups, shouldShowDemoGroup, feedData, isLoading],
+  );
+  const wiredFeedData = useMemo(() => wire(view.items), [wire, view.items]);
 
   // ── Render ──
 
@@ -229,55 +238,23 @@ export default function BlinksScreen() {
 
   const keyExtractor = useCallback((item: FeedItemData) => item.id, []);
 
-  const isLoading = isGroupsLoading || (groups.length > 0 && feedQuery.isLoading);
-  // "User has no feed content" — true when not loading AND either no groups
-  // or groups with no answered challenges yet.
-  const hasNoGroups = !isGroupsLoading && groups.length === 0;
-  const hasNoUserContent =
-    !isLoading && (hasNoGroups || (groups.length > 0 && feedQuery.isFetched && feedData.length === 0));
-
-  // ── List Header: the no-content / no-groups CTA ──
-  const ListHeader = useMemo(() => {
-    if (!hasNoUserContent) return null;
-    return (
-      <View style={styles.emptyState}>
-        <View style={styles.emptyIconContainer}>
-          <Zap size={48} color={theme.coral} fill={theme.coral} />
-        </View>
-        <Text style={styles.emptyTitle}>{hasNoGroups ? 'Welcome to Blink' : 'No challenges yet'}</Text>
-        <Text style={styles.emptySubtitle}>
-          {hasNoGroups
-            ? 'Capture moments with your closest crew via daily snap challenges. Join a group to start.'
-            : 'When your groups run challenges, they show up here.'}
-        </Text>
-        <TouchableOpacity
-          style={styles.emptyAction}
-          onPress={() => {
-            if (Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }
-            router.push('/(tabs)/(groups)');
-          }}
-        >
-          <LinearGradient
-            colors={[theme.coral, theme.coralDark]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.emptyActionGradient}
-          >
-            <Text style={styles.emptyActionText}>{hasNoGroups ? 'Create or Join a Group' : 'Go to Groups'}</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    );
-  }, [hasNoUserContent, hasNoGroups, router]);
-
   // ── List Empty (first-load skeleton) ──
   const ListEmpty = useMemo(() => (isLoading ? <FeedSkeleton /> : null), [isLoading]);
 
-  // ── List Footer ──
-  // Trailing spacer so the last card isn't flush with the tab bar.
-  const ListFooter = useMemo(() => <View style={{ height: 100 }} />, []);
+  // ── List Footer: the empty state (below any cards), then a spacer so the
+  // last item isn't flush with the tab bar ──
+  const dismissDemo = useOnboardingStore((s) => s.dismissDemo);
+  const ListFooter = useMemo(
+    () => (
+      <>
+        {view.emptyState && !isLoading ? (
+          <HomeEmptyState kind={view.emptyState} onHideDemo={shouldShowDemoGroup ? dismissDemo : undefined} />
+        ) : null}
+        <View style={{ height: 100 }} />
+      </>
+    ),
+    [view.emptyState, isLoading, shouldShowDemoGroup, dismissDemo],
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -321,7 +298,6 @@ export default function BlinksScreen() {
         keyExtractor={keyExtractor}
         contentContainerStyle={styles.feedContent}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={ListHeader}
         ListEmptyComponent={ListEmpty}
         ListFooterComponent={ListFooter}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.coral} />}
@@ -438,48 +414,6 @@ const styles = StyleSheet.create({
   },
 
   // Empty state
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 80,
-    paddingHorizontal: spacing.xl,
-  },
-  emptyIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: theme.bgCard,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  emptyTitle: {
-    ...typography.headlineLarge,
-    color: theme.text,
-    marginBottom: spacing.sm,
-  },
-  emptySubtitle: {
-    ...typography.bodyMedium,
-    color: theme.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: spacing.xxl,
-    maxWidth: 280,
-  },
-  emptyAction: {
-    borderRadius: borderRadius.full,
-    overflow: 'hidden',
-  },
-  emptyActionGradient: {
-    paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.full,
-  },
-  emptyActionText: {
-    ...typography.labelLarge,
-    color: theme.white,
-    fontWeight: '700',
-  },
-
   // Footer
   footerContainer: {
     alignItems: 'center',

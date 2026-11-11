@@ -11,6 +11,7 @@
  * Every demo id starts with `demo_`, so a group, challenge or response id on
  * its own is enough to route to this source.
  */
+import type { FeedItemData } from '@/components/FeedItem';
 import { Group } from '@/types';
 import { ApiChallenge, ApiChallengeResponse, ApiGroupDetail } from '@/types/api';
 import {
@@ -68,6 +69,32 @@ export const demoSource = {
   /** The demo group as it appears in the groups list. */
   listItem(): Group {
     return { ...DEMO_GROUP, challengeEndTime: Date.now() + DEMO_CHALLENGE_WINDOW_MS };
+  },
+
+  /** The demo group is listed until the user has a real group (or hides it); the tour doesn't end it. */
+  isVisible({ realGroupCount }: { realGroupCount: number }): boolean {
+    return realGroupCount === 0 && !useOnboardingStore.getState().demoDismissed;
+  },
+
+  /** Home's feed for a user with no real group: the demo challenge's card. */
+  homeItems(): FeedItemData[] {
+    const challenge = activeChallenge();
+    return [
+      {
+        id: `cc_live_${DEMO_CHALLENGE_ID}`,
+        type: 'challenge_card',
+        groupId: DEMO_GROUP_ID,
+        groupName: DEMO_GROUP.name,
+        groupEmoji: DEMO_GROUP.emoji,
+        challengeId: DEMO_CHALLENGE_ID,
+        challengePrompt: challenge.prompt || undefined,
+        isLive: true,
+        expiresAt: challenge.expires_at,
+        responseCount: DEMO_RESPONSES.length,
+        memberCount: DEMO_GROUP_DETAIL.members.length,
+        timestamp: challenge.created_at,
+      },
+    ];
   },
 
   /** GET /groups/:id */
