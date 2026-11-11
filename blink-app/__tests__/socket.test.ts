@@ -84,4 +84,46 @@ describe('connectSocket', () => {
     await flush();
     expect(socket.connect).not.toHaveBeenCalled();
   });
+
+  it('survives a server restart: ignores "server down", then refreshes the expired token once and reconnects', async () => {
+    connectSocket();
+    const socket = mockSockets[0];
+    mockRefreshSession.mockResolvedValue(true);
+
+    // The server is restarting: transport errors, socket.io retries on its own.
+    socket.listeners.get('connect_error')!(new Error('websocket error'));
+    await flush();
+    expect(mockRefreshSession).not.toHaveBeenCalled();
+
+    // Back up, but the access token expired meanwhile.
+    socket.listeners.get('connect_error')!(new Error('Authentication error: invalid token'));
+    await flush();
+    expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+    expect(socket.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('tries again later when the refresh itself could not reach the server', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      connectSocket();
+      const socket = mockSockets[0];
+      mockRefreshSession.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+      socket.listeners.get('connect_error')!(new Error('Authentication error: invalid token'));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(socket.connect).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(5_000);
+      expect(socket.connect).toHaveBeenCalledTimes(1);
+
+      // Refused again on that attempt: another refresh is allowed.
+      socket.listeners.get('connect_error')!(new Error('Authentication error: invalid token'));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockRefreshSession).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

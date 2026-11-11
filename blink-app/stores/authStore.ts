@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
-import { api, setTokens, clearTokens, loadToken, onSessionExpired } from '@/services/api';
+import {
+  api,
+  setTokens,
+  clearTokens,
+  getAccessToken,
+  hasStoredSession,
+  loadToken,
+  onSessionExpired,
+  refreshSession,
+} from '@/services/api';
 import { sendPushTokenToServer } from '@/utils/notifications';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { clearDeviceKey, wipeAllGroupKeys } from '@/services/groupCrypto';
@@ -22,6 +31,12 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /**
+   * A session is stored but the server couldn't confirm it (unreachable,
+   * 5xx, or a refresh that never got an answer). Not signed out: AuthGate
+   * shows a retry state instead of onboarding.
+   */
+  isOffline: boolean;
   requestOtp: (phone: string) => Promise<void>;
   verifyOtp: (phone: string, code: string) => Promise<void>;
   restoreSession: () => Promise<void>;
@@ -53,6 +68,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: true,
   isAuthenticated: false,
+  isOffline: false,
 
   requestOtp: async (phone: string) => {
     await api('/auth/request-otp', {
@@ -78,15 +94,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   restoreSession: async () => {
     try {
       await loadToken();
+      // A stored session without an access token: get one before asking /me.
+      if (!getAccessToken() && (await hasStoredSession())) await refreshSession();
       const user = await api<User>('/auth/me');
       set({
         user,
         isAuthenticated: true,
+        isOffline: false,
         isLoading: false,
       });
     } catch {
-      // Session restore failed (expired token, network error) -- treat as logged out
-      set({ isAuthenticated: false, isLoading: false });
+      // Only a refresh the server rejected signs out (it clears the stored
+      // session). Anything else — offline, a restart, a 5xx — keeps it.
+      const sessionKept = await hasStoredSession();
+      set({ isAuthenticated: false, isOffline: sessionKept, isLoading: false });
     }
   },
 
